@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}
+  Analysis
+{% endblock %}
+
+{% block body %}
+<table class="analysis"> 
+<thead>
+  <tr>
+    <th><b>Sample ID </b></th>
+    <th><b>CpGs</b></th>
+    <th><b>CNV</b></th>
+    {% for a in annotations %}
+    <th>
+      <b>UMAP against<br>{{a}}</b>
+    </th>
+    {% endfor %}
+  </tr>
+</thead>
+
+<tbody>
+  {% for run in analysis_runs %}
+    <tr>
+      <td>{{run}}</td>
+      <td>
+        <a href="./analysisLauncher?functionName=methylationPoller&sampleName={{run}}&refAnno=None" class="show" target="_blank"
+        rel="noopener noreferrer" title="{{run}}: CpGs">
+          plot
+        </a>
+      </td>
+      <td>
+        <a href="./analysis?func=cnv&samp={{run}}" class="show" target="_blank" rel="noopener noreferrer" title="make CNV plot">
+          plot
+        </a>
+      </td>
+
+      {% for a in annotations %}
+      <td>
+        <a href="./analysis?func=umap&samp={{run}}&ref={{a}}" class="show" target="_blank" rel="noopener noreferrer" title="make UMAP plot">
+          plot
+        </a>&nbsp;
+        <a href="./make_pdf?samp={{run}}&ref={{a}}" class="show" target="_blank" rel="noopener noreferrer" title="Generate and View PDF">
+          report
+        </a>
+      </td>  
+      {% endfor %}
+    </tr>
+  {% endfor %}
+</tbody>
+</table>
+
+{% endblock %}
