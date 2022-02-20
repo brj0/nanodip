@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='js/awesomplete.css')}}">
+  <script src="{{ url_for('static', filename='js/awesomplete.js')}}"></script>
+
+</head>
+
+<body>
+
+  <input class="awesomplete" data-list="Ada, Java, JavaScript, Brainfuck, LOLCODE, Node.js, Ruby on Rails" />
+  <form name="gene_dropdown" action="/getLigand" method="POST">
+    <label for="gene_form">Choose gene</label>
+    <select name="genes", id="genes">
+      {% for gene in genes %}
+      <option value="{{ gene }}">{{ gene }}</option>
+      {% endfor %}
+    </select>
+  </form>
+  <!-- <iframe width="2000" height="1000" frameborder="0" scrolling="yes" src="test.html"></iframe> -->
+  <div id='chart' class='chart'></div>
+
+</body>
+
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.6/d3.min.js"></script>
+<script type='text/javascript'>
+  var graphs = {{graph_json | safe}};
+  var config = {"scrollZoom": true};
+  Plotly.setPlotConfig(config);
+  Plotly.plot('chart',graphs,{});
+</script>
+<script>
+var e = document.getElementById("genes");
+var selectedGene = e.options[e.selectedIndex].value;
+</script>
+<script src="{{ url_for('static', filename='js/jquery-1.11.1.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/callback.js') }}"></script>
+
+</html>

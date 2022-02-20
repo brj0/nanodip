@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="refresh" content="{{autorefresh}}">
+  <title>{% block title %}{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css')}}">
+  {% block head %}{% endblock %}
+</head>
+
+<body>
+
+  <nav id="navbar">
+    <div class="logo">
+      <!--img src="img/EpiDiP_Logo_01.png" width="40px" height="40px"-->
+      <img src="{{ url_for('static', filename='img/logo.png')}}" width="140px" height="35px">
+      <!--div id="logo_text">NanoDip<div-->
+    </div>
+    <ul class="nav_menu">
+      <li>
+        <a href="/" title="General system information">Overview</a>
+      </li>
+      <li>
+        <a href="status" title="Live status of all connected Mk1b devices">Status</a>
+      </li>
+      <li>
+        <a href="start" title="Start a sequencing run on an idle Mk1b device">Start Run</a>
+      </li>
+      <li>
+        <a href="test_run" title="Start a test seq. run on an idle Mk1b device to verify that the previous flow cell wash was successful.">Start Test</a>
+      </li>
+      <li>
+        <a href="list_runs" title="List all buffered runs. Will be purged upon MinKNOW backend restart.">List Runs</a>
+      </li>
+      <li>
+        <a href="/results" title="List all completed analysis results">Results</a>
+      </li>
+      <li>
+        <a href="/analysis" title="Launch data analyses manually, e.g. for retrospective analysis">Analysis</a>
+      </li>
+      <li>
+        <a href="/about" title="Version, etc.">About</a>
+      </li>
+    </ul>
+  </nav>
+
+  <script>
+    navBar = document.getElementById("navbar")
+    var current;
+    for (var i = 0; i < document.links.length; i++) {
+      link = document.links[i];
+      if ((navBar.contains(link)) && (document.URL.includes(link))) {
+        current = link;
+      }
+    }
+    current.className = "current";
+  </script>
+
+  <div class="content">
+    {% block body %}{% endblock %}
+  </div>
+
+</body>
+
+</html>
