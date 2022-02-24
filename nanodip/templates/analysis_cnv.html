@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block title %}
+  Analysis
+{% endblock %}
+
+{% block body %}
+
+  <label for="genome_genes">Choose Gene:</label>
+  <input list="genome_genes" id="gene_list" name="gene_list" />
+  <datalist id="genome_genes">
+    {% for gene in genes %}
+      <option value="{{gene}}">
+    {% endfor %}
+  </datalist>
+
+  <label for="genome_genes">Choose Gene:</label>
+  <input list="genome_genes" id="gene_list2" name="gene_list" />
+  <datalist id="genome_genes">
+    {% for gene in genes %}
+      <option value="{{gene}}">
+    {% endfor %}
+  </datalist>
+
+  <div class="radio" id="cnv_radio">
+    <input type="radio" id="bins" name="display_type" value="bins" checked="checked">
+    <label for="bins">Bins</label>
+
+    <input type="radio" id="default" name="display_type" value="default">
+    <label for="default">Local coverage</label>
+  </div>
+
+  <div class="loader" id="loader"></div>
+  <div id="cnv_loc_avg"></div>
+  <div id="cnv_bins"></div>
+
+<script src="static/js/jquery-1.11.1.min.js"></script>
+<script src="static/js/plotly-latest.min.js"></script>
+
+<script>
+  function renderPlot(plotJSON, plotId){
+    var config = {"scrollZoom": true};
+    Plotly.setPlotConfig(config);
+    Plotly.plot(plotId, plotJSON,{});
+    /*Plotly.newPlot("cnv_loc_avg", plotJSON,{});*/
+  }
+</script>
+<script>
+  /*Load CNV Plot with bins method on startup.*/
+  var cnvPlotBins;
+  $(document).ready(function(){
+      $.ajax({
+          url: "/cnv",
+          type: "GET",
+          contentType: "application/json;charset=UTF-8",
+          data: {
+            "samp": "{{sample_name}}",
+            "genes": "", 
+            "method": "bins",
+          },
+          dataType:"json",
+          success: function (data) {
+              cnvPlotBins = data;
+              document.getElementById("loader").style.display = "none";
+              renderPlot(data, "cnv_bins");
+          }
+      });
+  })
+  /*Load CNV Plot with local average method on startup.*/
+  var cnvPlotLocAvg;
+  $(document).ready(function(){
+      $.ajax({
+          url: "/cnv",
+          type: "GET",
+          contentType: "application/json;charset=UTF-8",
+          data: {
+            "samp": "{{sample_name}}",
+            "genes": "", 
+          },
+          dataType:"json",
+          success: function (data) {
+              cnvPlotLocAvg = data;
+              document.getElementById("loader").style.display = "none";
+              renderPlot(data, "cnv_loc_avg");
+          }
+      });
+  })
+  $(document).ready(function(){
+    $('#cnv_loc_avg').hide();
+    $('#cnv_bins').show();
+    $("#cnv_radio input:radio").change(function(){
+      if ($(this).val() == "default") {
+        $('#cnv_bins').hide()
+        $('#cnv_loc_avg').show()
+        console.log("all");
+      }
+      else if ($(this).val() == "bins") {
+        $('#cnv_loc_avg').hide()
+        $('#cnv_bins').show()
+        console.log("cu");
+      }
+    });
+  });
+</script>
+<script>
+  /*Reload CNV Plot when genes are chosen.*/
+  $("#gene_list").on("change",function(){
+      $.ajax({
+          url: "/cnv",
+          type: "GET",
+          contentType: "application/json;charset=UTF-8",
+          data: {
+            "samp": "{{sample_name}}",
+            "genes": document.getElementById("gene_list").value
+          },
+          dataType:"json",
+          success: function (data) {
+              renderPlot(data, "cnv_loc_avg");
+          }
+      });
+  })
+</script>
+
+{% endblock %}
