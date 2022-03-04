@@ -1,291 +1,251 @@
 #!/usr/bin/env python
-# coding: utf-8
 
-# In[1]:
+"""
+## NanoDiP all-in-one Jupyter Notebook
+*J. Hench, S. Frank, and C. Hultschig, Neuropathology, IfP Basel, 2021*
 
+This software is provided free of charge and warranty; by using it you agree
+to do this on your own risk. The authors shall not be held liable for any
+damage caused by this software. We have assembled this and tested it to the
+best of our knowledge.
 
-versionString="24"                                   # version string of this application
+The purpose of NanoDiP (Nanopore Digital Pathology) is to compare low-coverage
+Nanopore sequencing data from natively extracted DNA sequencing runs against
+a flexibly adaptable collection of 450K/850K Illumina Infinium Methylation
+array data. These data have to be preprocessed into binary beta value files;
+this operation is performed in R (uses minfi to read raw array data) and
+outputs bindary float files (one per dataset). These beta values files (e.g.,
+204949770141_R03C01_betas_filtered.bin) are named according to the array ID
+(Sentrix ID) followed by the suffix. A collection of betas_filtered.bin files
+can be provided in a static manner and XLSX (Microsoft Excel) tables can be
+used to select a subset thereof alongside a user-defined annotation. The
+corresponding datasets will be loaded into memory and then serve as the
+reference cohort to which the Nanopore data are compared by dimension reduction
+(UMAP). This comparison is optimized for speed and low resource consumption so
+that it can run on the computer that operates the sequencer. The sequencing run
+is initiated through the MinKNOW API by this application. Basecalling and
+methylation calling occur as background tasks outside this Jupyter Notebook.
+User interaction occurs through a web interface based on CherryPy which has
+been tested on Chromium web browser. It is advisable to run it locally, there
+are no measures to secure the generated website.
 
+In order to use this application properly please make sure to be somewhat
+familiar with Jupyter Notebook. To run the software, press the button called
+*restart the kernel, re-run the whole notebook (with dialog)* and confirm
+execution. Then, in Chromium Browser, navigate to http://localhost:8080/ and
+preferably bookmark this location for convenience. In case of errors, you may
+just again click the same button *restart the kernel, re-run the whole notebook
+(with dialog)*.
+___
 
-# ## NanoDiP all-in-one Jupyter Notebook
-# *J. Hench, S. Frank, and C. Hultschig, Neuropathology, IfP Basel, 2021*
-# 
-# This software is provided free of charge and warranty; by using it you agree to do this on your own risk. The authors shall not be held liable for any damage caused by this software. We have assembled this and tested it to the best of our knowledge.
-# 
-# The purpose of NanoDiP (Nanopore Digital Pathology) is to compare low-coverage Nanopore sequencing data from natively extracted DNA sequencing runs against a flexibly adaptable collection of 450K/850K Illumina Infinium Methylation array data. These data have to be preprocessed into binary beta value files; this operation is performed in R (uses minfi to read raw array data) and outputs bindary float files (one per dataset). These beta values files (e.g., 204949770141_R03C01_betas_filtered.bin) are named according to the array ID (Sentrix ID) followed by the suffix. A collection of betas_filtered.bin files can be provided in a static manner and XLSX (Microsoft Excel) tables can be used to select a subset thereof alongside a user-defined annotation. The corresponding datasets will be loaded into memory and then serve as the reference cohort to which the Nanopore data are compared by dimension reduction (UMAP). This comparison is optimized for speed and low resource consumption so that it can run on the computer that operates the sequencer. The sequencing run is initiated through the MinKNOW API by this application. Basecalling and methylation calling occur as background tasks outside this Jupyter Notebook. User interaction occurs through a web interface based on CherryPy which has been tested on Chromium web browser. It is advisable to run it locally, there are no measures to secure the generated website.
-# 
-# In order to use this application properly please make sure to be somewhat familiar with Jupyter Notebook. To run the software, press the button called *restart the kernel, re-run the whole notebook (with dialog)* and confirm execution. Then, in Chromium Browser, navigate to http://localhost:8080/ and preferably bookmark this location for convenience. In case of errors, you may just again click the same button *restart the kernel, re-run the whole notebook (with dialog)*.
-# ___
-# ### Technical Details
-# * Tested with Python 3.7.5; 3.8.8 fails to load minknow_api in jupyter notebook.
-# * Verified to run on Ubuntu 18.04/Jetpack on ARMv8 and x86_64 CPUs; not tested on Windows and Mac OS. The latter two platforms are unsupported, we do not intend to support them.
-# * **CAUTION**: Requires a *patched* version of minknow api, file `[VENV]/lib/python3.7/site-packages/minknow_api/tools/protocols.py`. Without the patch, the generated fast5 sequencing data will be unreadable with f5c or nanopolish (wrong compression algorithm, which is the default in the MinKNOW backend).
-# 
+### Technical Details
 
-# In[2]:
+* Tested with Python 3.7.5; 3.8.8 fails to load minknow_api in jupyter
+  notebook.
+* Verified to run on Ubuntu 18.04/Jetpack on ARMv8 and x86_64 CPUs; not
+  tested on Windows and Mac OS. The latter two platforms are unsupported, we
+  do not intend to support them.
+* **CAUTION**: Requires a *patched* version of minknow api, file
+  `[VENV]/lib/python3.7/site-packages/minknow_api/tools/protocols.py`.
+  Without the patch, the generated fast5 sequencing data will be unreadable
+  with f5c or nanopolish (wrong compression algorithm, which is the default in
+  the MinKNOW backend).
+"""
 
-
-# verify running Python version (should be 3.7.5) and adjust jupyter notebook
+# Verify running Python version (should be 3.7.5) and adjust jupyter notebook.
 import IPython
 import os
-from IPython.core.display import display, HTML      # set display witdth to 100%
+from IPython.core.display import display, HTML
+# set display witdth to 100%
 display(HTML("<style>.container { width:100% !important; }</style>"))
 os.system('python --version')
 
+"""
+## Multithreading Options
+Depending on the number of parallel threads/cores of the underlying hardware,
+threading options for multithreaded modules need to be set as
+environment-specific parameters. One way to do so is through the *os* module.
+"""
 
-# ## Multithreading Options
-# Depending on the number of parallel threads/cores of the underlying hardware, threading options for multithreaded modules need to be set as environment-specific parameters. One way to do so is through the *os* module.
-
-# In[3]:
-
-
-# execution-wide multithreading options, set according to your hardware. Jetson AGX: suggest "2"
-# needs to be set before importing other modules that query these parameters
+# execution-wide multithreading options, set according to your hardware. Jetson
+# AGX: suggest "2" needs to be set before importing other modules that query
+# these parameters
 import os
-os.environ["NUMBA_NUM_THREADS"] = "2" # export NUMBA_NUM_THREADS=2
+os.environ["NUMBA_NUM_THREADS"] = "2"
 os.environ["OPENBLAS_NUM_THREADS"] = "2"
 os.environ["MKL_NUM_THREADS"] = "2"
 
+"""
+## Modules
+This section imports the required modules that should have been installed via
+pip. Other package managers have not been tested. To install packages, use the
+setup script provided with this software or, alternatively, install them one
+by one, ideally in a virtual python environment. Note that the MinKNOW API
+requires manual patching after installation with pip.
+"""
 
-# ## Modules
-# This section imports the required modules that should have been installed via pip. Other package managers have not been tested. To install packages, use the setup script provided with this software or, alternatively, install them one by one, ideally in a virtual python environment. Note that the MinKNOW API requires manual patching after installation with pip.
-
-# In[4]:
-
-
-# Python modules to load
+# python_modules_to_import
+# start_external_modules
 import argparse
 import cherrypy
 import datetime
 import fnmatch
 import logging
-import matplotlib
-import matplotlib.pyplot as plt
-from matplotlib.pyplot import figure
 from minknow_api.manager import Manager
 import minknow_api.statistics_pb2
 import minknow_api.device_pb2
 from minknow_api.tools import protocols
 from numba import jit
-import numpy
-import openpyxl
-import os
-from os import listdir
-import pandas
-import plotly.express as px
-import plotly.graph_objects as go
+import pandas as pd
 import psutil
 import pysam
-import random
 import shutil
-import string
 import socket
 import subprocess
 import sys
-import time # for development purposes in jupyter notebook (progress bars)
-import timeit # benchmarking
-from tqdm.notebook import tqdm, trange # for development purposes in jupyter notebook (progress bars)
-#import umap # installed via pip install umap-learn; import moved to UMAP function
-import webbrowser
-from xhtml2pdf import pisa
+import time
+import multiprocessing as mp
+# end_external_modules
 
-#TODO
-import config
+# start_internal_modules
+from config import (
+    ANALYSIS_EXCLUSION_PATTERNS,
+    ANNOTATIONS,
+    BARCODE_NAMES,
+    BROWSER_FAVICON,
+    CHERRYPY_HOST,
+    CHERRYPY_PORT,
+    DATA,
+    DEBUG_MODE,
+    EXCLUDED_FROM_ANALYSIS,
+    F5C,
+    IMAGES,
+    MINIMAP2,
+    NANODIP_OUTPUT,
+    NANODIP_REPORTS,
+    NANODIP_VERSION,
+    NEEDED_NUMBER_OF_BASES,
+    READS_PER_FILE,
+    READ_CPG_RSCRIPT,
+    REFERENCE_GENOME_FA,
+    REFERENCE_GENOME_MMI,
+    RESULT_ENDINGS,
+    RSCRIPT,
+    SAMTOOLS,
+    THIS_HOST,
+    VERBOSITY,
+)
+from data import (
+    binary_reference_data_exists,
+    ReferenceGenome,
+)
+from plots import (
+    CNVData,
+    UMAPData,
+)
+from utils import (
+    convert_html_to_pdf,
+    date_time_string_now,
+    render_template,
+)
+# end_internal_modules
 
+"""
+# No user editable code below
+Do not modify the cells below unless you would like to patch errors or create
+something new.
 
-# ## Configuration
-# Below are system-specific parameters that may or may not require adaptation. Many variable names are be self-explanatory. The key difference between Nanopore setups are between devices provided by ONT (MinIT incl. running the MinIT distribution on a NVIDIA Jetson developer kit such as the AGX Xavier, GridION) and the typical Ubuntu-based MinKNOW version on x86_64 computers. The raw data are written into a `/data` directory on ONT-based devices while they are found in `/var/lib/minknow/data` on x86_64 installations. Make sure to adapt your `minknowDataDir` accordingly. There are furthermore permission issues and special folders / files in the MinKNOW data directory. These files / folders should be excluded from analysis through `fileHideList` so that only real run folders will be parsed. Finally, the `nanodipOutputDir` is the place in which the background methylation and alignment process will place its results by replicating the directory hierarchy of the MinKNOW data location. It will not duplicate the data, and these data will be much smaller than raw run data. They can be placed anywhere in the file tree, but also inside the MinKNOW data path within a sub-folder. If the latter is the case, make sure to apply appropriate read/write permissions. Final reports and figures generated by NanoDiP are written into `nanodipReportDir`.
+## Sections
+1. Generic Functions
+2. MinKNOW API Functions
+3. CNV Plotter
+4. UMAP Methylation Plotter
+5. User Interface Functions
+6. Report Generator
+7. CherryPy Web UI
+"""
 
-# In[5]:
-
-
-# configuration parameters, modify here, no need for a configuration file
-minknowDataDir="/data"                              # where MinKNOW places its data
-fileHideList=["pings",                              # list of files and folders to be exluded from parsing
-              "reads","queued_reads","core-dump-db","lost+found",
-              "intermediate",
-              "minimap_data","nanodip_tmp","nanodip_output",
-              "nanodip_reports",
-              "non-ont","raw_for_playback","user_scripts",
-              "playback_raw_runs",".Trash-1000"]
-nanodipOutputDir="/data/nanodip_output"             # location to write intermediate analysis data, i.e. methylation and alignment files
-nanodipReportDir="/data/nanodip_reports"            # location to write reports and figures
-readsPerFile="400"                                  # number of reads per file. 400 works well on the Jetson AGX. Higher numbers increase batch size and RAM usage, lower numbers use more I/O resouces due to more frequent reloading of alignment reference
-wantedBases=150000000                               # number of basecalled bases until run termination occurs
-resultEndings=["_UMAP_top.html","_UMAP_all.html",   # list of file name sections that identify past runs
-               "_NanoDiP_report.pdf","_CNVplot.png",
-               "_NanoDiP_ranking.pdf"]
-analysisExclude=["_TestRun_"]                       # string patterns in sample names that exclude data from downstream analysis, e.g., test runs
-thisFaviconPath="/applications/nanodip/favicon.ico" # the web browser favicon file for this application
-epidipLogoPath="/applications/nanodip/EpiDiP_Logo_01.png" # logo bitmap for PDF reports
-imgPath="/applications/nanodip"                     # the location where image files for the web application are stored
-cpgScriptPath="/applications/nanodip/calculate_overlap_CpGs_04.sh" # script that loops over all fast5 folders, screens for predominant barcode and launched minimap2/f5c for each fast5 file 
-thisHost="localhost"                                # name of the host computer, typically "localhost"
-cherrypyHost="localhost"                            # name of the host, typically "localhost" as well
-cherrypyPort=8080                                   # port on which the NanoDiP UI will be served
-cherrypyThreads=100                                 # number of concurrent threads allowed to CherryPy, decrease in case of performance problems, default = 100
-debugLogging=True                                  # CherryPy debug logging incl. access logs (True for testing only)
-binDir="/applications/reference_data/betaEPIC450Kmix_bin" # location of the preprocessed beta value data
-binIndex=binDir+"/index.csv"                        # the index file of the beta value binary files is stored in a CSV files and is generated by the same R script that creates the beta value float binary files
-referenceDir="/applications/reference_data/reference_annotations" # location of the XLSX files that contain annotations, i.e. reference file collection definitions
-methylCutOff=0.35                                   # cut-off for "unmethylated vs methylated" for Illumina array data; also applicable to other methylation data types
-topMatch=100                                        # number of reference cases to be shown in subplot including copy number profile links (not advisable >200, plotly will become really slow)
-cnvLinkPrefix="http://s1665.rootserver.io/umapplot01/" # URL prefix to load PDF with CNV plot for a given Sentrix ID
-cnvLinkSuffix="_CNV_IFPBasel_annotations.pdf"       # URL prefix to load PDF with CNV plot 
-chrLengthsFile="/applications/reference_data/hg19_cnv/ChrLengths_hg19.tsv"          # contains three columns, A:chrom. strings, B: chrom. lengths, C: offsets
-centromereLocationsBed="/applications/reference_data/hg19_cnv/hg19.centromere.bed"  # contains the centromere positions for each chromosome
-plotlyRenderMode="webgl"                            # default="webgl", alternative "svg" without proper webgl support (e.g., firefox, use "svg"; slower, but does not require GPU)
-barcodeNames=["barcode01","barcode02","barcode03",  # barcode strings, currently kit SQK-RBK004
-              "barcode04","barcode05","barcode06",
-              "barcode07","barcode08","barcode09",
-              "barcode10","barcode11","barcode12"]
-refgenomefa="/applications/reference_data/minimap_data/hg19.fa" # human reference genome
-refgenomemmi="/applications/reference_data/minimap_data/hg19_20201203.mmi" # human reference genome minimap2 mmi
-ilmncgmapfile="/applications/reference_data/minimap_data/hg19_HumanMethylation450_15017482_v1-2_cgmap.tsv" # Illumina probe names of the 450K array
-f5cBin="/applications/f5c/f5c"                      # f5c binary location (absolute path) v6
-minimap2Bin="/applications/nanopolish/minimap2/minimap2" # minimap2 binary location (absolute path)
-samtoolsBin="/applications/samtools/samtools"       # samtools binary location (absolute path)
-rscriptBin="/applications/R-4.0.3/bin/Rscript"      # Rscript binary location (absolute path)
-readCpGscript="/applications/nanodip/readCpGs_mod02.R" # R script that reads CpGs into simplified text file (absolute path)
-verbosity=0                                         # 0=low log verbosity, 1=high log verbosity (with timestamps, for benchmarking and debugging)
-
-
-# # No user editable code below
-# Do not modify the cells below unless you would like to patch errors or create something new.
-# ## Sections
-# 1. Generic Functions
-# 2. MinKNOW API Functions
-# 3. CNV Plotter
-# 4. UMAP Methylation Plotter
-# 5. User Interface Functions
-# 6. Report Generator
-# 7. CherryPy Web UI
-
-# ### 1. Generic Functions
-
-# In[6]:
-
+"""
+### 1. Generic Functions
+"""
 
 def logpr(v,logstring): # logging funcion that reads verbosity parameter
     if v==1:
         print(str(datetime.datetime.now())+": "+str(logstring))
 
 
-# In[7]:
+def get_runs():
+    """Return list of run folders from MinKNOW data directory sorted by
+    modification time."""
+    runs = []
+    for f in os.listdir(DATA):
+        if f not in EXCLUDED_FROM_ANALYSIS:
+            file_path = os.path.join(DATA, f)
+            mod_time = os.path.getmtime(file_path)
+            if os.path.isdir(file_path):
+                runs.append([f, mod_time])
+    # sort based on modif. date
+    runs.sort(key=lambda x: (x[1], x[0]), reverse=True)
+    # Remove date after sorting
+    return [x[0] for x in runs]
 
-#TODO del
-def restartNanoDiP():
-    cherrypy.engine.restart()
-
-
-# In[8]:
-
-
-def getRuns(): # lists run folders from MinKNOW data directory in reverse order based on modif. date
-    runFolders=[]
-    #runFolderDates=[]
-    for r in listdir(minknowDataDir):
-        if r not in fileHideList:
-            f=minknowDataDir+"/"+r
-            if os.path.isdir(f):
-                runFolders.append([r,float(os.path.getmtime(f))])
-    runFolders.sort(key=lambda row: (row[1], row[0]), reverse=True) # sort based on modif. date
-    runFolders=[j.pop(0) for j in runFolders] # remove date column after sorting
-    return(runFolders)
-
-
-# In[9]:
-
-
-def getPredominantBarcode(sampleName):
-    fast5List = [os.path.join(dp, f) for dp, dn, filenames in os.walk(minknowDataDir+"/"+sampleName) for f in filenames if os.path.splitext(f)[1] == '.fast5']
-    barcodeHits=[]
-    for b in range(len(barcodeNames)):
-        c=0
-        for f in fast5List:
-            if barcodeNames[b] in f:
-                c+=1
-        barcodeHits.append(c)
-    maxbarcode=max(barcodeHits)
-    if maxbarcode>1:
-        predominantBarcode=barcodeNames[barcodeHits.index(maxbarcode)]
+def predominant_barcode(sample_name):
+    """Returns the predominante barcode within all fast5 files."""
+    fast5_files = []
+    for root, _, files in os.walk(os.path.join(DATA, sample_name)):
+        fast5_files.extend(
+            [os.path.join(root, f) for f in files if f.endswith(".fast5")]
+        )
+    barcode_hits=[]
+    for barcode in BARCODE_NAMES:
+        barcode_hits.append(
+            len([f for f in fast5_files if barcode in f])
+        )
+    max_barcode = max(barcode_hits)
+    if max_barcode > 1:
+        predominant_barcode = BARCODE_NAMES[barcode_hits.index(max_barcode)]
     else:
-        predominantBarcode="undetermined"
-    return predominantBarcode
+        predominant_barcode = "undetermined"
+    return predominant_barcode
 
+def reference_annotations():
+    """Return list of all reference annotation files (MS Excel XLSX format)."""
+    annotations = []
+    for r in os.listdir(ANNOTATIONS):
+        if r.endswith(".xlsx"):
+            annotations.append(r)
+    return annotations
 
-# In[10]:
-
-#TODO del
-def datetimestringnow(): # get current date and time as string to create timestamps
-    now = datetime.datetime.now()
-    return str(now.year).zfill(4)+str(now.month).zfill(2)+str(now.day).zfill(2)+"_"+str(now.hour).zfill(2)+str(now.minute).zfill(2)+str(now.second).zfill(2)  
-
-
-def date_time_string_now():
-    """Return current date and time as a string to create timestamps."""
-    now = datetime.datetime.now()
-    return now.strftime("%Y%m%d_%H%M%S")
-
-# In[11]:
-
-
-def convert_html_to_pdf(source_html, output_filename): # generate reports
-    result_file = open(output_filename, "w+b")         # open output file for writing (truncated binary)
-    pisa_status = pisa.CreatePDF(                      # convert HTML to PDF
-            source_html,                               # the HTML to convert
-            dest=result_file)                          # file handle to recieve result
-    result_file.close()                                # close output file
-    return pisa_status.err                            # return True on success and False on errors
-
-
-# In[12]:
-
-
-def getReferenceAnnotations(): # list all reference annotation files (MS Excel XLSX format)
-    referenceAnnotations=[]
-    for r in listdir(referenceDir):
-        if r.endswith('.xlsx'):
-            referenceAnnotations.append(r)    
-    return referenceAnnotations
-
-
-# In[13]:
 
 # TODO del
-def writeReferenceDefinition(sampleId,referenceFile): # write the filename of the UMAP reference for the 
-    with open(nanodipReportDir+'/'+sampleId+'_selected_reference.txt', 'w') as f: # current run into a text file
+# write the filename of the UMAP reference for the
+def writeReferenceDefinition(sampleId,referenceFile):
+    # current run into a text file
+    with open(NANODIP_REPORTS+'/'+sampleId+'_selected_reference.txt', 'w') as f:
         f.write(referenceFile)
 
 def write_reference_name(sample_id,reference_name):
     """Write the filename of the UMAP reference for the current run into
     a text file."""
     path = os.path.join(
-        config.NANODIP_REPORTS, sample_id + "_selected_reference.txt"
+        NANODIP_REPORTS, sample_id + "_selected_reference.txt"
     )
     with open(path, "w") as f:
         f.write(reference_name)
 
 
-
-
-# In[14]:
-
-
 def readReferenceDefinition(sampleId): # read the filename of the UMAP reference for the current sample
     try:
-        with open(nanodipReportDir+'/'+sampleId+'_selected_reference.txt', 'r') as f:
+        with open(NANODIP_REPORTS+'/'+sampleId+'_selected_reference.txt', 'r') as f:
             referenceFile=f.read()
     except:
         referenceFile=""
     return referenceFile
 
 
-# In[15]:
-
-
 def writeRunTmpFile(sampleId,deviceId):
-    with open(nanodipReportDir+'/'+sampleId+'_'+deviceId+'_runinfo.tmp', 'a') as f: # current run into a text file
+    # current run into a text file
+    with open(NANODIP_REPORTS+'/'+sampleId+'_'+deviceId+'_runinfo.tmp', 'a') as f:
         try:
             runId=getActiveRun(deviceId)
         except:
@@ -300,18 +260,12 @@ def writeRunTmpFile(sampleId,deviceId):
                 str(overlapCpGs)+"\n")
 
 
-# In[16]:
-
-
 def readRunTmpFile(sampleId):
     print("readRunTmpFile not ready")
 
 
-# In[17]:
-
-
 def getOverlapCpGs(sampleName):
-    methoverlapPath=nanodipOutputDir+"/"+sampleName # collect matching CpGs from sample
+    methoverlapPath=NANODIP_OUTPUT+"/"+sampleName # collect matching CpGs from sample
     methoverlapTsvFiles=[] # find all *methoverlap.tsv files
     for root, dirnames, filenames in os.walk(methoverlapPath):
         for filename in fnmatch.filter(filenames, '*methoverlap.tsv'):
@@ -320,23 +274,20 @@ def getOverlapCpGs(sampleName):
     first=True
     for f in methoverlapTsvFiles:
         try: # some fast5 files do not contain any CpGs
-            m=pandas.read_csv(f, delimiter='\t', header=None, index_col=0)
+            m=pd.read_csv(f, delimiter='\t', header=None, index_col=0)
             if first:
                 methoverlap=m
                 first=False
             else:
                 methoverlap=methoverlap.append(m)
         except:
-            logpr(verbosity,"empty file encountered, skipping")
+            logpr(VERBOSITY,"empty file encountered, skipping")
     return len(methoverlap)
-
-
-# In[18]:
 
 
 def f5cOneFast5(sampleId,analyzeOne=True):
     analyzedCount=0
-    thisRunDir=minknowDataDir+"/"+sampleId
+    thisRunDir=DATA+"/"+sampleId
     pattern = '*.fast5'
     fileList = []
     for dName, sdName, fList in os.walk(thisRunDir): # Walk through directory
@@ -347,7 +298,7 @@ def f5cOneFast5(sampleId,analyzeOne=True):
     completedCount=0
     maxBcCount=1 # at least 2 "passed" files (>1) need to be present
     targetBc="undetermined"
-    for bc in barcodeNames:
+    for bc in BARCODE_NAMES:
         thisBc=0
         for f in fileList:
             if bc in f:
@@ -356,7 +307,7 @@ def f5cOneFast5(sampleId,analyzeOne=True):
         if thisBc > maxBcCount:
             maxBcCount=thisBc
             targetBc=bc
-    f5cAnalysisDir=nanodipOutputDir+"/"+sampleId
+    f5cAnalysisDir=NANODIP_OUTPUT+"/"+sampleId
     if os.path.exists(f5cAnalysisDir)==False:
         os.mkdir(f5cAnalysisDir)
     thisBcFast5=[]
@@ -380,59 +331,56 @@ def f5cOneFast5(sampleId,analyzeOne=True):
                     os.symlink(q,targetq)             #fastq symlink
                 if os.path.exists(thisAnalysisDir+"/"+thisBcFileName+"-methoverlapcount.txt")==False:
                     if (analyzeOne==True and analyzedCount==0) or analyzeOne==False:
-                        cmd=f5cBin+" index -t 1 --iop 100 -d "+thisAnalysisDir+" "+targetq
+                        cmd=F5C+" index -t 1 --iop 100 -d "+thisAnalysisDir+" "+targetq
                         p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE) #index, call methylation and get methylation frequencies
                         p.wait()
-                        cmd=minimap2Bin+" -a -x map-ont "+refgenomemmi+" "+targetq+" -t 4 | "+samtoolsBin+" sort -T tmp -o "+thisAnalysisDir+"/"+thisBcFileName+"-reads_sorted.bam"
+                        cmd=MINIMAP2+" -a -x map-ont "+REFERENCE_GENOME_MMI+" "+targetq+" -t 4 | "+SAMTOOLS+" sort -T tmp -o "+thisAnalysisDir+"/"+thisBcFileName+"-reads_sorted.bam"
                         p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE) # get sorted BAM (4 threads)
                         p.wait()
-                        cmd=samtoolsBin+" index "+thisAnalysisDir+"/"+thisBcFileName+"-reads_sorted.bam"
+                        cmd=SAMTOOLS+" index "+thisAnalysisDir+"/"+thisBcFileName+"-reads_sorted.bam"
                         p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE) # index BAM
                         p.wait()
-                        cmd=f5cBin+" call-methylation -B2000000 -K400 -b "+thisAnalysisDir+"/"+thisBcFileName+"-reads_sorted.bam -g "+refgenomefa+" -r "+targetq+" > "+thisAnalysisDir+"/"+thisBcFileName+"-result.tsv"
+                        cmd=F5C+" call-methylation -B2000000 -K400 -b "+thisAnalysisDir+"/"+thisBcFileName+"-reads_sorted.bam -g "+REFERENCE_GENOME_FA+" -r "+targetq+" > "+thisAnalysisDir+"/"+thisBcFileName+"-result.tsv"
                         p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE) # set B to 2 megabases (GPU) and 0.4 kreads
                         p.wait()
-                        cmd=f5cBin+" meth-freq -c 2.5 -s -i "+thisAnalysisDir+"/"+thisBcFileName+"-result.tsv > "+thisAnalysisDir+"/"+thisBcFileName+"-freq.tsv"
+                        cmd=F5C+" meth-freq -c 2.5 -s -i "+thisAnalysisDir+"/"+thisBcFileName+"-result.tsv > "+thisAnalysisDir+"/"+thisBcFileName+"-freq.tsv"
                         p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
                         p.wait()
-                        cmd=rscriptBin+" "+readCpGscript+" "+thisAnalysisDir+"/"+thisBcFileName+"-freq.tsv "+ilmncgmapfile+" "+thisAnalysisDir+"/"+thisBcFileName+"-methoverlap.tsv "+thisAnalysisDir+"/"+thisBcFileName+"-methoverlapcount.txt"
+                        cmd=RSCRIPT+" "+READ_CPG_RSCRIPT+" "+thisAnalysisDir+"/"+thisBcFileName+"-freq.tsv "+ILUMINA_CG_MAP+" "+thisAnalysisDir+"/"+thisBcFileName+"-methoverlap.tsv "+thisAnalysisDir+"/"+thisBcFileName+"-methoverlapcount.txt"
                         p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
                         p.wait()
                         calledList.append(thisBcFileName)
                         analyzedCount+=1
                 else:
                     completedCount+=1
-    return "Target = "+targetBc+"<br>Methylation called for "+str(calledList)+". "+str(completedCount+analyzedCount)+"/"+str(len(thisBcFast5))  
+    return "Target = "+targetBc+"<br>Methylation called for "+str(calledList)+". "+str(completedCount+analyzedCount)+"/"+str(len(thisBcFast5))
 
 
-# ### 2. MinKNOW API Functions
-# Check https://github.com/nanoporetech/minknow_api for reference.
-# 
-# The following code requires a patched version of the MinKNOW API, install it from https://github.com/neuropathbasel/minknow_api.
+"""
+### 2. MinKNOW API Functions
+Check https://github.com/nanoporetech/minknow_api for reference.
 
-# In[19]:
-
-
-def mkManager(): # Construct a manager using the host + port provided. This is used to connect to
-    return Manager(host=thisHost, port=9501, use_tls=False) # the MinKNOW service trough the MK API.
+The following code requires a patched version of the MinKNOW API, install it
+from https://github.com/neuropathbasel/minknow_api.
+"""
 
 
-# In[20]:
+# Construct a manager using the host + port provided. This is used to connect to
+def mkManager():
+    return Manager(host=THIS_HOST, port=9501, use_tls=False) # the MinKNOW service trough the MK API.
 
 
-def listMinionPositions(): # list MinION devices that are currenty connected to the system 
+
+def listMinionPositions(): # list MinION devices that are currenty connected to the system
     manager = mkManager()
-    positions = manager.flow_cell_positions() # Find a list of currently available sequencing positions.  
+    positions = manager.flow_cell_positions() # Find a list of currently available sequencing positions.
     return(positions)   # User could call {pos.connect()} here to connect to the running MinKNOW instance.
-
-
-# In[21]:
 
 
 def listMinionExperiments(): # list all current and previous runs in the MinKNOW buffer, lost after MinKNOW restart
     manager=mkManager()
-    htmlHost="<b>Host: "+thisHost+"</b><br><table border='1'><tr>"
-    positions=manager.flow_cell_positions() # Find a list of currently available sequencing positions. 
+    htmlHost="<b>Host: "+THIS_HOST+"</b><br><table border='1'><tr>"
+    positions=manager.flow_cell_positions() # Find a list of currently available sequencing positions.
     htmlPosition=[]
     for p in positions:
         htmlPosinfo="<b>-"+str(p)+"</b><br>"
@@ -454,9 +402,6 @@ def listMinionExperiments(): # list all current and previous runs in the MinKNOW
     return(hierarchy)
 
 
-# In[22]:
-
-
 def getFlowCellID(thisDeviceId): # determine flow cell ID (if any). Note that some CTCs have an empty ID string.
     mountedFlowCellID="no_flow_cell"
     manager=mkManager()
@@ -468,19 +413,19 @@ def getFlowCellID(thisDeviceId): # determine flow cell ID (if any). Note that so
     return mountedFlowCellID
 
 
-# In[23]:
-
-
-# This cell starts a run on Mk1b devices and perform several checks concerning the run protocol.
+# This cell starts a run on Mk1b devices and perform several checks concerning
+# the run protocol.
 
 # modified from the MinKNOW API on https://github.com/nanoporetech/minknow_api (2021-06)
 # created from the sample code at
 # https://github.com/nanoporetech/minknow_api/blob/master/python/examples/start_protocol.py
-# minknow_api.manager supplies "Manager" a wrapper around MinKNOW's Manager gRPC API with utilities
-# for querying sequencing positions + offline basecalling tools.
+# minknow_api.manager supplies "Manager" a wrapper around MinKNOW's Manager
+# gRPC API with utilities for querying sequencing positions + offline
+# basecalling tools.
 # from minknow_api.manager import Manager
 
-# We need `find_protocol` to search for the required protocol given a kit + product code.
+# We need 'find_protocol' to search for the required protocol given a kit +
+# product code.
 # from minknow_api.tools import protocols
 def parse_args():
     """Build and execute a command line argument for starting a protocol.
@@ -737,7 +682,7 @@ def startRun():
     #manager = Manager(host=args.host, port=args.port, use_tls=not args.no_tls)
     manager=mkManager()
     errormessage=""
-    
+
     # Find which positions we are going to start protocol on:
     positions = manager.flow_cell_positions()
     filtered_positions = list(
@@ -863,7 +808,7 @@ def startRun():
                         print("protocol_identifier "+str(protocol_identifier))
                         print("args.sample_id "+str(args.sample_id))
                         print("args.experiment_group "+str(args.experiment_group))
-                        print("basecalling_args "+str(basecalling_args)) 
+                        print("basecalling_args "+str(basecalling_args))
                         print("read_until_args "+str(read_until_args))
                         print("fastq_arguments "+str(fastq_arguments)) #fastq_arguments OutputArgs(reads_per_file=400)
                         print("fast5_arguments "+str(fast5_arguments)) #fast5_arguments OutputArgs(reads_per_file=400)
@@ -894,9 +839,6 @@ def startRun():
     return errormessage+run_id # one of them should be ""
 
 
-# In[24]:
-
-
 def stopRun(minionId): # stop an existing run (if any) for a MinION device
     manager=mkManager()
     positions = list(manager.flow_cell_positions())
@@ -916,9 +858,6 @@ def stopRun(minionId): # stop an existing run (if any) for a MinION device
     return thisMessage
 
 
-# In[25]:
-
-
 # from minknow_api demos, start_seq.py
 def is_position_selected(position, args):
     """Find if the {position} is selected by command line arguments {args}."""
@@ -931,9 +870,6 @@ def is_position_selected(position, args):
             or flow_cell_info.flow_cell_id == args.flow_cell_id):
             return True
     return False
-
-
-# In[26]:
 
 
 def getMinKnowApiStatus(deviceString): # MinKNOW status per device
@@ -952,8 +888,6 @@ def getMinKnowApiStatus(deviceString): # MinKNOW status per device
     return replyString
 
 
-# In[27]:
-
 
 def getActiveRun(deviceString):
     manager=mkManager()
@@ -967,10 +901,7 @@ def getActiveRun(deviceString):
     return activeRun
 
 
-# In[28]:
-
-
-def getRealDeviceActivity(deviceString):            # seq. runs: 34 degC and flow cell checks 37 degC target 
+def getRealDeviceActivity(deviceString):            # seq. runs: 34 degC and flow cell checks 37 degC target
     manager=mkManager()                             # temperatures seem to be the only way to determine if
     positions = list(manager.flow_cell_positions()) # a device has been started
     filtered_positions = list(filter(lambda pos: pos.name == deviceString, positions))
@@ -984,9 +915,6 @@ def getRealDeviceActivity(deviceString):            # seq. runs: 34 degC and flo
     elif targetTemp=="35.0":
         returnValue="idle"
     return returnValue
-
-
-# In[29]:
 
 
 def getThisRunState(deviceString): # obtain further information about a particular device / run
@@ -1003,8 +931,6 @@ def getThisRunState(deviceString): # obtain further information about a particul
     return thisRunState
 
 
-# In[30]:
-
 
 def getThisRunSampleID(deviceString): # get SampleID from MinKNOW by device, only available after data
     manager=mkManager()               # acquisition as been initiated by MinKNOW.
@@ -1015,13 +941,11 @@ def getThisRunSampleID(deviceString): # get SampleID from MinKNOW by device, onl
         thisRunSampleID=connection.protocol.get_current_protocol_run().user_info.sample_id.value
     except:
         thisRunSampleID="No sampleId information in MinKNOW buffer for "+deviceString
-    return thisRunSampleID   
+    return thisRunSampleID
 
 
-# In[31]:
 
-
-def getThisRunYield(deviceString): # get run yield by device. The data of the previous run will remain 
+def getThisRunYield(deviceString): # get run yield by device. The data of the previous run will remain
     manager=mkManager()            # in the buffer until acquisition (not just a start) of a new run
     positions = list(manager.flow_cell_positions()) # have been initiated.
     filtered_positions = list(filter(lambda pos: pos.name == deviceString, positions))
@@ -1034,8 +958,6 @@ def getThisRunYield(deviceString): # get run yield by device. The data of the pr
         thisRunYield="No yield information in MinKNOW buffer for "+deviceString
     return thisRunYield
 
-
-# In[32]:
 
 
 def getThisRunOutput(deviceString,sampleName,runId): # get run yield by device, sampleName, runId
@@ -1062,9 +984,6 @@ def getThisRunOutput(deviceString,sampleName,runId): # get run yield by device, 
     return thisRunOutput # shall be a list
 
 
-# In[33]:
-
-
 def getThisRunEstimatedOutput(deviceString,sampleName,runId): # get run yield by device, sampleName, runId
     thisRunOutput=[-1,-1] # defaults in case of error / missing information
     manager=mkManager()            # in the buffer until acquisition (not just a start) of a new run
@@ -1089,14 +1008,11 @@ def getThisRunEstimatedOutput(deviceString,sampleName,runId): # get run yield by
     return thisRunOutput # shall be a list
 
 
-# In[34]:
-
-
 def getThisRunInformation(deviceString): # get current run information. Only available after data acquisition
     manager=mkManager()                  # has started.
     positions = list(manager.flow_cell_positions())
     filtered_positions = list(filter(lambda pos: pos.name == deviceString, positions))
-    connection = filtered_positions[0].connect() # Connect to the grpc port for the position    
+    connection = filtered_positions[0].connect() # Connect to the grpc port for the position
     try:
         thisRunInfo="Run information for "+deviceString+"<br><br>"+str(connection.protocol.get_current_protocol_run())
     except:
@@ -1104,25 +1020,22 @@ def getThisRunInformation(deviceString): # get current run information. Only ava
     return thisRunInfo
 
 
-# In[35]:
-
-
 def thisRunWatcherTerminator(deviceString,sampleName):
     realRunId=getActiveRun(deviceString) #
     currentBases=getThisRunEstimatedOutput(deviceString,sampleName,realRunId)[1]
     currentBasesString=str(round(currentBases/1e6,2))
-    wantedBasesString=str(round(wantedBases/1e6,2))
+    wantedBasesString=str(round(NEEDED_NUMBER_OF_BASES/1e6,2))
     myString="<html><head>"
     myString=myString+"<title>"+currentBasesString+"/"+wantedBasesString+"MB:"+sampleName+"</title>"
-    if currentBases < wantedBases: # don't refresh after showing the STOP state
+    if currentBases < NEEDED_NUMBER_OF_BASES: # don't refresh after showing the STOP state
         myString=myString+"<meta http-equiv='refresh' content='10'>"
     myString=myString+"</head><body>"
     myString=myString+"<b>Automatic run terminator</b> for sample <b>"+sampleName+ "</b>, run ID="+realRunId+" on "+deviceString+" when reaching "+wantedBasesString+" MB, now "+currentBasesString+" MB"
     myString=myString+"<hr>"
-    myString=myString+"Last refresh at "+datetimestringnow()+".<hr>"
-    if currentBases > wantedBases:
+    myString=myString+"Last refresh at "+date_time_string_now()+".<hr>"
+    if currentBases > NEEDED_NUMBER_OF_BASES:
         stopRun(deviceString)
-        myString=myString+"STOPPED at "+datetimestringnow()
+        myString=myString+"STOPPED at "+date_time_string_now()
     elif currentBases==0:
         myString=myString+"IDLE / MUX / ETC"
     else:
@@ -1131,417 +1044,26 @@ def thisRunWatcherTerminator(deviceString,sampleName):
     return myString
 
 
-# ### 3. CNV Plotter
-
-# In[36]:
-
-
-# TODO del
-def createCNVPlot(sampleName): # create a genome-wide copy number plot (all-in-one function)
-    with tqdm(total=6) as cnvpBar:
-        cnvpBar.set_description('CNVP('+sampleName+'), loading reference data')
-        cnvpBar.update(1)
-        startTime = datetime.datetime.now()
-        runPath=nanodipOutputDir+"/"+sampleName
-        ChromOffsets = pandas.read_csv(chrLengthsFile, delimiter='\t', header=None, index_col=0)
-        validChromosomes=list(ChromOffsets.index)
-        ChromOffsetCenters=[]
-        for c in range(0,len(validChromosomes)-1):
-            ChromOffsetCenters.append((ChromOffsets[2][c]+ChromOffsets[2][c+1])/2)
-        lastChromosome=len(validChromosomes)-1
-        ChromOffsetCenters.append((ChromOffsets[2][lastChromosome]+ChromOffsets[2][lastChromosome]+ChromOffsets[1][lastChromosome])/2) # last chromosome
-        centromereLocations = pandas.read_csv(centromereLocationsBed, delimiter='\t', header=None, index_col=0)
-        centromereLocations.loc['chr1'][1]
-        centromereOffsets = []
-        for c in validChromosomes:
-            centromereOffsets.append(ChromOffsets.loc[c][2] + centromereLocations.loc[c][1])
-        cnvpBar.set_description('CNVP('+sampleName+'), loading nanopore data')
-        cnvpBar.update(1)
-        bamFiles=[] # find all bam files
-        for root, dirnames, filenames in os.walk(runPath):
-            for filename in fnmatch.filter(filenames, '*.bam'):
-                bamFiles.append(os.path.join(root, filename))
-        cnvScatter=[]
-        for thisBam in bamFiles:
-            samfile = pysam.AlignmentFile(thisBam, "rb") # pysam coordinates start with 0 while samtools starts with 1 ! See https://pysam.readthedocs.io/en/latest/faq.html#pysam-coordinates-are-wrong
-            for thisChromosome in validChromosomes:
-                thisChromOffset=int(ChromOffsets.loc[[thisChromosome]][2])
-                for read in samfile.fetch(thisChromosome):
-                    cnvScatter.append(read.pos+thisChromOffset)
-        #print("Number of reads:"+str(len(cnvScatter)))
-        #print(max(cnvScatter)/len(cnvScatter))
-        cnvpBar.set_description('CNVP('+sampleName+'), determining bin size')
-        cnvpBar.update(1)
-        binwidth=30*max(cnvScatter)/len(cnvScatter)
-        figure(figsize=(20, 3), dpi=120)
-        xy=plt.hist(cnvScatter, bins=numpy.arange(min(cnvScatter), max(cnvScatter) + binwidth, binwidth),color="k")
-        #plt.vlines(ChromOffsets[2], 0,numpy.max(xy[0]), colors='c', linestyles='solid', label='')
-        #plt.title(sampleName, fontdict=None, loc='center', pad=None)
-        #plt.yscale('log')
-        cnvpBar.set_description('CNVP('+sampleName+'), cleaning data')
-        cnvpBar.update(1)
-        plotX=xy[1][0:len(xy[0])] # exclude regions with no mapped reads from plot
-        plotY=xy[0]
-        cleanPlotX=[]
-        cleanPlotY=[]
-        for p in range(0,len(plotY)):
-            if plotY[p]>0:
-                cleanPlotX.append(plotX[p])
-                cleanPlotY.append(plotY[p])
-        cleanPlotX=numpy.array(cleanPlotX) # convert back to numpy array (required for numpy functions)
-        cleanPlotY=numpy.array(cleanPlotY)
-        yStd=numpy.std(plotY)
-        yMean=numpy.mean(plotY)
-        yMedian=numpy.median(plotY)
-        cleanCoarseX=[]     # local means, cleaned
-        cleanCoarseY=[]
-        localBinSize=int(10e6)
-        localBinStep=int(0.5e6)
-        halfLocalBinSize=localBinSize/2
-        cnvpBar.set_description('CNVP('+sampleName+'), plotting data')
-        cnvpBar.update(1)
-        for x in range(0,int(numpy.round(numpy.max(cleanPlotX))),localBinStep):
-            thisSlice=cleanPlotY[numpy.logical_and(cleanPlotX >= x,  cleanPlotX <= x+localBinSize)]
-            if len(thisSlice)>0:
-                cleanCoarseX.append(numpy.median([x,x+localBinSize]))
-                cleanCoarseY.append(numpy.median(thisSlice))
-        cleanYMedian=numpy.median(cleanPlotY)
-        cleanYLower=numpy.min(cleanPlotY)
-        cleanYUpper=yMedian*2
-        matplotlib.use('Agg')
-        figure(figsize=(20, 6), dpi=120)
-        plt.ylim(cleanYLower,cleanYUpper)
-        plt.scatter(cleanPlotX,cleanPlotY,s=0.2,color='gray',linewidths=1)
-        plt.scatter(cleanCoarseX,cleanCoarseY,s=1,linewidths=5,c=cleanCoarseY,cmap=plt.cm.coolwarm_r,vmin=cleanYLower,vmax=cleanYUpper)
-        plt.hlines(yMedian, 0, max(cleanPlotX), colors='gray', linestyles='solid', label='') # median line
-        plt.vlines(ChromOffsets[2], cleanYLower, cleanYUpper, colors='gray', linestyles='solid', label='')
-        plt.vlines(ChromOffsets[2][len(ChromOffsets[2])-1]+ChromOffsets[1][len(ChromOffsets[2])-1], cleanYLower, cleanYUpper, colors='gray', linestyles='solid', label='') # terminating vline
-        plt.vlines(centromereOffsets, cleanYLower, cleanYUpper, colors='gray', linestyles='dashed', label='')
-        plt.title("Sample ID: "+sampleName, fontdict=None, loc='center', pad=None)
-        plt.xlabel('Number of mapped reads: '+str(len(cnvScatter)))
-        plt.ylabel('reads per '+ str(round(binwidth/1e6*100)/100) +' MB bin')
-        plt.xticks(ChromOffsetCenters, validChromosomes, rotation=90)
-        plt.savefig(nanodipReportDir+'/'+sampleName+'_CNVplot.png', bbox_inches='tight')
-        readCountFile = open(nanodipReportDir+'/'+sampleName+'_alignedreads.txt',"w")
-        readCountFile.write(str(len(cnvScatter)))
-        readCountFile.close()
-        logpr(verbosity,"CNVP end")
-        cnvpBar.set_description('CNVP('+sampleName+'), done')
-        cnvpBar.update(1)
-        endTime = datetime.datetime.now()
-        logpr(verbosity,"Start: "+str(startTime))
-        logpr(verbosity,"End  : "+str(endTime))
-        logpr(verbosity,"Dur. : "+str(endTime-startTime))
+"""
+### 3. CNV Plotter
+"""
 
 
-# ### 4. UMAP Methylation Plotter
-
-# In[37]:
 
 
-# TODO del
-def methylationUMAP(sampleName,referenceName): # create a methylation UMAP plot (all-in-one function)
-    import umap
-    startTime = datetime.datetime.now()
-    logpr(verbosity,"UMAP Plot initiated for "+sampleName)
-    with tqdm(total=8) as umapBar:
-        umapBar.set_description('UMAP('+sampleName+'), loading annotation')
-        umapBar.update(1)
-        binFiles=listdir(binDir) # collect reference case binary file names
-        referenceString=referenceName.replace(".xlsx","")
-        referenceSheetFile=referenceDir+"/"+referenceName # load reference annotation
-        referenceSheet=openpyxl.load_workbook(referenceSheetFile)
-        referenceList = referenceSheet.active
-        col_names = []
-        sentrixID  = referenceList['A']
-        methClass  = referenceList['B']
-        customText = referenceList['C']
-        for x in range(3): 
-            logpr(verbosity,sentrixID[x].value)
-            logpr(verbosity,methClass[x].value)
-            logpr(verbosity,customText[x].value)
-        indexFile=open(binIndex, "r") # load CpG site index file (contains index for methylation float binary data)
-        indexCol=indexFile.read().split("\n")
-        indexFile.close()
-        umapBar.set_description('UMAP('+sampleName+'), loading and processing methylation data from Nanopore run')
-        umapBar.update(1)
-        logpr(verbosity,len(indexCol))
-        methoverlapPath=nanodipOutputDir+"/"+sampleName # collect matching CpGs from sample
-        methoverlapTsvFiles=[] # find all *methoverlap.tsv files
-        for root, dirnames, filenames in os.walk(methoverlapPath):
-            for filename in fnmatch.filter(filenames, '*methoverlap.tsv'):
-                methoverlapTsvFiles.append(os.path.join(root, filename))
-        methoverlap=[]
-        first=True
-        for f in methoverlapTsvFiles:
-            try: # some fast5 files do not contain any CpGs
-                m = pandas.read_csv(f, delimiter='\t', header=None, index_col=0)
-                if first:
-                    methoverlap = m
-                    first = False
-                else:
-                    methoverlap = methoverlap.append(m)
-            except:
-                logpr(verbosity,"empty file encountered, skipping")
-        if len(methoverlap)>0:
-            logpr(verbosity,str("Number of 450K overlap CpGs: "+str(len(methoverlap))))
-            overlapProbes=methoverlap.index
-            existingProbes=set(indexCol).intersection(overlapProbes) # some probes have been skipped from the reference set, e.g. sex chromosomes
-            matching = [indexCol.index(i) for i in existingProbes]
-            logpr(verbosity,"overlap probes in cleaned reference data: "+str(len(matching)))
-            fileNumbers = []
-            binSuffix="_betas_filtered.bin"
-            missingFiles=[] # determine if there are entries in the annotation without corresponding methylation binary file
-            c=0
-            for s in sentrixID:
-                try:
-                    fileNumbers.append(binFiles.index(s.value+binSuffix))
-                except: # e.g. file not available
-                    missingFiles.append(c)
-                c=c+1
-            logpr(verbosity,fileNumbers)
-            betaValues=numpy.full([len(matching),len(fileNumbers)],-1, dtype=float, order='C') # create an empty array with -1
-            logpr(verbosity,betaValues)
-            umapBar.set_description('UMAP('+sampleName+'), loading overlap CpGs from reference data')
-            umapBar.update(1)
-            matchJumps=numpy.full([len(matching)],-1, dtype=int, order='C')
-            matchJumps[0]=matching[0] # create jump list for binary file, add first entry
-            if len(matching)>1:
-                for m in range(1,len(matching)): # create jump distances for binary file
-                    matchJumps[m]=matching[m]-matching[m-1]-1 # concatenate to list
-            logpr(verbosity,len(matchJumps))
-            betaValues = [ [ None for y in range( len(matching) ) ] for x in range( 1 ) ]
-            p_bar = tqdm(range(len(fileNumbers))) # progress bar (development only)
-            for f in p_bar:
-                betasFilename=binDir+"/"+binFiles[fileNumbers[f]]
-                with open(betasFilename, 'rb') as betasFile:
-                    allBetaSingleFile = numpy.fromfile(betasFile, dtype=float) # read float with numpy into regular python array (faster) 
-                    allBetaSingleFile = numpy.digitize(allBetaSingleFile,bins=[methylCutOff])
-                    betaValues.append(allBetaSingleFile[numpy.array(matching)])
-                    p_bar.set_description('UMAP('+sampleName+'), loading ref. dataset no. '+str(f))
-                betasFile.close()
-            umapBar.set_description('UMAP('+sampleName+'), merging reference and nanopore data')
-            umapBar.update(1)
-            betaValues = numpy.array(betaValues)
-            betaValues = numpy.delete(betaValues, 0, 0)
-            methoverlapNum=methoverlap.to_numpy()
-            diagnosticCaseCgs=[]
-            methoverlapCgnames=methoverlap.loc[existingProbes].index # deterine overlap CpG names
-            for i in existingProbes:
-                thisCg=numpy.mean(methoverlap.loc[[i]].values)
-                diagnosticCaseCgs.append(thisCg)
-            thisDiagnosticCase=numpy.digitize(diagnosticCaseCgs,bins=[methylCutOff]) # append the nanopore case
-            betaValues2=numpy.vstack([betaValues, thisDiagnosticCase]) # convert to numpy array for UMAP function
-            del betaValues # free memory
-            umapBar.set_description('UMAP('+sampleName+'), calculating embedding')
-            umapBar.update(1)
-            embeddingAll = umap.UMAP().fit_transform(betaValues2[:,]) # generate UMAP plot
-            logpr(verbosity,"\n"+str(embeddingAll))
-            umapBar.set_description('UMAP('+sampleName+'), plotting UMAP')
-            umapBar.update(1)
-            l=len(embeddingAll)-1  # get UMAP coordinates of nanopore case (i.e., last entry in array)
-            nanoX=embeddingAll[l,0]
-            nanoY=embeddingAll[l,1]
-            selectedSentrixIds = [ binFiles[i] for i in fileNumbers]
-            logpr(verbosity,len(selectedSentrixIds))
-            selectedSentrixIds.append(sampleName)
-            logpr(verbosity,len(selectedSentrixIds))
-            annoList=[] # create an annotation list and append nanopore case as the last entry
-            c=0
-            for mc in methClass:
-                if c not in missingFiles:
-                    annoList.append(mc.value)
-                c=c+1
-            annoList.append(sampleName)
-            embeddingAll=numpy.array(embeddingAll) # convert UMAP data to numpy array
-            numberRef=str(len(embeddingAll))+" ref. cases"
-            numberCpG=str(len(methoverlap))+" CpGs"
-            umapTitle="UMAP for "+sampleName+" against "+referenceName+", "+numberRef+", "+numberCpG
-            logpr(verbosity,type(embeddingAll))
-            logpr(verbosity,embeddingAll.shape)
-            logpr(verbosity,embeddingAll)
-            fig2 = px.scatter(x=embeddingAll[:,0], # create UMAP figure with all cases
-                              y=embeddingAll[:,1],
-                              labels={"x":"UMAP 0",
-                                      "y":"UMAP 1"},
-                              title=umapTitle, 
-                              color=annoList, 
-                              hover_name=selectedSentrixIds,
-                              render_mode=plotlyRenderMode) #
-            fig2.add_annotation(x=nanoX, y=nanoY,
-                                text=sampleName,
-                                showarrow=True,
-                                arrowhead=1)
-            fig2.update_yaxes(scaleanchor = "x", scaleratio = 1)
-            outPlot=nanodipReportDir+"/"+sampleName+"_"+referenceString+"_UMAP_all.html" # write to HTML file
-            fig2.write_html(outPlot)
-            fig2.write_image(nanodipReportDir+"/"+sampleName+"_"+referenceString+"_UMAP_all.png")    # plotly image export requires kaleido, install with pip install -U kaleido; needs reloading of plotly to take effect
-            umapBar.set_description('UMAP('+sampleName+'), calculating distance ranking')
-            umapBar.update(1)
-            distances = [] # create distance ranking
-            sentrixList = []
-            c=0
-            for s in sentrixID:
-                if c not in missingFiles:
-                    sentrixList.append(s.value)
-                c=c+1
-            sentrixList.append("thisCase")
-            mcList = []
-            c=0
-            for s in methClass:
-                if c not in missingFiles:
-                    mcList.append(s.value)
-                c=c+1
-            mcList.append("thisCase")
-            txtList = []
-            c=0
-            for s in methClass:
-                if c not in missingFiles:
-                    txtList.append(s.value)
-                c=c+1
-            txtList.append("thisCase")
-            caseX=embeddingAll[len(embeddingAll)-1,0]
-            caseY=embeddingAll[len(embeddingAll)-1,1]
-            xList = []
-            yList = []
-            for c in embeddingAll:
-                distances.append(numpy.sqrt(numpy.power(caseX-c[0],2)+numpy.power(caseY-c[1],2))) # calculate distance
-                xList.append(c[0])
-                yList.append(c[1])
-            distanceRanking = pandas.DataFrame({'distance':distances,'methClass':mcList,'txt':txtList,
-                                                'sentrix_ID':sentrixList,'X':xList,'Y':yList})
-            distanceRanking = distanceRanking.sort_values(by='distance', axis=0, ascending=True, inplace=False, kind='quicksort')
-            # distanceRanking[0:20]
-            wb = openpyxl.Workbook()     # write plot coordinates to xlsx
-            ws = wb.active # grab the active worksheet
-            ws['A1'] = "Sentrix_ID"     # Data can be assigned directly to cells
-            ws['B1'] = "X"     
-            ws['C1'] = "Y"
-            for thisRow in range(len(embeddingAll)):     # Rows can also be appended
-                ws.append([selectedSentrixIds[thisRow], embeddingAll[thisRow][0], embeddingAll[thisRow][1]])
-            wb.save(nanodipReportDir+"/"+sampleName+"_UMAP.xlsx")     # Save the file
-            closeupDf=distanceRanking[0:topMatch] # generate plot of thisCase surrounding reference datasets
-            closeupList=closeupDf.values.tolist()
-            markerSize=5 # marker size for plotly
-            fig3=px.scatter(x=closeupDf["X"],
-                            y=closeupDf["Y"],
-                            labels={"x":"UMAP 0",
-                                    "y":"UMAP 1"},
-                            hover_name=closeupDf["sentrix_ID"],
-                            title="Close-up "+umapTitle,
-                            color=closeupDf["methClass"],
-                            render_mode=plotlyRenderMode)
-            fig3.update_traces(marker=dict(size=markerSize))
-            fig3.add_annotation(x=nanoX, y=nanoY, text=sampleName, showarrow=True, arrowhead=1)
-            for ds in closeupDf.values.tolist(): # add transparent hyperlinks to reference CNV plots (e.g., on public EpiDiP.org server)
-                fig3.add_annotation(x=ds[4], y=ds[5],
-                                    text="<a href='"+cnvLinkPrefix+ds[3]+cnvLinkSuffix+"' target='_blank'>&nbsp;</a>",
-                                    showarrow=False, arrowhead=1)
-            topRadius=closeupList[len(closeupList)-1][0]
-            fig3.add_shape(type="circle",
-               x0=nanoX-topRadius,
-               y0=nanoY-topRadius,
-               x1=nanoX+topRadius,
-               y1=nanoY+topRadius,
-               line_color="black",
-               line_width=0.5)
-            fig3.update_yaxes(scaleanchor = "x", scaleratio = 1)
-            outPlot=nanodipReportDir+"/"+sampleName+"_"+referenceString+"_UMAP_top.html"
-            fig3.write_html(outPlot)
-            fig3.write_image(nanodipReportDir+"/"+sampleName+"_"+referenceString+"_UMAP_top.png")
-            # create PDF-compatible HTML table with proper cell padding, no borders etc.
-            htmlTable="<table border=0>"
-            htmlTable+="<tr><td><b>methClass</b></td><td><b>distance</b></td><td><b>txt</b></td><td><b>sentrix_ID</b></td></tr>"
-            for i in closeupList:
-                htmlTable+="<tr><td>"+str(i[1])+"</td><td>"+str(i[0])+"</td><td>"+str(i[2])+"</td><td>"+str(i[3])+"</td></tr>"
-            # generate PDF report
-            nanodipReport="<html><head><title>"+sampleName+"</title><body><h1>"+sampleName+"</h1>"+sampleName+"<br>"+htmlTable+"</body>"
-            convert_html_to_pdf(nanodipReport, nanodipReportDir+"/"+sampleName+"_"+referenceString+"_NanoDiP_ranking.pdf")
-            cpgCountFile = open(nanodipReportDir+'/'+sampleName+'_cpgcount.txt',"w")
-            cpgCountFile.write(str(len(methoverlap)))
-            cpgCountFile.close()
-            logpr(verbosity,"UMAP end")
-            endTime = datetime.datetime.now()
-            logpr(verbosity,"Start: "+str(startTime))
-            logpr(verbosity,"End  : "+str(endTime))
-            logpr(verbosity,"Dur. : "+str(endTime-startTime))
-            umapBar.set_description('UMAP('+sampleName+'), completed')
-            umapBar.update(1)
-        else:
-            outPlot=nanodipReportDir+"/"+sampleName+"_"+referenceString+"_UMAP_all.html"
-            with open(outPlot, 'w') as txtfile:
-                txtfile.write("<html><body>No data to plot.</body></html>")
+"""
+### 4. UMAP Methylation Plotter
+"""
+
+"""
+### 5. Report Generator
+"""
 
 
-# ### 5. Report Generator
+"""
+### 6. User Interface Functions
+"""
 
-# In[38]:
-
-
-# TODO del
-def generatePdfReport(sampleId,referenceId):
-    referenceName=referenceId.replace(".xlsx","")
-    runDate=datetimestringnow()
-    runSystemName=str(socket.gethostname())
-    umapTopPlotPath=nanodipReportDir+"/"+sampleId+"_"+referenceName+"_UMAP_top.png"
-    cnvPlotPath=nanodipReportDir+"/"+sampleId+"_CNVplot.png"
-    readCountPath=nanodipReportDir+"/"+sampleId+"_alignedreads.txt"
-    cpgCountPath=nanodipReportDir+"/"+sampleId+"_cpgcount.txt"
-    reportPdfName=sampleId+"_"+referenceName+"_NanoDiP_report.pdf"
-    reportPdfPath=nanodipReportDir+"/"+reportPdfName
-    detectedBarcode=getPredominantBarcode(sampleId)
-    readCount=open(readCountPath,"r")
-    validReads=str(readCount.read())
-    readCount.close()
-    cpgCount=open(cpgCountPath,"r")
-    overlapcpgCount=str(cpgCount.read())
-    cpgCount.close()
-    htmlcode="""
-        <html><body>
-        <h1><img src='"""+epidipLogoPath+"""' width='30' align='top'>&nbsp;&nbsp;
-        NanoDiP Report for Sample """+sampleId+"""</h1>
-        <table border='0'>
-        <tr><td width='100'>Generated on</td><td width='10'>:</td><td>"""+runSystemName+""" / """+runDate+"""</td></tr>
-        <tr><td>Detected barcode</td><td>:</td><td>"""+detectedBarcode+"""</td></tr>
-        <tr><td>Valid reads</td><td>:</td><td>"""+validReads+"""</td></tr>
-        <tr><td>450K overlap CpG count</td><td>:</td><td>"""+overlapcpgCount+"""</td></tr>
-        <tr><td>Reference data</td><td>:</td><td>"""+referenceName+"""</td></tr>
-        </table>
-        <h2>Methylation UMAP plot</h2>
-        <img src='"""+umapTopPlotPath+"""' width='500'><br>
-        <h2>Copy number plot</h2>
-        <img src='"""+cnvPlotPath+"""' width='700'>
-        </body><html>
-    """
-    convert_html_to_pdf(htmlcode, reportPdfPath)
-    return "<html><a href='reports/"+reportPdfName+"'>"+"PDF report generated for "+sampleId+", click this link to open it.</a></html>"
-
-
-# ### 6. User Interface Functions
-
-# In[39]:
-
-# TODO del
-def systemStats(): # obtain generic system parameters
-    total, used, free = shutil.disk_usage(minknowDataDir)
-    m="<tt><b>SSD or HDD usage</b><br>"
-    m=m+"Total: "+str(total // (2**30))+" GB<br>"
-    m=m+"Used : "+str(used // (2**30))+" GB<br>"
-    m=m+"Free : "+str(free // (2**30))+" GB<br>"
-    m=m+"<br><b>Memory</b><br>"
-    m=m+"free : "+str(round(psutil.virtual_memory().available * 100 / psutil.virtual_memory().total))+"%<br>"
-    m=m+"<br><b>CPU: </b><br>"    
-    m=m+"usage: "+str(round(psutil.cpu_percent()))+"%<br>"
-    m=m+"CpG&nbsp;&nbsp;active runs: "+str(UserInterface.cpgQueue)+" <a href='reset_queue?queue_name=cpg'>reset queue</a><br>"
-    m=m+"CNVP active runs: "+str(UserInterface.cnvpQueue)+" <a href='reset_queue?queue_name=cnvp'>reset queue</a><br>"
-    m=m+"UMAP active runs: "+str(UserInterface.umapQueue)+" <a href='reset_queue?queue_name=umap'>reset queue</a><br>"
-    m=m+"<br><br>"
-    m=m+"<a href='restart_server'>Restart NanoDiP</a> - <font color='#FF0000'><b>USE WITH CAUTION!</b></font>"
-    m=m+"</tt>" 
-    return m
-
-
-# In[40]:
 
 # TODO changed
 # String patterns in sample names that exclude data from downstream analysis,
@@ -1549,13 +1071,13 @@ def systemStats(): # obtain generic system parameters
 def analysis_launch_table():
     """Presents a html table from which analyses can be started in a post-hoc
     manner."""
-    analysis_runs = [run for run in getRuns() if 
-        not any(pattern in run for pattern in config.ANALYSIS_EXCLUSION_PATTERNS)]
-    annotations = getReferenceAnnotations()
+    analysis_runs = [run for run in get_runs() if
+        not any(pattern in run for pattern in ANALYSIS_EXCLUSION_PATTERNS)]
+    annotations = reference_annotations()
     table = f"""
         <tt>
         <font size='-2'>
-        <table border=1> 
+        <table border=1>
         <thead>
         <tr>
             <th align='left'><b>Sample ID </b></th>
@@ -1598,7 +1120,7 @@ def analysis_launch_table():
             rel='noopener noreferrer' title='{run}: {a.replace(".xlsx", "")}'>
                 make PDF
             </a>
-            </td>"""    
+            </td>"""
         table += """
         </tr>"""
     table += """
@@ -1608,61 +1130,19 @@ def analysis_launch_table():
         </tt>"""
     return table
 
-
-
-# In[41]:
-
-
-# TODO del not used
-def listRunsTable(): # return all run folders as HTML table
-    runFoldersHtml="<table border=1>"
-    for r in getRuns():
-        runFoldersHtml=runFoldersHtml+"<tr><td>"+r+"</td></tr>"
-    runFoldersHtml=runFoldersHtml+"</table>"
-    return(runFoldersHtml)
-
-
-# In[42]:
-
-# TODO del
-def collectPastAnalyses(): # list all analysis result files
-    fl=[] # empty file file
-    for f in listdir(nanodipReportDir):
-        for s in resultEndings:
-            if s in f:
-                fl.append([f,float(os.path.getmtime(nanodipReportDir+"/"+f))])
-    fl.sort(key=lambda row: (row[1], row[0]), reverse=True) # sort based on modif. date
-    fl=[j.pop(0) for j in fl] # remove date column after sorting
-    return fl
-
-
 def get_all_results():
     """Return list of all analysis result files in report directory sorted
     by modification time."""
     files = []
-    for f in listdir(config.NANODIP_REPORTS):
-        for e in config.RESULT_ENDINGS.values():
+    for f in os.listdir(NANODIP_REPORTS):
+        for e in RESULT_ENDINGS.values():
             if f.endswith(e):
                 mod_time = os.path.getmtime(
-                    os.path.join(config.NANODIP_REPORTS, f)
+                    os.path.join(NANODIP_REPORTS, f)
                 )
                 files.append([f, mod_time])
     files.sort(key=lambda x: (x[1], x[0]), reverse=True)
     return [f[0] for f in files]
-
-# In[43]:
-
-# TODO del
-def makePastAnalysesTable(): # create an HTML table displaying links to completed analysis results
-    ht="<tt><table border=1>"
-    for f in collectPastAnalyses():
-        ht=ht+"<tr><td><a href='reports/"+f+"' target='_blank' rel='noopener noreferrer'>"+f+"</a></td></tr>"
-    ht=ht+"</tt></table>"
-    return ht
-
-
-# In[44]:
-
 
 def livePage(deviceString): # generate a live preview of the data analysis with the current PNG figures
     thisSampleID=getThisRunSampleID(deviceString) # if there is a run that produces data, the run ID will exist
@@ -1677,22 +1157,14 @@ def livePage(deviceString): # generate a live preview of the data analysis with 
     ht=ht+"</tt></table><body></html>"
     return ht
 
-
-# In[45]:
-
-
 def methcallLivePage(sampleName): # generate a self-refreshing page to invoke methylation calling
     ht="<html><head><title>MethCaller: "+sampleName+"</title>"
     ht=ht+"<meta http-equiv='refresh' content='3'></head><body>"
-    ht=ht+"last refresh and console output at "+datetimestringnow()+"<hr>shell output<br><br><tt>"
+    ht=ht+"last refresh and console output at "+date_time_string_now()+"<hr>shell output<br><br><tt>"
     #ht=ht+calculateMethylationAndBamFromFast5Fastq(sampleName)
     ht=ht+f5cOneFast5(sampleName,analyzeOne=True)
     ht=ht+"</tt></body></html>"
     return ht
-
-
-# In[46]:
-
 
 #TODO changed
 def menuheader(current_page, autorefresh=0):
@@ -1736,7 +1208,7 @@ def menuheader(current_page, autorefresh=0):
         <html>
         <head>
         <title>
-            NanoDiP Version {config.NANODIP_VERSION}
+            NanoDiP Version {NANODIP_VERSION}
         </title>"""
     if autorefresh > 0:
         html += f"<meta http-equiv='refresh' content='{autorefresh}'>"
@@ -1763,17 +1235,18 @@ def menuheader(current_page, autorefresh=0):
         <br>"""
     return html
 
-# ### 6. CherryPy Web UI
-# The browser-based user interface is based on CherryPy, which contains an intergrated web server and serves pages locally. Communication between the service and browser typically generates static web pages that may or may not contain automatic self refresh commands. In the case of self-refreshing pages, the browser will re-request a given page with leads to re-execution of the respective python functions. The main handles to these function are located in the Web UI cell below.
+"""
+### 6. CherryPy Web UI
+The browser-based user interface is based on CherryPy, which contains an
+intergrated web server and serves pages locally. Communication between the
+service and browser typically generates static web pages that may or may not
+contain automatic self refresh commands. In the case of self-refreshing pages,
+the browser will re-request a given page with leads to re-execution of the
+respective python functions. The main handles to these function are located in
+the Web UI cell below.
+"""
 
-# In[ ]:
 
-
-# TODO changed
-from plots import make_cnv_plot, CNVData, UMAPData
-import data
-import multiprocessing as mp
-from utils import render_template
 
 
 class UserInterface(object):
@@ -1788,7 +1261,7 @@ class UserInterface(object):
 
     @cherrypy.expose
     def index(self):
-        total, used, free = shutil.disk_usage(config.NANODIP_DATA)
+        total, used, free = shutil.disk_usage(DATA)
         sys_stat = {
             "hostname": socket.gethostname(),
             "disk_total": total // (2**30),
@@ -1812,7 +1285,6 @@ class UserInterface(object):
         html += "<tt><b>Computer:</b> "
         html += str(socket.gethostname())
         html += "</tt><br><br>"
-        html += systemStats()
         return html
 
     @cherrypy.expose
@@ -1848,7 +1320,7 @@ class UserInterface(object):
             myString=myString+", active run: "+getActiveRun(n)
             if activeRun!="none":
                 myString=myString+" <a href='launchAutoTerminator?sampleName="+getThisRunSampleID(n)+"&deviceString="+n+"' target='_blank'>"
-                myString=myString+"<br>Click this link to launch automatic run terminator after "+str(round(wantedBases/1e6))+" MB.</a>"
+                myString=myString+"<br>Click this link to launch automatic run terminator after"+str(round(NEEDED_NUMBER_OF_BASES/1e6))+" MB.</a>"
                 myString=myString+"<br><font color=''#ff0000'><a href='stopSequencing?deviceId="+n+"' title='Clicking this will terminate the current run immediately! Use with care!'>terminate manually</a></font>"
             myString=myString+"<br><br>"
         myString=myString+"</body></html>"
@@ -1861,7 +1333,7 @@ class UserInterface(object):
         return render_template(
             "status.html",
             positions=positions,
-            mega_bases=config.NEEDED_NUMBER_OF_BASES // 1e6)
+            mega_bases=NEEDED_NUMBER_OF_BASES // 1e6)
 
     @cherrypy.expose
     def startSequencing(self,deviceId="",sampleId="",runDuration="",referenceFile=""):
@@ -1876,9 +1348,9 @@ class UserInterface(object):
                             '--experiment-duration',runDuration,
                             '--basecalling',
                             '--fastq',
-                            '--fastq-reads-per-file',readsPerFile,
+                            '--fastq-reads-per-file',READS_PER_FILE,
                             '--fast5',
-                            '--fast5-reads-per-file',readsPerFile,
+                            '--fast5-reads-per-file',READS_PER_FILE,
                             '--verbose',
                             '--kit','SQK-RBK004',
                             '--barcoding',
@@ -1888,9 +1360,9 @@ class UserInterface(object):
                 myString=myString+"sequencing run started for "+sampleId+" on "+deviceId+" as "+realRunId+" with reference "+referenceFile
                 myString=myString+"<hr>"+getThisRunInformation(deviceId)
                 myString=myString+"<hr><a href='launchAutoTerminator?sampleName="+sampleId+"&deviceString="+deviceId+"'>"
-                myString=myString+"Click this link to launch automatic run terminator after "+str(round(wantedBases/1e6))+" MB.</a> "
+                myString=myString+"Click this link to launch automatic run terminator after"+str(round(NEEDED_NUMBER_OF_BASES/1e6))+" MB.</a> "
                 myString=myString+"If you do not start the run terminator, you will have to terminate the run manually, or it will stop after the predefined time."
-        else:    
+        else:
             myString=myString+'''<form action="startSequencing" method="GET">
                 Select an idle Mk1b:&nbsp;<select name="deviceId" id="deviceId">'''
             positions=listMinionPositions()
@@ -1903,7 +1375,7 @@ class UserInterface(object):
                 </select>&nbsp; and enter the sample ID:&nbsp;<input type="text" name="sampleId" />
                 &nbsp;for&nbsp;<input type="text" name="runDuration" value="72" />&nbsp;hours.
                 &nbsp;Reference set&nbsp;<select name="referenceFile" id="referenceFile">'''
-            for ref in getReferenceAnnotations():
+            for ref in reference_annotations():
                 myString=myString+'<option value="'+ref+'">'+ref+'</option>'
             myString=myString+'&nbsp;<input type="submit" value="start sequencing now"/></form>'
         return myString
@@ -1924,9 +1396,9 @@ class UserInterface(object):
                 "--experiment-duration", run_duration,
                 "--basecalling",
                 "--fastq",
-                "--fastq-reads-per-file", config.READS_PER_FILE,
+                "--fastq-reads-per-file", READS_PER_FILE,
                 "--fast5",
-                "--fast5-reads-per-file", config.READS_PER_FILE,
+                "--fast5-reads-per-file", READS_PER_FILE,
                 "--verbose",
                 "--kit", "SQK-RBK004",
                 "--barcoding",
@@ -1942,7 +1414,7 @@ class UserInterface(object):
                 reference_id=reference_id,
                 device_id=device_id,
                 run_id=run_id,
-                mega_bases=config.NEEDED_NUMBER_OF_BASES // 1e6,
+                mega_bases=NEEDED_NUMBER_OF_BASES // 1e6,
                 run_info=getThisRunInformation(device_id),
             )
         else:
@@ -1954,7 +1426,7 @@ class UserInterface(object):
                 start_now=start_now,
                 test=False,
                 idle=idle,
-                references=getReferenceAnnotations(),
+                references=reference_annotations(),
             )
 
 
@@ -1962,7 +1434,7 @@ class UserInterface(object):
     def startTestrun(self,deviceId=""):
         myString=menuheader('startTestrun', 0)
         if deviceId:
-            sampleId=datetimestringnow()+"_TestRun_"+getFlowCellID(deviceId)
+            sampleId=date_time_string_now()+"_TestRun_"+getFlowCellID(deviceId)
             sys.argv = ['',
                         '--host','localhost',
                         '--position',deviceId,
@@ -1971,9 +1443,9 @@ class UserInterface(object):
                         '--experiment-duration','0.1',
                         '--basecalling',
                         '--fastq',
-                        '--fastq-reads-per-file',readsPerFile,
+                        '--fastq-reads-per-file',READS_PER_FILE,
                         '--fast5',
-                        '--fast5-reads-per-file',readsPerFile,
+                        '--fast5-reads-per-file',READS_PER_FILE,
                         '--verbose',
                         '--kit','SQK-RBK004',
                         '--barcoding',
@@ -2008,9 +1480,9 @@ class UserInterface(object):
                 "--experiment-duration", "0.1",
                 "--basecalling",
                 "--fastq",
-                "--fastq-reads-per-file", readsPerFile,
+                "--fastq-reads-per-file", READS_PER_FILE,
                 "--fast5",
-                "--fast5-reads-per-file", readsPerFile,
+                "--fast5-reads-per-file", READS_PER_FILE,
                 "--verbose",
                 "--kit", "SQK-RBK004",
                 "--barcoding",
@@ -2024,7 +1496,7 @@ class UserInterface(object):
                 reference_id="TEST",
                 device_id=device_id,
                 run_id=run_id,
-                mega_bases=config.NEEDED_NUMBER_OF_BASES // 1e6,
+                mega_bases=NEEDED_NUMBER_OF_BASES // 1e6,
                 run_info=getThisRunInformation(device_id),
             )
         else:
@@ -2036,7 +1508,7 @@ class UserInterface(object):
                 start_now=False,
                 test=True,
                 idle=idle,
-                references=getReferenceAnnotations(),
+                references=reference_annotations(),
             )
 
     @cherrypy.expose
@@ -2082,7 +1554,7 @@ class UserInterface(object):
         return render_template(
             "list_runs.html",
             positions=positions,
-            host=config.HOST,
+            host=CHERRYPY_HOST,
             status=status,
             mounted_flow_cell_id=mounted_flow_cell_id,
             current_status=current_status,
@@ -2103,75 +1575,41 @@ class UserInterface(object):
         return myString
 
     @cherrypy.expose
-    def analysis(self, func="", samp="", ref=""):
+    def analysis(self, func="", samp="", ref="", new="False"):
         if func == "":
-            analysis_runs = [run for run in getRuns() if not any(pattern in run
-                for pattern in config.ANALYSIS_EXCLUSION_PATTERNS)]
+            analysis_runs = [run for run in get_runs() if not any(pattern in run
+                for pattern in ANALYSIS_EXCLUSION_PATTERNS)]
             annotations = [a.replace(".xlsx", "")
-                for a in getReferenceAnnotations()]
+                for a in reference_annotations()]
             return render_template(
                 "analysis_start.html",
                 analysis_runs=analysis_runs,
                 annotations=annotations,
             )
         if func == "cnv":
-            genome = data.ReferenceGenome()
+            genome = ReferenceGenome()
             genes = genome.genes.name.to_list()
             return render_template(
                 "analysis_cnv.html",
                 sample_name=samp,
                 genes=genes,
+                new=new,
             )
         if func == "umap":
             return render_template(
                 "analysis_umap.html",
                 sample_name=samp,
                 reference_name=ref,
-                first_use = not data.binary_reference_data_exists(),
+                new=new,
+                first_use = not binary_reference_data_exists(),
             )
         else:
             raise cherrypy.HTTPError(404, "URL not found")
 
     @cherrypy.expose
-    def cnvplot(self, sampleName=None):
-        html = ""
-        if sampleName:
-            while UserInterface.cnvpQueue > 0:
-                time.sleep(2)
-            UserInterface.cnvpQueue += 1
-            try:
-                make_cnv_plot(data.SampleData(sampleName))
-                html_error = ""
-            except:
-                html_error = """
-                    <b>
-                    <font color='#FF0000'>
-                        ERROR OCCURRED, PLEASE RELOAD TAB
-                    </font>
-                    </b>"""
-            html += f"""
-                <html>
-                <head>
-                <title>
-                    {sampleName} at {datetimestringnow()}
-                </title>
-                <meta http-equiv='refresh' content='1;
-                    URL=reports/{sampleName}_CNVplot.html'>"
-                </head>
-                <body>
-                {html_error}
-                Loading CNV plot. If it fails,
-                <a href='reports/{sampleName}_CNVplot.html'>
-                    click here to load plot
-                </a>.
-                </body>
-                </html>"""
-            UserInterface.cnvpQueue -= 1
-        return html
-
-    @cherrypy.expose
-    def cnv(self, samp, genes="", method=""):
+    def cnv(self, samp, genes="", new="False"):
         t0=time.time()
+        print("NEW**********************",new)
         try:
             cnv_plt_data = CNVData(samp)
         except FileNotFoundError:
@@ -2180,7 +1618,7 @@ class UserInterface(object):
         def make_plot(cnv_data, lock):
             """Plot function for multiprocessing."""
             lock.acquire()
-            if not cnv_data.files_on_disk():
+            if not cnv_data.files_on_disk() or new == "True":
                 cnv_data.make_cnv_plot()
             lock.release()
 
@@ -2194,13 +1632,10 @@ class UserInterface(object):
         cnv_plt_data.read_from_disk()
         print("CNV=====================", time.time()-t0)
 
-        if method == "bins":
-            return cnv_plt_data.bins_plot_json
-
         return cnv_plt_data.plot_cnv_and_genes([genes])
 
     @cherrypy.expose
-    def umap(self, samp, ref, close_up=""):
+    def umap(self, samp, ref, close_up="", new="False"):
         t0=time.time()
         try:
             umap_data = UMAPData(samp, ref)
@@ -2210,7 +1645,7 @@ class UserInterface(object):
         def make_plot(plt_data, lock):
             """Plot function for multiprocessing."""
             lock.acquire()
-            if not plt_data.files_on_disk():
+            if not plt_data.files_on_disk() or new == "True":
                 plt_data.make_umap_plot()
             lock.release()
 
@@ -2249,7 +1684,7 @@ class UserInterface(object):
                 <html>
                 <head>
                 <title>
-                    {sampleName} against {refAnno} at {datetimestringnow()}
+                    {sampleName} against {refAnno} at {date_time_string_now()}
                 </title>
                 <meta http-equiv='refresh' content='1;
                     URL=reports/{sampleName}_{reference_name}_UMAP_all.html'>"
@@ -2265,27 +1700,19 @@ class UserInterface(object):
             UserInterface.umapQueue -= 1
         return html
 
-    #TODO del
-    @cherrypy.expose
-    def makePdf(self, sampleName=None, refAnno=None):
-        html = ""
-        if sampleName and refAnno:
-            html = generatePdfReport(sampleName, refAnno)
-        return html
-
     @cherrypy.expose
     def make_pdf(self, samp=None, ref=None):
-        path = os.path.join(config.NANODIP_REPORTS, samp + "_cpgcount.txt")
+        path = os.path.join(NANODIP_REPORTS, samp + "_cpgcount.txt")
         with open(path, "r") as f:
             overlap_cnt = f.read()
 
-        path = os.path.join(config.NANODIP_REPORTS, samp + "_alignedreads.txt")
+        path = os.path.join(NANODIP_REPORTS, samp + "_alignedreads.txt")
         with open(path, "r") as f:
             read_numbers = f.read()
 
-        cnv_path = os.path.join(config.NANODIP_REPORTS, samp + "_CNVplot.png") #TODO png
+        cnv_path = os.path.join(NANODIP_REPORTS, samp + "_CNVplot.png") #TODO png
         umap_path = os.path.join(
-            config.NANODIP_REPORTS,
+            NANODIP_REPORTS,
             samp + "_" + ref + "_UMAP_top.png",
         )
 
@@ -2294,7 +1721,7 @@ class UserInterface(object):
             sample_name=samp,
             sys_name=socket.gethostname(),
             date=date_time_string_now(),
-            barcode=getPredominantBarcode(samp),
+            barcode=predominant_barcode(samp),
             reads=read_numbers,
             cpg_overlap_cnt=overlap_cnt,
             reference=ref,
@@ -2302,7 +1729,7 @@ class UserInterface(object):
             umap_path=umap_path,
         )
         report_name = samp + "_" + ref + "_NanoDiP_report.pdf"
-        report_path = os.path.join(config.NANODIP_REPORTS, report_name)
+        report_path = os.path.join(NANODIP_REPORTS, report_name)
         convert_html_to_pdf(html_report, report_path)
         raise cherrypy.HTTPRedirect(os.path.join("reports", report_name))
 
@@ -2344,7 +1771,7 @@ class UserInterface(object):
             myString=myString+functionName+" launched for "+sampleName+" "
             if refAnno!="None":
                 myString=myString+"against "+refAnno
-            myString=myString+" at "+datetimestringnow()+". "
+            myString=myString+" at "+date_time_string_now()+". "
             myString=myString+"Frame below will display result upon completion, if this tab/window is kept open."
             if refAnno=="None":
                 myString=myString+"<br><iframe src='./"+functionName+"?sampleName="+sampleName+"' height='95%' width='100%' title='"+sampleName+"' border=3></iframe>"
@@ -2361,7 +1788,7 @@ class UserInterface(object):
                 myString=myString+"<title>Poller: "+sampleName+"/"+deviceString+"/"+runId+"</title>"
                 myString=myString+"<meta http-equiv='refresh' content='15'>"
                 myString=myString+"<body>"
-                myString=myString+"Last refresh for "+sampleName+"/"+deviceString+"/"+runId+" at "+datetimestringnow()
+                myString=myString+"Last refresh for "+sampleName+"/"+deviceString+"/"+runId+" at "+date_time_string_now()
                 myString=myString+"</body></html>"
                 writeRunTmpFile(sampleName,deviceString)
         return myString
@@ -2384,7 +1811,7 @@ class UserInterface(object):
 
 def main():
     # Start CherryPy Webserver
-    if config.DEBUG_MODE:
+    if DEBUG_MODE:
         #set access logging
         cherrypy.log.screen = True
         cherrypy.config.update({'log.screen': True})
@@ -2394,20 +1821,20 @@ def main():
         cherrypy.config.update({'log.screen': False})
         cherrypy.config.update({ "environment": "embedded" })
 
-    print(f"NanoDiP server running at http://{config.HOST}:{config.PORT}")
+    print(f"NanoDiP server running at http://{CHERRYPY_HOST}:{CHERRYPY_PORT}")
 
     cherrypy_config = {
         '/favicon.ico': {
             'tools.staticfile.on': True,
-            'tools.staticfile.filename': config.BROWSER_FAVICON,
+            'tools.staticfile.filename': BROWSER_FAVICON,
         },
         '/img': {
             'tools.staticdir.on': True,
-            'tools.staticdir.dir': config.IMAGES,
+            'tools.staticdir.dir': IMAGES,
         },
         '/reports': {
             'tools.staticdir.on': True,
-            'tools.staticdir.dir': config.NANODIP_REPORTS,
+            'tools.staticdir.dir': NANODIP_REPORTS,
         },
         '/static': {
             'tools.staticdir.on': True,
@@ -2419,9 +1846,21 @@ def main():
 if __name__ == "__main__":
     main()
 
-# ### ^^^ LIVE LOG ABOVE ^^^
-# All CherryPy access will be logged here, including live progress bars for computationally intense analyses. Detailed access logging is turned off by default (accessLogging is False), but can be turned on,e.g., for debugging, in the configuration section at the beginning of this notebook. While it is not required to have at look at these during normal operation, information contained in the log may be helpful in troubleshooting. Line numbers in error messages indicated here typically match those given in the respective Jupyter Notebook cells.
-#
-# To preseve these messages, halt the Python kernel, save and close the notebook to send it for support. This makes sure that the code as well as the error messages will be preserved.
-#
-# To launch the user interface, wait until you see a pink log entry that the web server has started, then navigate to http://localhost:8080.
+"""
+### ^^^ LIVE LOG ABOVE ^^^
+All CherryPy access will be logged here, including live progress bars for
+computationally intense analyses. Detailed access logging is turned off by
+default (accessLogging is False), but can be turned on,e.g., for debugging,
+in the configuration section at the beginning of this notebook. While it is not
+required to have at look at these during normal operation, information
+contained in the log may be helpful in troubleshooting. Line numbers in error
+messages indicated here typically match those given in the respective Jupyter
+Notebook cells.
+
+To preseve these messages, halt the Python kernel, save and close the notebook
+to send it for support. This makes sure that the code as well as the error
+messages will be preserved.
+
+To launch the user interface, wait until you see a pink log entry that the web
+server has started, then navigate to http://localhost:8080.
+"""

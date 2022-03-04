@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}
+  Results
+{% endblock %}
+
+{% block body %}
+<table class="analysis">
+  <thead>
+    <tr>
+      <th>
+        Processed files  
+      </th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for file in files %}
+      <tr>
+        <td>
+          <a href="reports/{{file}}" class="results" target="_blank" rel="noopener noreferrer">
+            {{file}}
+          </a>
+        </td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

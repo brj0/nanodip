@@ -1,8 +1,14 @@
-import data
+# start_external_modules
+import datetime
+import jinja2
 import os
 import pandas as pd
-import config
-import jinja2
+import xhtml2pdf.pisa
+# end_external_modules
+
+# start_internal_modules
+from config import ILUMINA_CG_MAP
+# end_internal_modules
 
 def extract_referenced_cpgs(sample_methylation,
                             output_overlap,
@@ -14,7 +20,7 @@ def extract_referenced_cpgs(sample_methylation,
         output_overlap_cnt: file path of CpG overlap count
     """
     reference_cpgs = pd.read_csv(
-        config.ILUMINA_CG_MAP,
+        ILUMINA_CG_MAP,
         delimiter="\t",
         names=["ilmnid","chromosome","strand","start"],
     )
@@ -43,4 +49,15 @@ def render_template(template_name, **context):
     template = jinja2.Environment(
         loader=loader).get_template(template_name)
     return template.render(context)
+
+def convert_html_to_pdf(source_html, output_file):
+    """Create PDF from html-string."""
+    with open(output_file, "w+b") as f:
+        pisa_status = xhtml2pdf.pisa.CreatePDF(source_html, dest=f)
+    return pisa_status.err
+
+def date_time_string_now():
+    """Return current date and time as a string to create timestamps."""
+    now = datetime.datetime.now()
+    return now.strftime("%Y%m%d_%H%M%S")
 

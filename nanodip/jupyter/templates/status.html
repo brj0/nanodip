@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}
+  Status
+{% endblock %}
+
+{% block body %}
+
+{% for pos in positions %}
+  <iframe src="DeviceStatusLive?deviceString={{pos}}" height="200" width="600" title="{{pos}}" border=3></iframe>
+  <iframe src="AnalysisStatusLive?deviceString={{pos}}" height="200" width="600" title="{{pos}}" border=3></iframe>
+  <br>
+  <a href="DeviceStatusLive?deviceString={{pos}}" target="_blank" title="Click to open device status page in new tab or window">{{pos}}</a>, live state: {{getRealDeviceActivity(pos)}}, active run: {{getActiveRun(pos)}}
+
+  {% if getActiveRun(pos) != "none" %}
+    <a href="launchAutoTerminator?sampleName={{getThisRunSampleID(pos)}}&deviceString={{pos}}" target="_blank">
+      Click this link to launch automatic run terminator after {{mega_bases}} MB.
+    </a>
+    <br>
+    <font color="#ff0000">
+    <a href="stopSequencing?deviceId={{pos}}" title="Clicking this will terminate the current run immediately! Use with care!">
+      terminate manually
+    </a>
+    </font>
+  {% endif %}
+
+{% endfor %}
+
+{% endblock %}
