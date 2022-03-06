@@ -41,8 +41,6 @@ genome = ReferenceGenome()
 
 # ref = ReferenceData(reference_name)
 # cnv = CNVData(sample_name)
-umapp = UMAPData(sample_name, reference_name)
-umapp.make_umap_plot()
 
 
 def umap_plot_from_data(sample, reference, umap_data_frame, close_up):
@@ -116,6 +114,8 @@ def umap_plot_from_data(sample, reference, umap_data_frame, close_up):
     return umap_plot
 
 
-plt=umap_plot_from_data(umapp.sample, umapp.reference, umapp.umap_df, close_up=False)
-plt.show()
+#umapp = UMAPData(sample_name, reference_name)
+#umapp.make_umap_plot()
+#plt=umap_plot_from_data(umapp.sample, umapp.reference, umapp.umap_df, close_up=False)
+#plt.show()
 

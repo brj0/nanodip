@@ -14,7 +14,7 @@ END_EXTERNAL = '# end_external_modules\n'
 START_INTERNAL = '# start_internal_modules\n'
 END_INTERNAL = '# end_internal_modules\n'
 
-def external_imports(modules):    
+def external_imports(modules):
     """Return all external module imports used."""
     def external_modules(content):
         start = content.index(START_EXTERNAL) + 1

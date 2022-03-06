@@ -1,9 +1,8 @@
 """
-    nanodip.data
-    ------------
-    
-    Data containers for sample, reference-data and reference-genome/gene
-    data.  
+## Data
+
+Data containers for sample, reference-data and reference-genome/gene
+data.
 """
 
 
@@ -151,13 +150,13 @@ class ReferenceData:
         self.methylation_class = [methyl_dict[s] for s in self.specimen_ids]
         self.description = ReferenceData.get_description(
             self.methylation_class
-        ) 
+        )
 
     def get_description(methylation_classes):
         """Returns a description of the methylation class."""
         abbr_df = pd.read_csv(ANNOTATIONS_ABBREVIATIONS_BASEL)
         abbr = {
-            mc:desc for mc, desc in 
+            mc:desc for mc, desc in
             zip(abbr_df.MethylClassStr, abbr_df.MethylClassShortDescr)
         }
         non_trivial_abbr = abbr.copy()
@@ -202,18 +201,17 @@ class ReferenceData:
         """
         path_csv = os.path.join(ANNOTATIONS, self.name + ".csv")
         path_xlsx = os.path.join(ANNOTATIONS, self.name + ".xlsx")
-        if not os.path.exists(path_csv):
-            csv_exists_and_up_to_date = False
-        else:
-            csv_exists_and_up_to_date = (
-                os.path.getmtime(path_csv) > os.path.getmtime(path_xlsx)
-            )
+        csv_exists_and_up_to_date = (
+            os.path.exists(path_csv) and
+            os.path.getmtime(path_csv) > os.path.getmtime(path_xlsx)
+        )
         if csv_exists_and_up_to_date:
             return pd.read_csv(path_csv)
         annotation = pd.read_excel(
             path_xlsx,
             header=None,
             names=["id", "methylation_class", "custom_text"],
+            engine="openpyxl", # TODO slower?
         )
         annotation.to_csv(path_csv, index=False)
         return annotation

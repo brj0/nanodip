@@ -176,7 +176,8 @@ def logpr(v,logstring): # logging funcion that reads verbosity parameter
 
 def get_runs():
     """Return list of run folders from MinKNOW data directory sorted by
-    modification time."""
+    modification time.
+    """
     runs = []
     for f in os.listdir(DATA):
         if f not in EXCLUDED_FROM_ANALYSIS:
@@ -226,7 +227,8 @@ def writeReferenceDefinition(sampleId,referenceFile):
 
 def write_reference_name(sample_id,reference_name):
     """Write the filename of the UMAP reference for the current run into
-    a text file."""
+    a text file.
+    """
     path = os.path.join(
         NANODIP_REPORTS, sample_id + "_selected_reference.txt"
     )
@@ -668,7 +670,7 @@ def is_position_selected(position, args):
 
 
 def startRun():
-    """Entrypoint to start protocol example"""
+    """Entrypoint to start protocol example."""
     # Parse arguments to be passed to started protocols:
     run_id=""
     args = parse_args()
@@ -1070,7 +1072,8 @@ def thisRunWatcherTerminator(deviceString,sampleName):
 # e.g., test runs
 def analysis_launch_table():
     """Presents a html table from which analyses can be started in a post-hoc
-    manner."""
+    manner.
+    """
     analysis_runs = [run for run in get_runs() if
         not any(pattern in run for pattern in ANALYSIS_EXCLUSION_PATTERNS)]
     annotations = reference_annotations()
@@ -1169,7 +1172,8 @@ def methcallLivePage(sampleName): # generate a self-refreshing page to invoke me
 #TODO changed
 def menuheader(current_page, autorefresh=0):
     """Generate a universal website header for the UI pages that
-    contains a simple main menu."""
+    contains a simple main menu.
+    """
     menu = {
         "index":[
             "Overview",
@@ -1251,7 +1255,8 @@ the Web UI cell below.
 
 class UserInterface(object):
     """The CherryPy Web UI Webserver class defines entrypoints and
-    function calls."""
+    function calls.
+    """
     # global variables within the CherryPy Web UI
     cpgQueue = 0 # TODO use mutex instead
     umapQueue = 0
@@ -1700,7 +1705,7 @@ class UserInterface(object):
             UserInterface.umapQueue -= 1
         return html
 
-    @cherrypy.expose
+    @cherrypy.expose # TODO crash if files not on disk
     def make_pdf(self, samp=None, ref=None):
         path = os.path.join(NANODIP_REPORTS, samp + "_cpgcount.txt")
         with open(path, "r") as f:

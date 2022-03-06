@@ -1,9 +1,8 @@
 """
-    nanodip.plots
-    -------------
+## Plots
 
-    Create Methylation UMAP plot.
-    Create Copy Number Variation plot.
+Create Methylation UMAP plot.
+Create Copy Number Variation plot.
 """
 
 # start_external_modules
@@ -110,8 +109,9 @@ def umap_plot_from_data(sample, reference, umap_data_frame, close_up):
             y0=umap_sample["y"] - radius,
             x1=umap_sample["x"] + radius,
             y1=umap_sample["y"] + radius,
+            fillcolor="rgba(0,0,0,0)",
             line_color="black",
-            line_width=0.5,
+            line_width=1.0,
         )
     return umap_plot
 
@@ -207,7 +207,7 @@ def get_cnv(read_positions, genome):
     return bin_midpoints, copy_numbers
 
 def cnv_grid(genome):
-    """Makes chromosome grid layout for CNV Plot and saves it on disk. If 
+    """Makes chromosome grid layout for CNV Plot and saves it on disk. If
     available grid is read from disk.
     """
     # Check if grid exists and return if available.
@@ -216,7 +216,7 @@ def cnv_grid(genome):
         with open(grid_path, "r") as f:
             grid = from_json(f.read())
         return grid
-        
+
     grid = go.Figure()
     grid.update_layout(
         coloraxis_showscale=False,
@@ -487,7 +487,7 @@ class CNVData:
         plot_path = self.path + ENDINGS["cnv_json"]
         genes_path = self.path + ENDINGS["genes"]
         return (
-            os.path.exists(plot_path) and 
+            os.path.exists(plot_path) and
             os.path.exists(genes_path)
         )
 

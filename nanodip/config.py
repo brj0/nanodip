@@ -66,7 +66,7 @@ BARCODE_NAMES = [
 # HG19 Gene data
 # https://hgdownload.soe.ucsc.edu/goldenPath/hg19/bigZips/genes/hg19.refGene.gtf.gz
 GENES_RAW = os.path.join(REFERENCE_DATA, "hg19_cnv", "hg19.refGene.gtf")
-GENES = os.path.join(REFERENCE_DATA, "hg19_cnv", "hg19_genes.csv")
+GENES = os.path.join(REFERENCE_DATA, "hg19_cnv", "hg19_genes.csv") # TODO crash if file changed
 RELEVANT_GENES = os.path.join(REFERENCE_DATA, "hg19_cnv", "relevant_genes.csv")
 
 # Beta values above cutoff will be interpreted as methylated.
@@ -100,7 +100,7 @@ EXCLUDED_FROM_ANALYSIS = [
     "nanodip_reports",
     "nanodip_tmp",
     "non-ont",
-    "pings",                              
+    "pings",
     "playback_raw_runs",
     "queued_reads",
     "raw_for_playback",
@@ -135,7 +135,7 @@ ENDINGS = {
 
 DEBUG_MODE = True
 # 0=low log verbosity, 1=high log verbosity (with timestamps, for benchmarking and debugging)
-VERBOSITY = 0 # TODO replace logger 
+VERBOSITY = 0 # TODO replace logger
 
 # Host and port on which the NanoDiP UI will be served
 CHERRYPY_HOST = "localhost"
@@ -159,5 +159,5 @@ MINIMAP2 = "/applications/nanopolish/minimap2/minimap2"
 SAMTOOLS = "/applications/samtools/samtools"
 RSCRIPT = "/applications/R-4.0.3/bin/Rscript"
 # TODO del: R script that reads CpGs into simplified text file (absolute path)
-READ_CPG_RSCRIPT="/applications/nanodip/readCpGs_mod02.R" 
+READ_CPG_RSCRIPT="/applications/nanodip/readCpGs_mod02.R"
 
