@@ -28,19 +28,20 @@ import os
 # end_internal_modules
 
 NANODIP_VERSION = 24
+__version__ = "24"
 
-# Data directories
+# Data directories for MinKNOW and NanoDiP output.
 DATA = "/data"
 NANODIP_OUTPUT = os.path.join(DATA, "nanodip_output")
 NANODIP_REPORTS = os.path.join(DATA, "nanodip_reports")
+
+# Reference data
 REFERENCE_DATA = "/applications/reference_data"
 BETA_VALUES = os.path.join(REFERENCE_DATA, "betaEPIC450Kmix_bin")
 ANNOTATIONS = os.path.join(REFERENCE_DATA, "reference_annotations")
-ANNOTATIONS_ABBREVIATIONS_BASEL = "/applications/reference_data/reference_annotations/mc_anno_ifp_basel.csv"
+ANNOTATIONS_ABBREVIATIONS_BASEL = os.path.join(ANNOTATIONS, "mc_anno_ifp_basel.csv")
 # https://gdc.cancer.gov/resources-tcga-users/tcga-code-tables/tcga-study-abbreviations
-ANNOTATIONS_ABBREVIATIONS_TCGA = "/applications/reference_data/reference_annotations/tcga_study_abbreviations.tsv"
-
-# Reference data
+ANNOTATIONS_ABBREVIATIONS_TCGA = os.path.join(ANNOTATIONS, "tcga_study_abbreviations.tsv")
 ILUMINA_CG_MAP = os.path.join(REFERENCE_DATA, "minimap_data/hg19_HumanMethylation450_15017482_v1-2_cgmap.tsv")
 REFERENCE_METHYLATION_DATA = os.path.join(REFERENCE_DATA, "EPIC450K")
 REFERENCE_METHYLATION = os.path.join(REFERENCE_METHYLATION_DATA, "methylation.bin")
@@ -55,14 +56,6 @@ CHROMOSOMES = os.path.join(REFERENCE_DATA, "hg19_cnv", "hg19_chromosomes.tsv")
 REFERENCE_GENOME_FA = "/applications/reference_data/minimap_data/hg19.fa"
 REFERENCE_GENOME_MMI = "/applications/reference_data/minimap_data/hg19_20201203.mmi"
 
-# Barcode strings, currently kit SQK-RBK004.
-BARCODE_NAMES = [
-    "barcode01","barcode02","barcode03",
-    "barcode04","barcode05","barcode06",
-    "barcode07","barcode08","barcode09",
-    "barcode10","barcode11","barcode12",
-]
-
 # HG19 Gene data
 # https://hgdownload.soe.ucsc.edu/goldenPath/hg19/bigZips/genes/hg19.refGene.gtf.gz
 GENES_RAW = os.path.join(REFERENCE_DATA, "hg19_cnv", "hg19.refGene.gtf")
@@ -71,6 +64,19 @@ RELEVANT_GENES = os.path.join(REFERENCE_DATA, "hg19_cnv", "relevant_genes.csv")
 
 # Beta values above cutoff will be interpreted as methylated.
 METHYLATION_CUTOFF = 0.35
+
+# Barcode strings, currently kit SQK-RBK004.
+BARCODE_NAMES = [
+    "barcode01","barcode02","barcode03",
+    "barcode04","barcode05","barcode06",
+    "barcode07","barcode08","barcode09",
+    "barcode10","barcode11","barcode12",
+]
+
+# Number of reads per file. 400 works well on the Jetson AGX. Higher numbers
+# increase batch size and RAM usage, lower numbers use more I/O resouces due
+# to more frequent reloading of alignment reference.
+READS_PER_FILE = "400"
 
 # Number of basecalled bases until run termination occurs.
 NEEDED_NUMBER_OF_BASES = 150_000_000
@@ -135,7 +141,7 @@ ENDINGS = {
 
 DEBUG_MODE = True
 # 0=low log verbosity, 1=high log verbosity (with timestamps, for benchmarking and debugging)
-VERBOSITY = 0 # TODO replace logger
+VERBOSITY = 0 # TODO replace by logger
 
 # Host and port on which the NanoDiP UI will be served
 CHERRYPY_HOST = "localhost"
@@ -148,16 +154,10 @@ BROWSER_FAVICON = "/applications/nanodip/favicon.ico"
 # The location where image files for the web application are stored.
 IMAGES ="/applications/nanodip"
 
-# Number of reads per file. 400 works well on the Jetson AGX. Higher numbers
-# increase batch size and RAM usage, lower numbers use more I/O resouces due
-# to more frequent reloading of alignment reference.
-READS_PER_FILE = "400"
-
 # Paths to binaries for methylation calling.
 F5C = "/applications/f5c/f5c"
 MINIMAP2 = "/applications/nanopolish/minimap2/minimap2"
 SAMTOOLS = "/applications/samtools/samtools"
-RSCRIPT = "/applications/R-4.0.3/bin/Rscript"
 # TODO del: R script that reads CpGs into simplified text file (absolute path)
+RSCRIPT = "/applications/R-4.0.3/bin/Rscript"
 READ_CPG_RSCRIPT="/applications/nanodip/readCpGs_mod02.R"
-

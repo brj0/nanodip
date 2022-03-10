@@ -2,7 +2,8 @@
 
 """
 ## NanoDiP all-in-one Jupyter Notebook
-*J. Hench, S. Frank, and C. Hultschig, Neuropathology, IfP Basel, 2021*
+*J. Hench, S. Frank, C. Hultschig and J. Brugger, Neuropathology, IfP Basel,
+2021*
 
 This software is provided free of charge and warranty; by using it you agree
 to do this on your own risk. The authors shall not be held liable for any
@@ -90,6 +91,7 @@ import argparse
 import cherrypy
 import datetime
 import fnmatch
+import json
 import logging
 from minknow_api.manager import Manager
 import minknow_api.statistics_pb2
@@ -104,6 +106,7 @@ import socket
 import subprocess
 import sys
 import time
+import threading
 import multiprocessing as mp
 # end_external_modules
 
@@ -137,6 +140,7 @@ from config import (
 )
 from data import (
     binary_reference_data_exists,
+    files_by_ending,
     ReferenceGenome,
 )
 from plots import (
@@ -146,6 +150,7 @@ from plots import (
 from utils import (
     convert_html_to_pdf,
     date_time_string_now,
+    extract_referenced_cpgs,
     render_template,
 )
 # end_internal_modules
@@ -192,19 +197,18 @@ def get_runs():
 
 def predominant_barcode(sample_name):
     """Returns the predominante barcode within all fast5 files."""
-    fast5_files = []
-    for root, _, files in os.walk(os.path.join(DATA, sample_name)):
-        fast5_files.extend(
-            [os.path.join(root, f) for f in files if f.endswith(".fast5")]
-        )
+    fast5_files = files_by_ending(DATA, sample_name, ending=".fast5")
+    pass_fast5_files = [f for f in fast5_files if "_pass_" in f] # TODO @HEJU im Original fehlt diese Zeile
     barcode_hits=[]
     for barcode in BARCODE_NAMES:
         barcode_hits.append(
-            len([f for f in fast5_files if barcode in f])
+            len([f for f in pass_fast5_files if barcode in f])
         )
-    max_barcode = max(barcode_hits)
-    if max_barcode > 1:
-        predominant_barcode = BARCODE_NAMES[barcode_hits.index(max_barcode)]
+    max_barcode_cnt = max(barcode_hits)
+    if max_barcode_cnt > 1:
+        predominant_barcode = BARCODE_NAMES[
+            barcode_hits.index(max_barcode_cnt)
+        ]
     else:
         predominant_barcode = "undetermined"
     return predominant_barcode
@@ -255,108 +259,171 @@ def writeRunTmpFile(sampleId,deviceId):
         ro=getThisRunOutput(deviceId,sampleId,runId)
         readCount=ro[0]
         bascalledBases=ro[1]
-        overlapCpGs=getOverlapCpGs(sampleId)
+        overlapCpGs=len(SampleData.get_read_cpgs((sampleId)))
         f.write(str(int(time.time()))+"\t"+
                 str(readCount)+"\t"+
                 str(bascalledBases)+"\t"+
                 str(overlapCpGs)+"\n")
 
+def single_file_methylation_caller(analysis_dir, file_name):
+    """Invokes f5c methylation caller on a single fast5/fastq file and
+    calculates methylation frequencies and CpG overlaps.
 
-def readRunTmpFile(sampleId):
-    print("readRunTmpFile not ready")
+    Args:
+        analysis_dir: directory containing fast5 and fastq files.
+        file_name: run id.
+    """
+    base_path = os.path.join(analysis_dir, file_name)
+    # Create index file for f5c.
+    f5c_index = [
+        F5C, "index",
+        "-t", "1",
+        "--iop", "100",
+        "--directory", analysis_dir,
+        base_path + ".fastq",
+    ]
+    # Aligns reads to reference genome and sorts resulting bam files
+    # (4 threads).
+    seq_align = [
+        MINIMAP2,
+        "-a",
+        "-x", "map-ont",
+        REFERENCE_GENOME_MMI,
+        base_path + ".fastq",
+        "-t", "4",
+        "|",
+        SAMTOOLS, "sort",
+        "-T", "tmp",
+        "-o", base_path + "-reads_sorted.bam",
+    ]
+    # Make bam index for samtools.
+    bam_index = [
+        SAMTOOLS, "index",
+        base_path + "-reads_sorted.bam",
+    ]
+    # Methylation caller.
+    methyl_calling = [
+        F5C, "call-methylation",
+        "--disable-cuda=yes",   # TODO for debugging on CPU only. Must be del.
+        "-B2000000", "-K400",   # set B to 2 megabases (GPU) and 0.4 kreads
+        "-b", base_path + "-reads_sorted.bam",
+        "-g", REFERENCE_GENOME_FA,
+        "-r", base_path + ".fastq",
+        ">", base_path + "-result.tsv",
+    ]
+    # Calculate methylation frequencies.
+    methyl_frequency = [
+        F5C, "meth-freq",
+        "-c", "2.5",
+        "-s",
+        "-i", base_path + "-result.tsv",
+        ">",
+        base_path + "-freq.tsv",
+    ]
+    # TODO del. replaced by extract_referenced_cpgs
+    # Calculate CpG overlap.
+    # methyl_overlap = [
+    #     RSCRIPT,
+    #     READ_CPG_RSCRIPT,
+    #     base_path + "-freq.tsv",
+    #     ILUMINA_CG_MAP,
+    #     base_path + "-methoverlap.tsv",
+    #     base_path + "-methoverlapcount.txt",
+    # ]
+    commands = [
+        f5c_index,
+        seq_align,
+        bam_index,
+        methyl_calling,
+        methyl_frequency,
+        #methyl_overlap,
+    ]
+    for cmd in commands:
+        cmd_str = " ".join(cmd)
+        p = subprocess.Popen(cmd_str, shell=True, stdout=subprocess.PIPE)
+        p.wait()
+    # Calculate CpG overlap.
+    extract_referenced_cpgs(
+        base_path + "-freq.tsv",
+        base_path + "-methoverlap.tsv",
+        base_path + "-methoverlapcount.txt",
+    )
+    # Write empty textfile to signal successful completion.
+    with open(os.path.join(analysis_dir, "done.txt"), "w"):
+        pass
+    print(f"Methylation calling on {file_name} done.")
 
+def methylation_caller(sample_name, analyze_one=True):
+    """Searches for callable fast5/fastq files that have not yet been
+    called and invokes methylation calling. Results will be added to
+    the NANODIP_OUTPUT directory.
 
-def getOverlapCpGs(sampleName):
-    methoverlapPath=NANODIP_OUTPUT+"/"+sampleName # collect matching CpGs from sample
-    methoverlapTsvFiles=[] # find all *methoverlap.tsv files
-    for root, dirnames, filenames in os.walk(methoverlapPath):
-        for filename in fnmatch.filter(filenames, '*methoverlap.tsv'):
-            methoverlapTsvFiles.append(os.path.join(root, filename))
-    methoverlap=[]
-    first=True
-    for f in methoverlapTsvFiles:
-        try: # some fast5 files do not contain any CpGs
-            m=pd.read_csv(f, delimiter='\t', header=None, index_col=0)
-            if first:
-                methoverlap=m
-                first=False
-            else:
-                methoverlap=methoverlap.append(m)
-        except:
-            logpr(VERBOSITY,"empty file encountered, skipping")
-    return len(methoverlap)
+    Args:
+        sample_name: Name of sample to be analyzed.
+        analyse_one: If True only first fast5/fastq file found
+                     will be analyzed.
+    """
+    # At least 2 "passed" files need to be present.
+    barcode = predominant_barcode(sample_name)
+    fast5_files = [
+        f for f in files_by_ending(DATA, sample_name, ending=".fast5")
+        if barcode in f
+    ]
+    # Analyse in alphanumeric ordering for improved debugging.
+    fast5_files.sort()
+    def from_5_to_q(fn):
+        return fn.replace(
+            ".fast5", ".fastq"
+        ).replace("fast5_pass", "fastq_pass")
 
+    # TODO @HEJU Daten mit _fail_ werden so nicht ausgeschlossen. Gewollt?
+    fast5q_file_pairs = [
+        [f, from_5_to_q(f)] for f in fast5_files
+        if os.path.exists(from_5_to_q(f))
+    ]
 
-def f5cOneFast5(sampleId,analyzeOne=True):
-    analyzedCount=0
-    thisRunDir=DATA+"/"+sampleId
-    pattern = '*.fast5'
-    fileList = []
-    for dName, sdName, fList in os.walk(thisRunDir): # Walk through directory
-        for fileName in fList:
-            if fnmatch.fnmatch(fileName, pattern): # Match search string
-                fileList.append(os.path.join(dName, fileName))
-    calledList=[]
-    completedCount=0
-    maxBcCount=1 # at least 2 "passed" files (>1) need to be present
-    targetBc="undetermined"
-    for bc in BARCODE_NAMES:
-        thisBc=0
-        for f in fileList:
-            if bc in f:
-                if "_pass_" in f:
-                    thisBc+=1
-        if thisBc > maxBcCount:
-            maxBcCount=thisBc
-            targetBc=bc
-    f5cAnalysisDir=NANODIP_OUTPUT+"/"+sampleId
-    if os.path.exists(f5cAnalysisDir)==False:
-        os.mkdir(f5cAnalysisDir)
-    thisBcFast5=[]
-    thisBcFastq=[]
-    for f in fileList:
-        if targetBc in f:
-            q=f.replace(".fast5","").replace("fast5_pass","fastq_pass")+".fastq"
-            if os.path.exists(q): # check if accompanying fastq exists
-                thisBcFast5.append(f)
-                thisBcFastq.append(q)
-                thisBcFileName=f.split("/")
-                thisBcFileName=thisBcFileName[len(thisBcFileName)-1].replace(".fast5","") # get name prefix (to be the analysis subdir name later)
-                thisAnalysisDir=f5cAnalysisDir+"/"+thisBcFileName
-                if os.path.exists(thisAnalysisDir)==False:
-                    os.mkdir(thisAnalysisDir)
-                target5=thisAnalysisDir+"/"+thisBcFileName+".fast5"
-                targetq=thisAnalysisDir+"/"+thisBcFileName+".fastq"
-                if os.path.exists(target5)==False:
-                    os.symlink(f,target5)             # fast5 symlink
-                if os.path.exists(targetq)==False:
-                    os.symlink(q,targetq)             #fastq symlink
-                if os.path.exists(thisAnalysisDir+"/"+thisBcFileName+"-methoverlapcount.txt")==False:
-                    if (analyzeOne==True and analyzedCount==0) or analyzeOne==False:
-                        cmd=F5C+" index -t 1 --iop 100 -d "+thisAnalysisDir+" "+targetq
-                        p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE) #index, call methylation and get methylation frequencies
-                        p.wait()
-                        cmd=MINIMAP2+" -a -x map-ont "+REFERENCE_GENOME_MMI+" "+targetq+" -t 4 | "+SAMTOOLS+" sort -T tmp -o "+thisAnalysisDir+"/"+thisBcFileName+"-reads_sorted.bam"
-                        p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE) # get sorted BAM (4 threads)
-                        p.wait()
-                        cmd=SAMTOOLS+" index "+thisAnalysisDir+"/"+thisBcFileName+"-reads_sorted.bam"
-                        p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE) # index BAM
-                        p.wait()
-                        cmd=F5C+" call-methylation -B2000000 -K400 -b "+thisAnalysisDir+"/"+thisBcFileName+"-reads_sorted.bam -g "+REFERENCE_GENOME_FA+" -r "+targetq+" > "+thisAnalysisDir+"/"+thisBcFileName+"-result.tsv"
-                        p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE) # set B to 2 megabases (GPU) and 0.4 kreads
-                        p.wait()
-                        cmd=F5C+" meth-freq -c 2.5 -s -i "+thisAnalysisDir+"/"+thisBcFileName+"-result.tsv > "+thisAnalysisDir+"/"+thisBcFileName+"-freq.tsv"
-                        p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-                        p.wait()
-                        cmd=RSCRIPT+" "+READ_CPG_RSCRIPT+" "+thisAnalysisDir+"/"+thisBcFileName+"-freq.tsv "+ILUMINA_CG_MAP+" "+thisAnalysisDir+"/"+thisBcFileName+"-methoverlap.tsv "+thisAnalysisDir+"/"+thisBcFileName+"-methoverlapcount.txt"
-                        p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-                        p.wait()
-                        calledList.append(thisBcFileName)
-                        analyzedCount+=1
-                else:
-                    completedCount+=1
-    return "Target = "+targetBc+"<br>Methylation called for "+str(calledList)+". "+str(completedCount+analyzedCount)+"/"+str(len(thisBcFast5))
+    f5c_analysis_dir = os.path.join(NANODIP_OUTPUT, sample_name)
+    if not os.path.exists(f5c_analysis_dir):
+        os.mkdir(f5c_analysis_dir)
 
+    prev_called = []
+    curr_called = []
+    not_called = []
+
+    for f5, fq in fast5q_file_pairs:
+        file_name = os.path.basename(f5).split(".")[0]
+        analysis_dir = os.path.join(f5c_analysis_dir, file_name)
+        symlink5 = os.path.join(analysis_dir, file_name + ".fast5")
+        symlinkq = os.path.join(analysis_dir, file_name + ".fastq")
+        if not os.path.exists(analysis_dir):
+            os.mkdir(analysis_dir)
+        if not os.path.exists(symlink5):
+            os.symlink(f5, symlink5)
+        if not os.path.exists(symlinkq):
+            os.symlink(fq, symlinkq)
+        done = os.path.join(analysis_dir, "done.txt")
+        if os.path.exists(done):
+            prev_called.append(file_name)
+        else:
+            not_called.append(
+                [analysis_dir, file_name]
+            )
+    for directory, file_name in not_called:
+        single_file_methylation_caller(directory, file_name)
+        curr_called.append(file_name)
+        if analyze_one:
+            break
+    num_completed = len(prev_called) + len(curr_called)
+    num_fastq = len(fast5q_file_pairs)
+    no_callable_left = num_fastq == num_completed
+    return {
+        "barcode": barcode,
+        "called": curr_called,
+        "num_completed": num_completed,
+        "num_fastq": num_fastq,
+        "no_callable_left": no_callable_left,
+        "time": date_time_string_now(),
+    }
 
 """
 ### 2. MinKNOW API Functions
@@ -1160,15 +1227,6 @@ def livePage(deviceString): # generate a live preview of the data analysis with 
     ht=ht+"</tt></table><body></html>"
     return ht
 
-def methcallLivePage(sampleName): # generate a self-refreshing page to invoke methylation calling
-    ht="<html><head><title>MethCaller: "+sampleName+"</title>"
-    ht=ht+"<meta http-equiv='refresh' content='3'></head><body>"
-    ht=ht+"last refresh and console output at "+date_time_string_now()+"<hr>shell output<br><br><tt>"
-    #ht=ht+calculateMethylationAndBamFromFast5Fastq(sampleName)
-    ht=ht+f5cOneFast5(sampleName,analyzeOne=True)
-    ht=ht+"</tt></body></html>"
-    return ht
-
 #TODO changed
 def menuheader(current_page, autorefresh=0):
     """Generate a universal website header for the UI pages that
@@ -1263,6 +1321,8 @@ class UserInterface(object):
     cnvpQueue = 0
     cnv_lock = mp.Lock()
     umap_lock = mp.Lock()
+    cpg_sem = threading.Semaphore()
+
 
     @cherrypy.expose
     def index(self):
@@ -1309,7 +1369,6 @@ class UserInterface(object):
                 UserInterface.cnvpQueue = 0
             html += queue_name + " queue reset"
         return html
-
 
     @cherrypy.expose
     def listPositions(self):
@@ -1567,7 +1626,6 @@ class UserInterface(object):
             buffered_run_ids=buffered_run_ids,
         )
 
-
     @cherrypy.expose
     def results(self):
         files = get_all_results()
@@ -1607,6 +1665,13 @@ class UserInterface(object):
                 reference_name=ref,
                 new=new,
                 first_use = not binary_reference_data_exists(),
+            )
+        if func == "cpg":
+            return render_template(
+                "analysis_cpg.html",
+                start_time=date_time_string_now(),
+                sample_name=samp,
+                autorefresh="",
             )
         else:
             raise cherrypy.HTTPError(404, "URL not found")
@@ -1667,43 +1732,6 @@ class UserInterface(object):
             return umap_data.cu_plot_json
 
         return umap_data.plot_json
-
-    @cherrypy.expose
-    def umapplot(self, sampleName=None, refAnno=None):
-        html = ""
-        if sampleName and refAnno:
-            while UserInterface.umapQueue > 0:
-                time.sleep(2)
-            UserInterface.umapQueue += 1
-            reference_name = refAnno.replace(".xlsx", "")
-            try:
-                make_umap_plot(sampleName, reference_name)
-                html_error = ""
-            except: #TODO which exception?
-                html_error = """
-                    <b>
-                    <font color='#FF0000'>ERROR OCCURRED, PLEASE RELOAD TAB
-                    </font>
-                    </b>"""
-            html += f"""
-                <html>
-                <head>
-                <title>
-                    {sampleName} against {refAnno} at {date_time_string_now()}
-                </title>
-                <meta http-equiv='refresh' content='1;
-                    URL=reports/{sampleName}_{reference_name}_UMAP_all.html'>"
-                </head>
-                <body>
-                {html_error}
-                Loading UMAP plot. If it fails,
-                <a href='reports/{sampleName}_{reference_name}_UMAP_all.html'>
-                    click here to load plot
-                </a>.
-                </body>
-                </html>"""
-            UserInterface.umapQueue -= 1
-        return html
 
     @cherrypy.expose # TODO crash if files not on disk
     def make_pdf(self, samp=None, ref=None):
@@ -1787,25 +1815,12 @@ class UserInterface(object):
         return myString
 
     @cherrypy.expose
-    def analysisPoller(self,sampleName="",deviceString="",runId=""):
-        myString="<html><head>"
-        if sampleName and deviceString and runId:
-                myString=myString+"<title>Poller: "+sampleName+"/"+deviceString+"/"+runId+"</title>"
-                myString=myString+"<meta http-equiv='refresh' content='15'>"
-                myString=myString+"<body>"
-                myString=myString+"Last refresh for "+sampleName+"/"+deviceString+"/"+runId+" at "+date_time_string_now()
-                myString=myString+"</body></html>"
-                writeRunTmpFile(sampleName,deviceString)
-        return myString
-
-    @cherrypy.expose
-    def methylationPoller(self,sampleName=""):
-        while UserInterface.cpgQueue>0:
-            time.sleep(2)
-        UserInterface.cpgQueue+=1
-        myString=methcallLivePage(sampleName)
-        UserInterface.cpgQueue-=1
-        return myString
+    def cpgs(self, sample_name=""):
+        """Generate a self-refreshing page to invoke methylation calling."""
+        UserInterface.cpg_sem.acquire()
+        stats = methylation_caller(sample_name)
+        UserInterface.cpg_sem.release()
+        return json.dumps(stats)
 
     @cherrypy.expose
     def launchAutoTerminator(self,sampleName="",deviceString=""):
@@ -1815,7 +1830,7 @@ class UserInterface(object):
         return myString
 
 def main():
-    # Start CherryPy Webserver
+    """Start CherryPy Webserver."""
     if DEBUG_MODE:
         #set access logging
         cherrypy.log.screen = True

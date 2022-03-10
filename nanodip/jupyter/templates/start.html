@@ -32,16 +32,16 @@ Sequencing run started for {{sample_id}} on {{device_id}} as {{run_id}} with ref
       </option>
       {% endfor %}
     </select>
-    &nbsp; 
+    &nbsp;
 
     {% if test %}
       <input type="submit" value="start test run now (0.1h)"/>
     {% else %}
       and enter the sample ID:&nbsp;
-      
+
       <input type="text" name="sample_id" />
       &nbsp;for&nbsp;
-      
+
       <input type="text" name="run_duration" value="72" />
         &nbsp;hours.
         &nbsp;Reference set&nbsp;

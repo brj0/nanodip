@@ -29,7 +29,7 @@ def extract_referenced_cpgs(sample_methylation,
     reference_cpgs = pd.read_csv(
         ILUMINA_CG_MAP,
         delimiter="\t",
-        names=["ilmnid","chromosome","strand","start"],
+        names=["ilmnid", "chromosome", "strand", "start"],
     )
     sample_cpgs = pd.read_csv(
         sample_methylation,

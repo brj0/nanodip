@@ -17,7 +17,7 @@ Running and buffered experiments:<br>
     <tt>
       <b>-{{p}}</b><br>
       --mounted flow cell ID: <b>{{mounted_flow_cell_id[p]}}</b><br>
-      ---{{current_status[p]}}<br> 
+      ---{{current_status[p]}}<br>
       {% for b in buffered_run_ids[p] %}
       --run ID: {{b}}<br>
       ---with flow cell ID: {{flow_cell_id[(p, b)]}}<br>

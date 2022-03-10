@@ -8,9 +8,7 @@ data.
 
 # start_external_modules
 from tqdm import tqdm
-import csv
 import numpy as np
-import openpyxl
 import os
 import pandas as pd
 import pysam
@@ -211,7 +209,7 @@ class ReferenceData:
             path_xlsx,
             header=None,
             names=["id", "methylation_class", "custom_text"],
-            engine="openpyxl", # TODO slower?
+            engine="openpyxl",
         )
         annotation.to_csv(path_csv, index=False)
         return annotation
@@ -296,6 +294,19 @@ class ReferenceGenome:
                "loc",
         ]].to_csv(GENES, index=False, sep="\t")
 
+def files_by_ending(directory, sample_name, ending):
+    """Returns a list containing all sample output files with a given
+    ending.
+    """
+    sample_path = os.path.join(directory, sample_name)
+    output_files = []
+    for root, _, files in os.walk(sample_path):
+        output_files.extend(
+            [os.path.join(root, f)
+            for f in files if f.endswith(ending)]
+        )
+    return output_files
+
 class SampleData:
     """Container of sample data."""
     def __init__(self, name):
@@ -308,13 +319,7 @@ class SampleData:
     def set_reads(self):
         """Calculate all read start and end positions."""
         genome = ReferenceGenome()
-        bam_files = []
-        sample_path = os.path.join(NANODIP_OUTPUT, self.name)
-        for root, _, files in os.walk(sample_path):
-            bam_files.extend(
-                [os.path.join(root, f)
-                for f in files if f.endswith(".bam")]
-            )
+        bam_files = files_by_ending(NANODIP_OUTPUT, self.name, ending=".bam")
         read_positions = []
         for f in bam_files:
             samfile = pysam.AlignmentFile(f, "rb")
@@ -329,29 +334,25 @@ class SampleData:
                     assert (read.reference_length != 0), "Empty read"
         self.reads = read_positions
 
-    def get_read_cpgs(name):
+    def get_read_cpgs(sample_name):
         """Get all Ilumina methylation sites with methylaton status
         within a samples reads.
 
         Args:
-            name: sample name to be analysed
+            sample_name: sample name to be analysed
 
         Returns:
             Pandas Data Frame containing the reads Ilumina cpg_sites and
             methylation status.
         """
 
-        sample_path = os.path.join(NANODIP_OUTPUT, name)
+        sample_path = os.path.join(NANODIP_OUTPUT, sample_name)
 
         if not os.path.exists(sample_path):
             raise FileNotFoundError(sample_path)
 
-        cpg_files = []
-        for root, _, files in os.walk(sample_path):
-            cpg_files.extend(
-                [os.path.join(root, f)
-                for f in files if f.endswith("methoverlap.tsv")]
-            )
+        cpg_files = files_by_ending(NANODIP_OUTPUT, sample_name,
+                                     ending="methoverlap.tsv")
 
         methylation_info = pd.DataFrame()
 

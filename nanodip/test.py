@@ -11,13 +11,38 @@ import re
 import time
 
 from config import (
+    ANALYSIS_EXCLUSION_PATTERNS,
+    ANNOTATIONS,
+    BARCODE_NAMES,
+    BROWSER_FAVICON,
+    CHERRYPY_HOST,
+    CHERRYPY_PORT,
     CNV_GRID,
     CNV_URL_PREFIX,
     CNV_URL_SUFFIX,
+    DATA,
+    DEBUG_MODE,
     ENDINGS,
+    EXCLUDED_FROM_ANALYSIS,
+    F5C,
+    ILUMINA_CG_MAP,
+    IMAGES,
+    MINIMAP2,
+    NANODIP_OUTPUT,
     NANODIP_REPORTS,
+    NANODIP_VERSION,
+    NEEDED_NUMBER_OF_BASES,
     PLOTLY_RENDER_MODE,
+    READS_PER_FILE,
+    READ_CPG_RSCRIPT,
+    REFERENCE_GENOME_FA,
+    REFERENCE_GENOME_MMI,
+    RESULT_ENDINGS,
+    RSCRIPT,
+    SAMTOOLS,
+    THIS_HOST,
     UMAP_PLOT_TOP_MATCHES,
+    VERBOSITY,
 )
 from data import (
     get_sample_methylation,
@@ -28,14 +53,16 @@ from data import (
 )
 
 from plots import CNVData, UMAPData
-import config, data, plots
+import config, data, plots, nanodip
+from nanodip import methylation_caller
 
+sample_name = "B2021_48459_20211112_BC10"
 sample_name = "B2021_48700_20211112_BC11"
 reference_name = "20210721_EpiDiP_anno"
 reference_name = "GSE90496_IfP01"
-sample = SampleData(sample_name)
-reference = ReferenceData(reference_name)
-genome = ReferenceGenome()
+#sample = SampleData(sample_name)
+#reference = ReferenceData(reference_name)
+#genome = ReferenceGenome()
 
 # data.make_binary_reference_data()
 
@@ -43,79 +70,16 @@ genome = ReferenceGenome()
 # cnv = CNVData(sample_name)
 
 
-def umap_plot_from_data(sample, reference, umap_data_frame, close_up):
-    """Create and return umap plot from UMAP data.
-
-    Args:
-        sample: sample data
-        reference: reference data
-        umap_data_frame: pandas data frame containing umap info. First
-            row corresponds to sample.
-        close_up: bool to indicate if only top matches should be plotted.
-    """
-    umap_sample = umap_data_frame.iloc[0]
-    umap_title = f"UMAP for {sample.name} against {reference.name}, "\
-        + f"{len(reference.annotated_specimens)} reference cases, "\
-        + f"{len(sample.cpg_overlap)} CpGs"
-    if close_up:
-        umap_title = "Close-up " + umap_title
-    umap_plot = px.scatter(
-        umap_data_frame,
-        x="x",
-        y="y",
-        labels={"x":"UMAP 0", "y":"UMAP 1", "color":"WHO class"},
-        title=umap_title,
-        color="methylation_class",
-        hover_name="id",
-        hover_data=["description"],
-        render_mode=PLOTLY_RENDER_MODE,
-        template="simple_white",
-    )
-    umap_plot.add_annotation(
-        x=umap_sample["x"],
-        y=umap_sample["y"],
-        text=sample.name,
-        showarrow=True,
-        arrowhead=1,
-    )
-    umap_plot.update_yaxes(
-        scaleanchor = "x",
-        scaleratio = 1,
-        mirror=True,
-    )
-    umap_plot.update_xaxes(
-        mirror=True,
-    )
-    # If close-up add hyperlinks for all references and draw circle
-    if close_up:
-        umap_plot.update_traces(marker=dict(size=5))
-        # Add hyperlinks
-        for _, row in umap_data_frame.iloc[1:].iterrows():
-            umap_plot.add_annotation(
-                x=row["x"],
-                y=row["y"],
-                text="<a href='" + CNV_URL_PREFIX + row["id"]
-                    + CNV_URL_SUFFIX
-                    + "' target='_blank'>&nbsp;</a>",
-                showarrow=False,
-                arrowhead=1,
-            )
-        # Draw circle
-        radius = umap_data_frame["distance"].iloc[-1]
-        umap_plot.add_shape(
-            type="circle",
-            x0=umap_sample["x"] - radius,
-            y0=umap_sample["y"] - radius,
-            x1=umap_sample["x"] + radius,
-            y1=umap_sample["y"] + radius,
-            line_color="black",
-            line_width=0.5,
-        )
-    return umap_plot
-
 
 #umapp = UMAPData(sample_name, reference_name)
 #umapp.make_umap_plot()
 #plt=umap_plot_from_data(umapp.sample, umapp.reference, umapp.umap_df, close_up=False)
 #plt.show()
+
+
+sample_name = "01_TestRun_BC10"
+ad = "/home/minknow/Desktop/trashdir/FAQ17395_pass_barcode10_89406014_4/"
+fn="FAQ17395_pass_barcode10_89406014_4"
+analysis_dir, file_name = ad, fn
+analyze_one=True
 

@@ -150,6 +150,10 @@ a.results {
   100% { transform: rotate(360deg); }
 }
 
+.mono {
+  font-family: monospace;
+}
+
 /*
 .umap_radio {
   display: flex;

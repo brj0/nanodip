@@ -169,7 +169,7 @@ def umap_data_frame(sample, reference):
     umap_df = pd.DataFrame({
         "distance": [np.linalg.norm(z - umap_sample) for z in umap_2d],
         "methylation_class":  [sample.name] + reference.methylation_class,
-        "description":  ["undetermined"] + reference.description,
+        "description":  ["Sample tested"] + reference.description,
         "id": [sample.name] + reference.specimen_ids,
         "x": umap_2d[:,0],
         "y": umap_2d[:,1],

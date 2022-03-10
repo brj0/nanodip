@@ -5,7 +5,7 @@
 {% endblock %}
 
 {% block body %}
-<table class="analysis"> 
+<table class="analysis">
 <thead>
   <tr>
     <th><b>Sample ID </b></th>
@@ -24,9 +24,9 @@
     <tr>
       <td>{{run}}</td>
       <td>
-        <a href="./analysisLauncher?functionName=methylationPoller&sampleName={{run}}&refAnno=None" class="show" target="_blank"
+        <a href="./analysis?func=cpg&samp={{run}}" class="show" target="_blank"
         rel="noopener noreferrer" title="{{run}}: CpGs">
-          plot
+          get CpGs
         </a>
       </td>
       <td>
@@ -53,7 +53,7 @@
         <a href="./make_pdf?samp={{run}}&ref={{a}}" class="show" target="_blank" rel="noopener noreferrer" title="Generate and View PDF">
           report
         </a>
-      </td>  
+      </td>
       {% endfor %}
     </tr>
   {% endfor %}
