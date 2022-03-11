@@ -28,7 +28,7 @@ Sequencing run started for {{sample_id}} on {{device_id}} as {{run_id}} with ref
     <select name="device_id" id="device_id">
       {% for pos in idle %}
       <option value="{pos}">
-        {{pos}}:{{getFlowCellID(pos)}}
+        {{pos}}:{{flow_cell[pos]}}
       </option>
       {% endfor %}
     </select>

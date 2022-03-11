@@ -10,10 +10,11 @@
   <iframe src="DeviceStatusLive?deviceString={{pos}}" height="200" width="600" title="{{pos}}" border=3></iframe>
   <iframe src="AnalysisStatusLive?deviceString={{pos}}" height="200" width="600" title="{{pos}}" border=3></iframe>
   <br>
-  <a href="DeviceStatusLive?deviceString={{pos}}" target="_blank" title="Click to open device status page in new tab or window">{{pos}}</a>, live state: {{getRealDeviceActivity(pos)}}, active run: {{getActiveRun(pos)}}
+  <a href="DeviceStatusLive?deviceString={{pos}}" target="_blank" title="Click to open device status page in new tab or
+  window">{{pos}}</a>, live state: {{device_activity[pos]}}, active run: {{active_runs[pos]}}
 
-  {% if getActiveRun(pos) != "none" %}
-    <a href="launchAutoTerminator?sampleName={{getThisRunSampleID(pos)}}&deviceString={{pos}}" target="_blank">
+  {% if active_runs[pos] != "none" %}
+    <a href="launchAutoTerminator?sampleName={{sample_id[pos]}}&deviceString={{pos}}" target="_blank">
       Click this link to launch automatic run terminator after {{mega_bases}} MB.
     </a>
     <br>

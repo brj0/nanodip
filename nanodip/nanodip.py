@@ -304,7 +304,7 @@ def single_file_methylation_caller(analysis_dir, file_name):
     # Methylation caller.
     methyl_calling = [
         F5C, "call-methylation",
-        "--disable-cuda=yes",   # TODO for debugging on CPU only. Must be del.
+        #"--disable-cuda=yes",   # TODO for debugging on CPU only. Must be del.
         "-B2000000", "-K400",   # set B to 2 megabases (GPU) and 0.4 kreads
         "-b", base_path + "-reads_sorted.bam",
         "-g", REFERENCE_GENOME_FA,
@@ -1393,10 +1393,16 @@ class UserInterface(object):
     @cherrypy.expose
     def status(self):
         positions = [str(pos.name) for pos in listMinionPositions()]
+        device_activity = {pos:getRealDeviceActivity(pos) for pos in positions}
+        active_runs = {pos:getActiveRun(pos) for pos in positions}
+        sample_id = {pos:getThisRunSampleID(pos) for pos in positions}
         print("--------------", positions)
         return render_template(
             "status.html",
             positions=positions,
+            device_activity=device_activity,
+            active_runs=active_runs,
+            sample_id=sample_id,
             mega_bases=NEEDED_NUMBER_OF_BASES // 1e6)
 
     @cherrypy.expose
@@ -1485,11 +1491,13 @@ class UserInterface(object):
             positions = [p.name for p in listMinionPositions()]
             idle = [p for p in positions if getRealDeviceActivity(p) == "idle"
                 and getFlowCellID(p) != ""]
+            flow_cell = {pos:getFlowCellID(pos) for pos in idle}
             return render_template(
                 "start.html",
                 start_now=start_now,
                 test=False,
                 idle=idle,
+                flow_cell=flow_cell,
                 references=reference_annotations(),
             )
 
@@ -1567,11 +1575,13 @@ class UserInterface(object):
             positions = [p.name for p in listMinionPositions()]
             idle = [p for p in positions if getRealDeviceActivity(p) == "idle"
                 and getFlowCellID(p) != ""]
+            flow_cell = {pos:getFlowCellID(pos) for pos in idle}
             return render_template(
                 "start.html",
                 start_now=False,
                 test=True,
                 idle=idle,
+                flow_cell=flow_cell,
                 references=reference_annotations(),
             )
 

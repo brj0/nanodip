@@ -85,7 +85,7 @@ NEEDED_NUMBER_OF_BASES = 150_000_000
 CNV_URL_PREFIX = "http://s1665.rootserver.io/umapplot01/"
 CNV_URL_SUFFIX = "_CNV_IFPBasel_annotations.pdf"
 
-CNV_GRID = "/applications/tmp/grid.json" # TODO to /tmp/nanodip
+CNV_GRID = "/applications/reference_data/hg19_cnv/grid.json" # TODO to /tmp/nanodip
 
 # Number of reference cases to be shown in subplot including copy
 # number profile links (not advisable >200, plotly will become really

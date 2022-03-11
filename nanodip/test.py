@@ -82,4 +82,3 @@ ad = "/home/minknow/Desktop/trashdir/FAQ17395_pass_barcode10_89406014_4/"
 fn="FAQ17395_pass_barcode10_89406014_4"
 analysis_dir, file_name = ad, fn
 analyze_one=True
-
