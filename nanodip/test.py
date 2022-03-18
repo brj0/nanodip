@@ -8,6 +8,7 @@ from plotly.io import write_json, from_json
 import pysam
 import random
 import re
+import sys
 import time
 
 from config import (
@@ -60,25 +61,33 @@ sample_name = "B2021_48459_20211112_BC10"
 sample_name = "B2021_48700_20211112_BC11"
 reference_name = "20210721_EpiDiP_anno"
 reference_name = "GSE90496_IfP01"
-#sample = SampleData(sample_name)
-#reference = ReferenceData(reference_name)
-#genome = ReferenceGenome()
+
+# sample = SampleData(sample_name)
+# reference = ReferenceData(reference_name)
+# genome = ReferenceGenome()
 
 # data.make_binary_reference_data()
-
-# ref = ReferenceData(reference_name)
 # cnv = CNVData(sample_name)
 
+# umapp = UMAPData(sample_name, reference_name)
+# umapp.make_umap_plot()
 
 
-#umapp = UMAPData(sample_name, reference_name)
-#umapp.make_umap_plot()
-#plt=umap_plot_from_data(umapp.sample, umapp.reference, umapp.umap_df, close_up=False)
-#plt.show()
+import grpc
+
+from nanodip import (
+    mk_manager,
+    minion_positions,
+    minion_positions,
+    run_information,
+    position_from_device_id,
+    getMinKnowApiStatus,
+    device_status,
+)
+
+device_id = "MN26636"
 
 
-sample_name = "01_TestRun_BC10"
-ad = "/home/minknow/Desktop/trashdir/FAQ17395_pass_barcode10_89406014_4/"
-fn="FAQ17395_pass_barcode10_89406014_4"
-analysis_dir, file_name = ad, fn
-analyze_one=True
+# determine if anything is running and the kind of run, via set temperature
+
+

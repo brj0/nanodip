@@ -27,8 +27,8 @@ import os
 # start_internal_modules
 # end_internal_modules
 
-NANODIP_VERSION = 24
-__version__ = "24"
+NANODIP_VERSION = 31
+__version__ = "31"
 
 # Data directories for MinKNOW and NanoDiP output.
 DATA = "/data"
@@ -149,7 +149,7 @@ THIS_HOST = "localhost"
 CHERRYPY_PORT = 8080
 
 # The web browser favicon file for this application.
-BROWSER_FAVICON = "/applications/nanodip/favicon.ico"
+BROWSER_FAVICON = "/applications/nanodip/nanodip/static/img/favicon.ico"
 
 # The location where image files for the web application are stored.
 IMAGES ="/applications/nanodip"

@@ -150,23 +150,8 @@ a.results {
   100% { transform: rotate(360deg); }
 }
 
-.mono {
+.mono,
+.mono b {
   font-family: monospace;
+  /*font-family: "Lucida Console", "Courier New", monospace;*/
 }
-
-/*
-.umap_radio {
-  display: flex;
-  background: #fff;
-  height: 70%;
-  align-items: center;
-  justify-content: space-evenly;
-  border-radius: 5px;
-  padding: 20px 15px;
-  box-shadow: 5px 5px 30px rgba(0,0,0,0.2);
-}
-
-input[type="radio"]{
-  display: none;
-}
-*/

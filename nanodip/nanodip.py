@@ -93,6 +93,7 @@ import datetime
 import fnmatch
 import json
 import logging
+import grpc
 from minknow_api.manager import Manager
 import minknow_api.statistics_pb2
 import minknow_api.device_pb2
@@ -229,7 +230,7 @@ def writeReferenceDefinition(sampleId,referenceFile):
     with open(NANODIP_REPORTS+'/'+sampleId+'_selected_reference.txt', 'w') as f:
         f.write(referenceFile)
 
-def write_reference_name(sample_id,reference_name):
+def write_reference_name(sample_id, reference_name):
     """Write the filename of the UMAP reference for the current run into
     a text file.
     """
@@ -338,6 +339,7 @@ def single_file_methylation_caller(analysis_dir, file_name):
         methyl_frequency,
         #methyl_overlap,
     ]
+    # TODO check for successful termination
     for cmd in commands:
         cmd_str = " ".join(cmd)
         p = subprocess.Popen(cmd_str, shell=True, stdout=subprocess.PIPE)
@@ -434,68 +436,39 @@ from https://github.com/neuropathbasel/minknow_api.
 """
 
 
-# Construct a manager using the host + port provided. This is used to connect to
-def mkManager():
-    return Manager(host=THIS_HOST, port=9501, use_tls=False) # the MinKNOW service trough the MK API.
+def mk_manager():
+    """Construct a manager using the host and port provided. This is
+    used to connect to the MinKNOW service trough the MK API.
+
+    minknow_api.manager.Manager:  a wrapper around MinKNOW's Manager
+        gRPC API with utilities for querying sequencing positions and
+        offline basecalling tools.
+    """
+    return Manager(host=THIS_HOST, port=9501, use_tls=False)
 
 
 
-def listMinionPositions(): # list MinION devices that are currenty connected to the system
-    manager = mkManager()
-    positions = manager.flow_cell_positions() # Find a list of currently available sequencing positions.
-    return(positions)   # User could call {pos.connect()} here to connect to the running MinKNOW instance.
+def minion_positions():
+    """Return MinION devices that are currenty connected to the system."""
+    manager = mk_manager()
+    # Find a list of currently available sequencing positions.
+    positions = manager.flow_cell_positions()
+    # User could call {posisions.connect()} here to connect to the
+    # running MinKNOW instance.
+    return positions
 
-
-def listMinionExperiments(): # list all current and previous runs in the MinKNOW buffer, lost after MinKNOW restart
-    manager=mkManager()
-    htmlHost="<b>Host: "+THIS_HOST+"</b><br><table border='1'><tr>"
-    positions=manager.flow_cell_positions() # Find a list of currently available sequencing positions.
-    htmlPosition=[]
+def flow_cell_id(device_id):
+    """Return flow cell ID (if any). Note that some CTCs have an
+    empty ID string.
+    """
+    flow_cell_id = "no_flow_cell"
+    positions = minion_positions()
     for p in positions:
-        htmlPosinfo="<b>-"+str(p)+"</b><br>"
-        connection = p.connect()
-        mountedFlowCellID=connection.device.get_flow_cell_info().flow_cell_id # return the flow cell info
-        htmlPosinfo=htmlPosinfo+"--mounted flow cell ID: <b>" + mountedFlowCellID +"</b><br>"
-        htmlPosinfo=htmlPosinfo+"---"+str(connection.acquisition.current_status())+"<br>" # READY, STARTING, sequencing/mux = PROCESSING, FINISHING; Pause = PROCESSING
-        protocols = connection.protocol.list_protocol_runs()
-        bufferedRunIds = protocols.run_ids
-        for b in bufferedRunIds:
-            htmlPosinfo=htmlPosinfo+"--run ID: " + b +"<br>"
-            run_info = connection.protocol.get_run_info(run_id=b)
-            htmlPosinfo=htmlPosinfo+"---with flow cell ID: " + run_info.flow_cell.flow_cell_id +"<br>"
-        htmlPosition.append(htmlPosinfo)
-    hierarchy = htmlHost
-    for p in htmlPosition:
-        hierarchy=hierarchy + "<td valign='top'><tt>"+p+"</tt></td>"
-    hierarchy=hierarchy+"</table>"
-    return(hierarchy)
-
-
-def getFlowCellID(thisDeviceId): # determine flow cell ID (if any). Note that some CTCs have an empty ID string.
-    mountedFlowCellID="no_flow_cell"
-    manager=mkManager()
-    positions=manager.flow_cell_positions() # Find a list of currently available sequencing positions.
-    for p in positions:
-        if thisDeviceId in str(p):
+        if device_id in p.name:
             connection = p.connect()
-            mountedFlowCellID=connection.device.get_flow_cell_info().flow_cell_id # return the flow cell info
-    return mountedFlowCellID
+            flow_cell_id = connection.device.get_flow_cell_info().flow_cell_id
+    return flow_cell_id
 
-
-# This cell starts a run on Mk1b devices and perform several checks concerning
-# the run protocol.
-
-# modified from the MinKNOW API on https://github.com/nanoporetech/minknow_api (2021-06)
-# created from the sample code at
-# https://github.com/nanoporetech/minknow_api/blob/master/python/examples/start_protocol.py
-# minknow_api.manager supplies "Manager" a wrapper around MinKNOW's Manager
-# gRPC API with utilities for querying sequencing positions + offline
-# basecalling tools.
-# from minknow_api.manager import Manager
-
-# We need 'find_protocol' to search for the required protocol given a kit +
-# product code.
-# from minknow_api.tools import protocols
 def parse_args():
     """Build and execute a command line argument for starting a protocol.
 
@@ -517,11 +490,20 @@ def parse_args():
         help="Port to connect to on host (defaults to standard MinKNOW port based on tls setting)",
     )
     parser.add_argument(
-        "--no-tls", help="Disable tls connection", default=False, action="store_true"
+        "--no-tls",
+        help="Disable tls connection",
+        default=False,
+        action="store_true",
     )
-    parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
-
-    parser.add_argument("--sample-id", help="sample ID to set")
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable debug logging",
+    )
+    parser.add_argument(
+        "--sample-id",
+        help="sample ID to set",
+    )
     parser.add_argument(
         "--experiment-group",
         "--group-id",
@@ -546,7 +528,7 @@ def parse_args():
         help="Override the product-code stored on the flow-cell and previously user-specified"
         "product-codes",
     )
-    # BASECALL ARGUMENTS
+    # Basecalling arguments
     parser.add_argument(
         "--basecalling",
         action="store_true",
@@ -556,9 +538,11 @@ def parse_args():
         "--basecall-config",
         help="specify the base-calling config and enable base-calling",
     )
-    # BARCODING ARGUMENTS
+    # Barcoding arguments
     parser.add_argument(
-        "--barcoding", action="store_true", help="protocol uses barcoding",
+        "--barcoding",
+        action="store_true",
+        help="protocol uses barcoding",
     )
     parser.add_argument(
         "--barcode-kits",
@@ -566,14 +550,15 @@ def parse_args():
         help="bar-coding expansion kits used in the experiment",
     )
     parser.add_argument(
-        "--trim-barcodes", action="store_true", help="enable bar-code trimming",
+        "--trim-barcodes",
+        action="store_true",
+        help="enable bar-code trimming",
     )
     parser.add_argument(
         "--barcodes-both-ends",
         action="store_true",
         help="bar-code filtering (both ends of a strand must have a matching barcode)",
     )
-
     parser.add_argument(
         "--detect-mid-strand-barcodes",
         action="store_true",
@@ -591,20 +576,20 @@ def parse_args():
         default=0.0,
         help="read selection based on bar-code accuracy",
     )
-
     parser.add_argument(
         "--min-score-mid",
         type=float,
         default=0.0,
         help="read selection based on bar-code accuracy",
     )
-    # ALIGNMENT ARGUMENTS
+    # Alignment arguments
     parser.add_argument(
         "--alignment-reference",
         help="Specify alignment reference to send to basecaller for live alignment.",
     )
     parser.add_argument(
-        "--bed-file", help="Specify bed file to send to basecaller.",
+        "--bed-file",
+        help="Specify bed file to send to basecaller.",
     )
     # Output arguments
     parser.add_argument(
@@ -641,12 +626,16 @@ def parse_args():
         default=4000,
         help="set the number of reads combined into one BAM file.",
     )
-    # Read until
+    # Read until arguments
     parser.add_argument(
-        "--read-until-reference", type=str, help="Reference file to use in read until",
+        "--read-until-reference",
+        type=str,
+        help="Reference file to use in read until",
     )
     parser.add_argument(
-        "--read-until-bed-file", type=str, help="Bed file to use in read until",
+        "--read-until-bed-file",
+        type=str,
+        help="Bed file to use in read until",
     )
     parser.add_argument(
         "--read-until-filter",
@@ -654,7 +643,7 @@ def parse_args():
         choices=["deplete", "enrich"],
         help="Filter type to use in read until",
     )
-    # Experiment
+    # Experiment arguments
     parser.add_argument(
         "--experiment-duration",
         type=float,
@@ -697,18 +686,18 @@ def parse_args():
             sys.exit(1)
 
     if args.bed_file and not args.alignment_reference:
-        print("Unable to specify `--bed-file` without `--alignment-reference`.")
+        print("Unable to specify '--bed-file' without '--alignment-reference'.")
         sys.exit(1)
 
     if (args.barcoding or args.barcode_kits) and not (
         args.basecalling or args.basecall_config
     ):
         print(
-            "Unable to specify `--barcoding` or `--barcode-kits` without `--basecalling`."
+            "Unable to specify '--barcoding' or '--barcode-kits' without '--basecalling'."
         )
         sys.exit(1)
     if args.alignment_reference and not (args.basecalling or args.basecall_config):
-        print("Unable to specify `--alignment-reference` without `--basecalling`.")
+        print("Unable to specify '--alignment-reference' without '--basecalling'.")
 
         sys.exit(1)
     if not (args.fast5 or args.fastq):
@@ -735,9 +724,18 @@ def is_position_selected(position, args):
 
     return False
 
-
 def startRun():
-    """Entrypoint to start protocol example."""
+    """Start a run on Mk1b devices and perform several checks concerning
+    the run protocol.
+
+    Code modified from the MinKNOW API on
+    https://github.com/nanoporetech/minknow_api
+    (2021-06) created from the sample code at
+    https://github.com/nanoporetech/minknow_api/blob/master/python/examples/start_protocol.py
+
+    We need 'find_protocol' to search for the required protocol given a kit
+    and product code.
+    """
     # Parse arguments to be passed to started protocols:
     run_id=""
     args = parse_args()
@@ -749,7 +747,7 @@ def startRun():
 
     # Construct a manager using the host + port provided:
     #manager = Manager(host=args.host, port=args.port, use_tls=not args.no_tls)
-    manager=mkManager()
+    manager=mk_manager()
     errormessage=""
 
     # Find which positions we are going to start protocol on:
@@ -760,7 +758,7 @@ def startRun():
 
     # At least one position needs to be selected:
     if not filtered_positions:
-        errormessage="No positions selected for protocol - specify `--position` or `--flow-cell-id`"
+        errormessage="No positions selected for protocol - specify '--position' or '--flow-cell-id'"
     else:
         protocol_identifiers = {}
         for pos in filtered_positions:
@@ -909,7 +907,7 @@ def startRun():
 
 
 def stopRun(minionId): # stop an existing run (if any) for a MinION device
-    manager=mkManager()
+    manager=mk_manager()
     positions = list(manager.flow_cell_positions())
     filtered_positions = list(filter(lambda pos: pos.name == minionId, positions))
     # Connect to the grpc port for the position:
@@ -941,25 +939,30 @@ def is_position_selected(position, args):
     return False
 
 
-def getMinKnowApiStatus(deviceString): # MinKNOW status per device
-    replyString=""
-    testHost="localhost"
-    manager=mkManager()
-    positions = list(manager.flow_cell_positions())
-    filtered_positions = list(filter(lambda pos: pos.name == deviceString, positions))
-    connection = filtered_positions[0].connect() # Connect to the grpc port for the position
-    # determine if anything is running and the kind of run, via set temperature
-    replyString=replyString+"acquisition.get_acquisition_info().state: "+str(connection.acquisition.get_acquisition_info().state)+"<br>"
-    replyString=replyString+"acquisition.current_status(): "+str(connection.acquisition.current_status())+"<br>"
-    replyString=replyString+"minion_device.get_settings().temperature_target.min: "+str(connection.minion_device.get_settings().temperature_target.min)+"<br>"
-    replyString=replyString+"device.get_temperature(): " + str(connection.device.get_temperature().minion.heatsink_temperature)+"<br>"
-    replyString=replyString+"device.get_bias_voltage(): " + str(connection.device.get_bias_voltage())+"<br>"
-    return replyString
-
+def device_status(device_id):
+    """MinKNOW status per device."""
+    position = position_from_device_id(device_id)
+    connection = position.connect()
+    status = {
+        "acquisition.get_acquisition_info().state": str(
+            connection.acquisition.get_acquisition_info().state
+        ),
+        "acquisition.current_status()": str(
+            connection.acquisition.current_status()
+        ),
+        "minion_device.get_settings().temperature_target.min": str(
+            connection.minion_device.get_settings().temperature_target.min
+        ),
+        "device.get_temperature()": str(
+            connection.device.get_temperature().minion.heatsink_temperature
+        ),
+        "device.get_bias_voltage()": str(connection.device.get_bias_voltage()),
+    }
+    return status
 
 
 def getActiveRun(deviceString):
-    manager=mkManager()
+    manager=mk_manager()
     positions = list(manager.flow_cell_positions())
     filtered_positions = list(filter(lambda pos: pos.name == deviceString, positions))
     connection = filtered_positions[0].connect() # Connect to the grpc port for the position
@@ -969,25 +972,23 @@ def getActiveRun(deviceString):
         activeRun="none"
     return activeRun
 
-
-def getRealDeviceActivity(deviceString):            # seq. runs: 34 degC and flow cell checks 37 degC target
-    manager=mkManager()                             # temperatures seem to be the only way to determine if
-    positions = list(manager.flow_cell_positions()) # a device has been started
-    filtered_positions = list(filter(lambda pos: pos.name == deviceString, positions))
-    connection = filtered_positions[0].connect() # Connect to the grpc port for the position
-    targetTemp=str(connection.minion_device.get_settings().temperature_target.min)
-    returnValue=""
-    if targetTemp=="34.0":
-        returnValue="sequencing"
-    elif targetTemp=="37.0":
-        returnValue="checking flow cell"
-    elif targetTemp=="35.0":
-        returnValue="idle"
-    return returnValue
+def real_device_activity(device_id):
+    """Returns device activity by checking the target temperature."""
+    position = position_from_device_id(device_id)
+    connection = position.connect()
+    target_temp =str(
+        connection.minion_device.get_settings().temperature_target.min
+    )
+    device_activity = {
+        "34.0": "sequencing",
+        "35.0": "idle",
+        "37.0": "checking flow cell",
+    }
+    return device_activity.get(target_temp, "")
 
 
 def getThisRunState(deviceString): # obtain further information about a particular device / run
-    manager=mkManager()
+    manager=mk_manager()
     positions = list(manager.flow_cell_positions())
     filtered_positions = list(filter(lambda pos: pos.name == deviceString, positions))
     connection = filtered_positions[0].connect() # Connect to the grpc port for the position
@@ -1002,7 +1003,7 @@ def getThisRunState(deviceString): # obtain further information about a particul
 
 
 def getThisRunSampleID(deviceString): # get SampleID from MinKNOW by device, only available after data
-    manager=mkManager()               # acquisition as been initiated by MinKNOW.
+    manager=mk_manager()               # acquisition as been initiated by MinKNOW.
     positions = list(manager.flow_cell_positions())
     filtered_positions = list(filter(lambda pos: pos.name == deviceString, positions))
     connection = filtered_positions[0].connect() # Connect to the grpc port for the position
@@ -1015,7 +1016,7 @@ def getThisRunSampleID(deviceString): # get SampleID from MinKNOW by device, onl
 
 
 def getThisRunYield(deviceString): # get run yield by device. The data of the previous run will remain
-    manager=mkManager()            # in the buffer until acquisition (not just a start) of a new run
+    manager=mk_manager()            # in the buffer until acquisition (not just a start) of a new run
     positions = list(manager.flow_cell_positions()) # have been initiated.
     filtered_positions = list(filter(lambda pos: pos.name == deviceString, positions))
     connection = filtered_positions[0].connect() # Connect to the grpc port for the position
@@ -1031,7 +1032,7 @@ def getThisRunYield(deviceString): # get run yield by device. The data of the pr
 
 def getThisRunOutput(deviceString,sampleName,runId): # get run yield by device, sampleName, runId
     thisRunOutput=[-1,-1] # defaults in case of error / missing information
-    manager=mkManager()            # in the buffer until acquisition (not just a start) of a new run
+    manager=mk_manager()            # in the buffer until acquisition (not just a start) of a new run
     positions = list(manager.flow_cell_positions()) # have been initiated.
     filtered_positions = list(filter(lambda pos: pos.name == deviceString, positions))
     connection = filtered_positions[0].connect() # Connect to the grpc port for the position
@@ -1055,7 +1056,7 @@ def getThisRunOutput(deviceString,sampleName,runId): # get run yield by device, 
 
 def getThisRunEstimatedOutput(deviceString,sampleName,runId): # get run yield by device, sampleName, runId
     thisRunOutput=[-1,-1] # defaults in case of error / missing information
-    manager=mkManager()            # in the buffer until acquisition (not just a start) of a new run
+    manager=mk_manager()            # in the buffer until acquisition (not just a start) of a new run
     positions = list(manager.flow_cell_positions()) # have been initiated.
     filtered_positions = list(filter(lambda pos: pos.name == deviceString, positions))
     connection = filtered_positions[0].connect() # Connect to the grpc port for the position
@@ -1077,17 +1078,28 @@ def getThisRunEstimatedOutput(deviceString,sampleName,runId): # get run yield by
     return thisRunOutput # shall be a list
 
 
-def getThisRunInformation(deviceString): # get current run information. Only available after data acquisition
-    manager=mkManager()                  # has started.
-    positions = list(manager.flow_cell_positions())
-    filtered_positions = list(filter(lambda pos: pos.name == deviceString, positions))
-    connection = filtered_positions[0].connect() # Connect to the grpc port for the position
-    try:
-        thisRunInfo="Run information for "+deviceString+"<br><br>"+str(connection.protocol.get_current_protocol_run())
-    except:
-        thisRunInfo="No protocol information in MinKNOW buffer for "+deviceString
-    return thisRunInfo
+def position_from_device_id(device_id):
+    """Returns minion position """
+    position = next(
+        (pos for pos in minion_positions() if pos.name == device_id),
+        False,
+    )
+    if not position:
+        raise ValueError(f"'{device_id}' is not a valid Minion position.")
+    return position
 
+def run_information(device_id):
+    """Get current run information. Only available after data acquisition
+    has started.
+    """
+    position = position_from_device_id(device_id)
+    connection = position.connect()
+    try:
+        info = (f"Run information for {device_id}<br><br>"
+               + str(connection.protocol.get_current_protocol_run()))
+    except grpc.RpcError:
+        info = f"No protocol information in MinKNOW buffer for {device_id}"
+    return info
 
 def thisRunWatcherTerminator(deviceString,sampleName):
     realRunId=getActiveRun(deviceString) #
@@ -1373,13 +1385,13 @@ class UserInterface(object):
     @cherrypy.expose
     def listPositions(self):
         myString=menuheader(1,10)
-        positions=listMinionPositions()
+        positions=minion_positions()
         for pos in positions:
             n=str(pos.name) # pos.state does not tell much other than that the device is connected with USB ("running")
             myString=myString+"<br><iframe src='DeviceStatusLive?deviceString="+n+"' height='200' width='600' title='"+n+"' border=3></iframe>"
             myString=myString+"<iframe src='AnalysisStatusLive?deviceString="+n+"' height='200' width='600' title='"+n+"' border=3></iframe>"
             myString=myString+"<br><a href='DeviceStatusLive?deviceString="+n+"' target='_blank' title='Click to open device status page in new tab or window'>"+n+"</a>"
-            myString=myString+", live state: "+getRealDeviceActivity(n)
+            myString=myString+", live state: "+real_device_activity(n)
             activeRun=getActiveRun(n)
             myString=myString+", active run: "+getActiveRun(n)
             if activeRun!="none":
@@ -1392,8 +1404,8 @@ class UserInterface(object):
 
     @cherrypy.expose
     def status(self):
-        positions = [str(pos.name) for pos in listMinionPositions()]
-        device_activity = {pos:getRealDeviceActivity(pos) for pos in positions}
+        positions = [pos.name for pos in minion_positions()]
+        device_activity = {pos:real_device_activity(pos) for pos in positions}
         active_runs = {pos:getActiveRun(pos) for pos in positions}
         sample_id = {pos:getThisRunSampleID(pos) for pos in positions}
         print("--------------", positions)
@@ -1406,7 +1418,7 @@ class UserInterface(object):
             mega_bases=NEEDED_NUMBER_OF_BASES // 1e6)
 
     @cherrypy.expose
-    def startSequencing(self,deviceId="",sampleId="",runDuration="",referenceFile=""):
+    def startSequencing(self,deviceId="",sampleId="",runDuration="",referenceFile="",startBiasVoltage=""):
         myString=menuheader(2,0)
         if sampleId:
             if float(runDuration)>=0.1:
@@ -1418,44 +1430,55 @@ class UserInterface(object):
                             '--experiment-duration',runDuration,
                             '--basecalling',
                             '--fastq',
-                            '--fastq-reads-per-file',READS_PER_FILE,
+                            '--fastq-reads-per-file',readsPerFile,
                             '--fast5',
-                            '--fast5-reads-per-file',READS_PER_FILE,
+                            '--fast5-reads-per-file',readsPerFile,
                             '--verbose',
                             '--kit','SQK-RBK004',
                             '--barcoding',
-                            '--barcode-kits','SQK-RBK004']
+                            '--barcode-kits','SQK-RBK004',
+                            '--','--start_bias_voltage',startBiasVoltage] # The "--" are required for so-called extra-arguments.
                 realRunId=startRun()
                 writeReferenceDefinition(sampleId,referenceFile)
                 myString=myString+"sequencing run started for "+sampleId+" on "+deviceId+" as "+realRunId+" with reference "+referenceFile
-                myString=myString+"<hr>"+getThisRunInformation(deviceId)
-                myString=myString+"<hr><a href='launchAutoTerminator?sampleName="+sampleId+"&deviceString="+deviceId+"'>"
-                myString=myString+"Click this link to launch automatic run terminator after"+str(round(NEEDED_NUMBER_OF_BASES/1e6))+" MB.</a> "
-                myString=myString+"If you do not start the run terminator, you will have to terminate the run manually, or it will stop after the predefined time."
+                myString=myString+"<hr>"+run_information(deviceId)
+                myString=myString+'''<hr>Navigate to <b>MK1b Status</b> to launch the run terminator. It may take several minutes until the link for the
+                run terminator appears. This is due to the inexistent run state while the flow cell is being heated up to operation temperature.
+                In addition, you may want to navigate to <b>Analyze</b> and launch <b>get CpGs</b>.<br><br>
+                If you do not start the run terminator, you will have to terminate the run manually, or it will stop after the predefined time.'''
         else:
             myString=myString+'''<form action="startSequencing" method="GET">
                 Select an idle Mk1b:&nbsp;<select name="deviceId" id="deviceId">'''
             positions=listMinionPositions()
             for pos in positions:
                 thisPos=pos.name
-                if getRealDeviceActivity(thisPos)=="idle":
+                if real_device_activity(thisPos)=="idle":
                     if getFlowCellID(thisPos)!="":
                         myString=myString+'<option value="'+thisPos+'">'+thisPos+': '+getFlowCellID(thisPos)+'</option>'
             myString=myString+'''
                 </select>&nbsp; and enter the sample ID:&nbsp;<input type="text" name="sampleId" />
+                &nbsp;with start voltage&nbsp;<select name="startBiasVoltage" id="startBiasVoltage">'''
+            for vo in range(-180,-260,-5):
+                myString=myString+'<option value="'+str(vo)+'">'+str(vo)+' mV</option>'
+            myString=myString+'''</select>
                 &nbsp;for&nbsp;<input type="text" name="runDuration" value="72" />&nbsp;hours.
                 &nbsp;Reference set&nbsp;<select name="referenceFile" id="referenceFile">'''
-            for ref in reference_annotations():
+            for ref in getReferenceAnnotations():
                 myString=myString+'<option value="'+ref+'">'+ref+'</option>'
             myString=myString+'&nbsp;<input type="submit" value="start sequencing now"/></form>'
         return myString
 
 
-
     @cherrypy.expose
-    def start(self, device_id="", sample_id="",
-              run_duration="", reference_id=""):
-        start_now = sample_id and float(run_duration) >= 0.1
+    def start(
+        self,
+        device_id="",
+        sample_id="",
+        run_duration="",
+        reference_id="",
+        start_voltage="",
+    ):
+        start_now = bool(sample_id) and float(run_duration) >= 0.1
         if start_now:
             sys.argv = [
                 "",
@@ -1473,6 +1496,8 @@ class UserInterface(object):
                 "--kit", "SQK-RBK004",
                 "--barcoding",
                 "--barcode-kits", "SQK-RBK004",
+                "--",  # Required for so-called extra-arguments.
+                "--start_bias_voltage", start_voltage,
             ]
             run_id = startRun()
             write_reference_name(sample_id, reference_id)
@@ -1485,13 +1510,13 @@ class UserInterface(object):
                 device_id=device_id,
                 run_id=run_id,
                 mega_bases=NEEDED_NUMBER_OF_BASES // 1e6,
-                run_info=getThisRunInformation(device_id),
+                run_info=run_information(device_id),
             )
         else:
-            positions = [p.name for p in listMinionPositions()]
-            idle = [p for p in positions if getRealDeviceActivity(p) == "idle"
-                and getFlowCellID(p) != ""]
-            flow_cell = {pos:getFlowCellID(pos) for pos in idle}
+            positions = [p.name for p in minion_positions()]
+            idle = [p for p in positions if real_device_activity(p) == "idle"
+                and flow_cell_id(p) != ""]
+            flow_cell = {pos:flow_cell_id(pos) for pos in idle}
             return render_template(
                 "start.html",
                 start_now=start_now,
@@ -1506,7 +1531,7 @@ class UserInterface(object):
     def startTestrun(self,deviceId=""):
         myString=menuheader('startTestrun', 0)
         if deviceId:
-            sampleId=date_time_string_now()+"_TestRun_"+getFlowCellID(deviceId)
+            sampleId=date_time_string_now()+"_TestRun_"+flow_cell_id(deviceId)
             sys.argv = ['',
                         '--host','localhost',
                         '--position',deviceId,
@@ -1524,16 +1549,16 @@ class UserInterface(object):
                         '--barcode-kits','SQK-RBK004']
             realRunId=startRun()
             myString=myString+"sequencing run started for "+sampleId+" on "+deviceId+" as "+realRunId
-            myString=myString+"<hr>"+getThisRunInformation(deviceId)
+            myString=myString+"<hr>"+run_information(deviceId)
         else:
             myString=myString+'''<form action="startTestrun" method="GET">
                 Select an idle Mk1b:&nbsp;<select name="deviceId" id="deviceId">'''
-            positions=listMinionPositions()
+            positions=minion_positions()
             for pos in positions:
                 thisPos=pos.name
-                if getRealDeviceActivity(thisPos)=="idle":
-                    if getFlowCellID(thisPos)!="":
-                        myString=myString+'<option value="'+thisPos+'">'+thisPos+': '+getFlowCellID(thisPos)+'</option>'
+                if real_device_activity(thisPos)=="idle":
+                    if flow_cell_id(thisPos)!="":
+                        myString=myString+'<option value="'+thisPos+'">'+thisPos+': '+flow_cell_id(thisPos)+'</option>'
             myString=myString+'''
                 </select>&nbsp;<input type="submit" value="start test run now (0.1h)"/></form>'''
         return myString
@@ -1542,7 +1567,7 @@ class UserInterface(object):
     def test_run(self, device_id=""):
         if device_id:
             sample_id = (date_time_string_now() + "_TestRun_"
-                + getFlowCellID(device_id))
+                + flow_cell_id(device_id))
             sys.argv = [
                 "",
                 "--host", "localhost",
@@ -1569,13 +1594,13 @@ class UserInterface(object):
                 device_id=device_id,
                 run_id=run_id,
                 mega_bases=NEEDED_NUMBER_OF_BASES // 1e6,
-                run_info=getThisRunInformation(device_id),
+                run_info=run_information(device_id),
             )
         else:
-            positions = [p.name for p in listMinionPositions()]
-            idle = [p for p in positions if getRealDeviceActivity(p) == "idle"
-                and getFlowCellID(p) != ""]
-            flow_cell = {pos:getFlowCellID(pos) for pos in idle}
+            positions = [p.name for p in minion_positions()]
+            idle = [p for p in positions if real_device_activity(p) == "idle"
+                and flow_cell_id(p) != ""]
+            flow_cell = {pos:flow_cell_id(pos) for pos in idle}
             return render_template(
                 "start.html",
                 start_now=False,
@@ -1593,47 +1618,36 @@ class UserInterface(object):
         return myString
 
     @cherrypy.expose
-    def listExperiments(self):
-        myString=menuheader('listExperiments', 10)
-        myString=myString+"Running and buffered experiments:<br>"
-        experiments=listMinionExperiments()
-        myString=myString+experiments
-        return myString
-
-    @cherrypy.expose
     def list_runs(self):
-        status = {}
         mounted_flow_cell_id = {}
         current_status = {}
         flow_cell_id = {}
-        buffered_run_ids = {}
+        run_ids = {}
+        device_names = []
 
-        manager = mkManager()
-        # Find a list of currently available sequencing positions.
-        positions = manager.flow_cell_positions()
-
-        for p in positions:
-            connection = p.connect()
-            # return the flow cell info
-            mounted_flow_cell_id[p] = connection.device.get_flow_cell_info(
+        for minion in minion_positions():
+            name = minion.name
+            connection = minion.connect()
+            device_names.append(name)
+            mounted_flow_cell_id[name] = connection.device.get_flow_cell_info(
                 ).flow_cell_id
             # READY, STARTING, sequencing/mux = PROCESSING, FINISHING;
             # Pause = PROCESSING
-            current_status[p] = connection.acquisition.current_status()
+            current_status[name] = connection.acquisition.current_status()
             protocols = connection.protocol.list_protocol_runs()
-            buffered_run_ids[p] = protocols.run_ids
-            for b in buffered_run_ids[p]:
-                run_info = connection.protocol.get_run_info(run_id=b)
-                flow_cell_id[(p, b)] = run_info.flow_cell.flow_cell_id
+            run_ids[name] = protocols.run_ids
+            for run_id in run_ids[name]:
+                run_info = connection.protocol.get_run_info(run_id=run_id)
+                flow_cell_id[(name, run_id)] = run_info.flow_cell.flow_cell_id
+
         return render_template(
             "list_runs.html",
-            positions=positions,
+            device_names=device_names,
             host=CHERRYPY_HOST,
-            status=status,
             mounted_flow_cell_id=mounted_flow_cell_id,
             current_status=current_status,
             flow_cell_id=flow_cell_id,
-            buffered_run_ids=buffered_run_ids,
+            run_ids=run_ids,
         )
 
     @cherrypy.expose
@@ -1781,24 +1795,31 @@ class UserInterface(object):
         return render_template("about.html")
 
     @cherrypy.expose
-    def DeviceStatusLive(self,deviceString=""):
-        currentFlowCellId=getFlowCellID(deviceString)
-        myString="<html><head><title>"+deviceString+": "+currentFlowCellId+"</title>"
+    def live_device_status(self,device_id=""):
+        is_sequencing = real_device_activity(device_id) == "sequencing"
+        sample_id = getThisRunSampleID(device_id)
+        run_state = getThisRunState(device_id)
+        run_yield = getThisRunYield(device_id)
+        status = None
         try:
-            myString=myString+"<meta http-equiv='refresh' content='2'>"
-            if getRealDeviceActivity(deviceString)=="sequencing":
-                myString=myString+"<body bgcolor='#00FF00'>"
-            else:
-                myString=myString+"<body>"
-            myString=myString+"<b>"+deviceString+": "+currentFlowCellId+"</b><br><tt>"
-            myString=myString+getMinKnowApiStatus(deviceString)
-        except:
-            myString=myString+"<br>No previous device activity, information will appear as soon as the device has been running once in this session.<br>"
-        myString=myString+"Sample ID: "+getThisRunSampleID(deviceString)+"<br>"
-        myString=myString+getThisRunState(deviceString)
-        myString=myString+"<br>"+getThisRunYield(deviceString)
-        myString=myString+"</tt></body></html>"
-        return myString
+            status = device_status(device_id)
+            previous_activity = True
+        except Exception as e:
+            # TODO catch correct exception.
+            print(e)
+            sys.exit(1) # TODO del
+            previous_activity = False
+        return render_template(
+            "device_status.html",
+            device_id=device_id,
+            status=status,
+            flow_cell_id=flow_cell_id(device_id),
+            is_sequencing=is_sequencing,
+            sample_id=sample_id,
+            run_yield=run_yield,
+            run_state=run_state,
+            previous_activity=previous_activity,
+        )
 
     @cherrypy.expose
     def AnalysisStatusLive(self,deviceString=""):

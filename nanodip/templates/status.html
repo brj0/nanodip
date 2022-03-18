@@ -7,10 +7,10 @@
 {% block body %}
 
 {% for pos in positions %}
-  <iframe src="DeviceStatusLive?deviceString={{pos}}" height="200" width="600" title="{{pos}}" border=3></iframe>
+  <iframe src="live_device_status?device_id={{pos}}" height="200" width="600" title="{{pos}}" border=3></iframe>
   <iframe src="AnalysisStatusLive?deviceString={{pos}}" height="200" width="600" title="{{pos}}" border=3></iframe>
   <br>
-  <a href="DeviceStatusLive?deviceString={{pos}}" target="_blank" title="Click to open device status page in new tab or
+  <a href="live_device_status?device_id={{pos}}" target="_blank" title="Click to open device status page in new tab or
   window">{{pos}}</a>, live state: {{device_activity[pos]}}, active run: {{active_runs[pos]}}
 
   {% if active_runs[pos] != "none" %}

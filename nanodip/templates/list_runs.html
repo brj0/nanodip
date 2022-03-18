@@ -10,19 +10,19 @@
 Running and buffered experiments:<br>
 
 <b>Host: {{host}}</b><br>
-<table border='1'>
+<table border="1">
   <tr>
-    {% for p in positions %}
-    <td valign='top'>
-    <tt>
-      <b>-{{p}}</b><br>
-      --mounted flow cell ID: <b>{{mounted_flow_cell_id[p]}}</b><br>
-      ---{{current_status[p]}}<br>
-      {% for b in buffered_run_ids[p] %}
-      --run ID: {{b}}<br>
-      ---with flow cell ID: {{flow_cell_id[(p, b)]}}<br>
-      {% endfor %}
-    </tt>
+    {% for d in device_names %}
+    <td valign="top">
+      <div class="mono">
+        <b>-{{d}}</b><br>
+        --mounted flow cell ID: <b>{{mounted_flow_cell_id[d]}}</b><br>
+        ---{{current_status[d]}}<br>
+        {% for i in run_ids[d] %}
+        --run ID: {{i}}<br>
+        ---with flow cell ID: {{flow_cell_id[(d, i)]}}<br>
+        {% endfor %}
+      </div>
     </td>
     {% endfor %}
   </tr>

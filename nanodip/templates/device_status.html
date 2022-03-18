@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="refresh" content="2">
+  <title>{{device_id}}: {{flow_cell_id}}</title>
+  <link rel="stylesheet" href="static/style.css">
+</head>
+
+{% if is_sequencing %}
+<body bgcolor="#00FF00">
+{% else %}
+<body>
+{% endif %}
+
+  {% if previous_activity %}
+    <b>{{device_id}}: {{flow_cell_id}}</b>
+    <br>
+    <div class="mono">
+      {% for key, val in status.items() %}
+      {{key}}: {{val}} <br>
+      {% endfor %}
+    {% else %}
+      <br> No previous device activity, information will appear as soon as the device
+      has been running once in this session.<br>
+    {% endif %}
+
+      Sample ID: {{sample_id}}<br>
+      {{run_state}}
+    <br>
+    {{run_yield}}
+  </div>
+
+</body>
+
+</html>
