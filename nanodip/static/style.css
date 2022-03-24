@@ -11,7 +11,7 @@ nav {
   background-color: #212121;
   align-items: center;
   padding-left: 100px;
-  padding-right: 150px;
+  padding-right: 50px;
 }
 
 .logo {
@@ -64,7 +64,7 @@ nav a:active::after {
 
 .content {
   padding-left: 100px;
-  padding-right: 250px;
+  padding-right: 50px;
   padding-top: 50px;
 }
 

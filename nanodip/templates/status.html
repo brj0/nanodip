@@ -7,10 +7,10 @@
 {% block body %}
 
 {% for pos in positions %}
-  <iframe src="live_device_status?device_id={{pos}}" height="200" width="600" title="{{pos}}" border=3></iframe>
-  <iframe src="AnalysisStatusLive?deviceString={{pos}}" height="200" width="600" title="{{pos}}" border=3></iframe>
+  <iframe src="{{url_live_device[pos]}}" height="200" width="600" title="{{pos}}" border=3></iframe>
+  <iframe src="{{url_analysis[pos]}}" height="200" width="600" title="{{pos}}" border=3></iframe>
   <br>
-  <a href="live_device_status?device_id={{pos}}" target="_blank" title="Click to open device status page in new tab or
+  <a href="{{url_device[pos]}}" target="_blank" title="Click to open device status page in new tab or
   window">{{pos}}</a>, live state: {{device_activity[pos]}}, active run: {{active_runs[pos]}}
 
   {% if active_runs[pos] != "none" %}
@@ -19,7 +19,7 @@
     </a>
     <br>
     <font color="#ff0000">
-    <a href="stopSequencing?deviceId={{pos}}" title="Clicking this will terminate the current run immediately! Use with care!">
+    <a href="stop_sequencing?device_id={{pos}}" title="Clicking this will terminate the current run immediately! Use with care!">
       terminate manually
     </a>
     </font>

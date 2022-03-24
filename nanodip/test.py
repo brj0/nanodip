@@ -1,6 +1,9 @@
 import bisect
+from minknow_api.tools import protocols
 import numpy as np
+import logging
 import os
+import argparse
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -72,22 +75,31 @@ reference_name = "GSE90496_IfP01"
 # umapp = UMAPData(sample_name, reference_name)
 # umapp.make_umap_plot()
 
-
 import grpc
 
 from nanodip import (
     mk_manager,
-    minion_positions,
+    parse_args,
     minion_positions,
     run_information,
-    position_from_device_id,
-    getMinKnowApiStatus,
+    connection_from_device_id,
     device_status,
+    active_run,
+    mk_manager,
+    called_bases,
+    run_sample_id,
+    date_time_string_now,
+    start_run,
+    is_position_selected,
 )
 
+
 device_id = "MN26636"
+sample_id = "test"
+# run_id = active_run(device_id)
+run_duration = "0.1"
+start_voltage = "-180"
 
 
-# determine if anything is running and the kind of run, via set temperature
-
+# run_ids=start_run(device_id = "MN26636", sample_id = "test", run_duration = "0.1", start_voltage = "-180")
 

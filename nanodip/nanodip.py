@@ -98,6 +98,7 @@ from minknow_api.manager import Manager
 import minknow_api.statistics_pb2
 import minknow_api.device_pb2
 from minknow_api.tools import protocols
+from minknow_api.acquisition_pb2 import READY
 from numba import jit
 import pandas as pd
 import psutil
@@ -153,6 +154,7 @@ from utils import (
     date_time_string_now,
     extract_referenced_cpgs,
     render_template,
+    url_for,
 )
 # end_internal_modules
 
@@ -199,7 +201,8 @@ def get_runs():
 def predominant_barcode(sample_name):
     """Returns the predominante barcode within all fast5 files."""
     fast5_files = files_by_ending(DATA, sample_name, ending=".fast5")
-    pass_fast5_files = [f for f in fast5_files if "_pass_" in f] # TODO @HEJU im Original fehlt diese Zeile
+    # TODO @HEJU im Original fehlt diese Zeile:
+    pass_fast5_files = [f for f in fast5_files if "_pass_" in f]
     barcode_hits=[]
     for barcode in BARCODE_NAMES:
         barcode_hits.append(
@@ -223,13 +226,6 @@ def reference_annotations():
     return annotations
 
 
-# TODO del
-# write the filename of the UMAP reference for the
-def writeReferenceDefinition(sampleId,referenceFile):
-    # current run into a text file
-    with open(NANODIP_REPORTS+'/'+sampleId+'_selected_reference.txt', 'w') as f:
-        f.write(referenceFile)
-
 def write_reference_name(sample_id, reference_name):
     """Write the filename of the UMAP reference for the current run into
     a text file.
@@ -240,31 +236,17 @@ def write_reference_name(sample_id, reference_name):
     with open(path, "w") as f:
         f.write(reference_name)
 
-
-def readReferenceDefinition(sampleId): # read the filename of the UMAP reference for the current sample
+def read_reference(sample_id):
+    """Read the filename of the UMAP reference for the current sample."""
+    path = os.path.join(
+        NANODIP_REPORTS, sample_id + "_selected_reference.txt"
+    )
     try:
-        with open(NANODIP_REPORTS+'/'+sampleId+'_selected_reference.txt', 'r') as f:
-            referenceFile=f.read()
-    except:
-        referenceFile=""
-    return referenceFile
-
-
-def writeRunTmpFile(sampleId,deviceId):
-    # current run into a text file
-    with open(NANODIP_REPORTS+'/'+sampleId+'_'+deviceId+'_runinfo.tmp', 'a') as f:
-        try:
-            runId=getActiveRun(deviceId)
-        except:
-            runId="none"
-        ro=getThisRunOutput(deviceId,sampleId,runId)
-        readCount=ro[0]
-        bascalledBases=ro[1]
-        overlapCpGs=len(SampleData.get_read_cpgs((sampleId)))
-        f.write(str(int(time.time()))+"\t"+
-                str(readCount)+"\t"+
-                str(bascalledBases)+"\t"+
-                str(overlapCpGs)+"\n")
+        with open(path, "r") as f:
+            reference = f.read()
+    except FileNotFoundError:
+        reference = ""
+    return reference
 
 def single_file_methylation_caller(analysis_dir, file_name):
     """Invokes f5c methylation caller on a single fast5/fastq file and
@@ -321,23 +303,12 @@ def single_file_methylation_caller(analysis_dir, file_name):
         ">",
         base_path + "-freq.tsv",
     ]
-    # TODO del. replaced by extract_referenced_cpgs
-    # Calculate CpG overlap.
-    # methyl_overlap = [
-    #     RSCRIPT,
-    #     READ_CPG_RSCRIPT,
-    #     base_path + "-freq.tsv",
-    #     ILUMINA_CG_MAP,
-    #     base_path + "-methoverlap.tsv",
-    #     base_path + "-methoverlapcount.txt",
-    # ]
     commands = [
         f5c_index,
         seq_align,
         bam_index,
         methyl_calling,
         methyl_frequency,
-        #methyl_overlap,
     ]
     # TODO check for successful termination
     for cmd in commands:
@@ -428,13 +399,12 @@ def methylation_caller(sample_name, analyze_one=True):
     }
 
 """
-### 2. MinKNOW API Functions
+### MinKNOW API Functions
 Check https://github.com/nanoporetech/minknow_api for reference.
 
 The following code requires a patched version of the MinKNOW API, install it
 from https://github.com/neuropathbasel/minknow_api.
 """
-
 
 def mk_manager():
     """Construct a manager using the host and port provided. This is
@@ -446,8 +416,6 @@ def mk_manager():
     """
     return Manager(host=THIS_HOST, port=9501, use_tls=False)
 
-
-
 def minion_positions():
     """Return MinION devices that are currenty connected to the system."""
     manager = mk_manager()
@@ -456,6 +424,17 @@ def minion_positions():
     # User could call {posisions.connect()} here to connect to the
     # running MinKNOW instance.
     return positions
+
+def connection_from_device_id(device_id):
+    """Returns minion position """
+    position = next(
+        (pos for pos in minion_positions() if pos.name == device_id),
+        False,
+    )
+    if not position:
+        raise ValueError(f"'{device_id}' is not a valid Minion position.")
+    connection = position.connect()
+    return connection
 
 def flow_cell_id(device_id):
     """Return flow cell ID (if any). Note that some CTCs have an
@@ -469,7 +448,7 @@ def flow_cell_id(device_id):
             flow_cell_id = connection.device.get_flow_cell_info().flow_cell_id
     return flow_cell_id
 
-def parse_args():
+def parse_args(args_list):
     """Build and execute a command line argument for starting a protocol.
 
     Returns:
@@ -669,7 +648,7 @@ def parse_args():
         nargs="*",
         help="Additional arguments passed verbatim to the protocol script",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(args_list)
     # Further argument checks
     # Read until must have a reference and a filter type, if enabled:
     if (
@@ -721,213 +700,233 @@ def is_position_selected(position, args):
             or flow_cell_info.flow_cell_id == args.flow_cell_id
         ):
             return True
-
     return False
 
-def startRun():
+def start_run(
+    device_id="",
+    sample_id="",
+    run_duration="",
+    start_voltage="",
+):
     """Start a run on Mk1b devices and perform several checks concerning
     the run protocol.
 
     Code modified from the MinKNOW API on
     https://github.com/nanoporetech/minknow_api
-    (2021-06) created from the sample code at
-    https://github.com/nanoporetech/minknow_api/blob/master/python/examples/start_protocol.py
+    (2022-03) created from the sample code at
+    https://github.com/nanoporetech/minknow_api/blob/master/python/minknow_api/examples/start_protocol.py
 
     We need 'find_protocol' to search for the required protocol given a kit
     and product code.
     """
-    # Parse arguments to be passed to started protocols:
-    run_id=""
-    args = parse_args()
-    #args = parse_args(minknowApiShellArgumentString.split())
+    args_list = [
+        "--host",
+        "localhost",
+        "--position", device_id,
+        "--sample-id", sample_id,
+        "--experiment-group", sample_id,
+        "--experiment-duration", run_duration,
+        "--basecalling",
+        "--fastq",
+        "--fastq-reads-per-file", READS_PER_FILE,
+        "--fast5",
+        "--fast5-reads-per-file", READS_PER_FILE,
+        "--verbose",
+        "--kit", "SQK-RBK004",
+        "--barcoding",
+        "--barcode-kits", "SQK-RBK004",
+        "--",  # Required for so-called extra-arguments.
+        "--start_bias_voltage", start_voltage,
+    ]
 
-    # Specify --verbose on the command line to get extra details about
+    # Parse arguments to be passed to started protocols:
+    args = parse_args(args_list)
+
+    # Specify --verbose on the command line to get extra details.
     if args.verbose:
         logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 
-    # Construct a manager using the host + port provided:
-    #manager = Manager(host=args.host, port=args.port, use_tls=not args.no_tls)
-    manager=mk_manager()
-    errormessage=""
-
     # Find which positions we are going to start protocol on:
-    positions = manager.flow_cell_positions()
-    filtered_positions = list(
-        filter(lambda pos: is_position_selected(pos, args), positions)
-    )
+    positions = [
+        pos for pos in minion_positions() if is_position_selected(pos, args)
+    ]
 
     # At least one position needs to be selected:
-    if not filtered_positions:
-        errormessage="No positions selected for protocol - specify '--position' or '--flow-cell-id'"
-    else:
-        protocol_identifiers = {}
-        for pos in filtered_positions:
-            # Connect to the sequencing position:
-            position_connection = pos.connect()
+    if not positions:
+        print(
+            "No positions selected for protocol - specify "
+            "'--position' or '--flow-cell-id'"
+        )
+        return []
 
-            # Check if a flowcell is available for sequencing
-            flow_cell_info = position_connection.device.get_flow_cell_info()
-            if not flow_cell_info.has_flow_cell:
-                errormessage="No flow cell present in position "+str(pos)
-            else:
-                # Select product code:
-                if args.product_code:
-                    product_code = args.product_code
-                else:
-                    product_code = flow_cell_info.user_specified_product_code
-                    if not product_code:
-                        product_code = flow_cell_info.product_code
+    # Start protocol on the requested postitions:
+    print("Starting protocol on %s positions." % len(positions))
+    run_ids = []
 
-                # Find the protocol identifier for the required protocol:
-                protocol_info = protocols.find_protocol(
-                    position_connection,
-                    product_code=product_code,
-                    kit=args.kit,
-                    basecalling=args.basecalling,
-                    basecall_config=args.basecall_config,
-                    barcoding=args.barcoding,
-                    barcoding_kits=args.barcode_kits,
+    for pos in positions:
+        # Connect to the sequencing position:
+        connection = pos.connect()
+
+        # Check if a flowcell is available for sequencing
+        flow_cell_info = connection.device.get_flow_cell_info()
+        if not flow_cell_info.has_flow_cell:
+            print(f"No flow cell present in position {pos}")
+            return []
+
+        # Select product code:
+        if args.product_code:
+            product_code = args.product_code
+        else:
+            product_code = flow_cell_info.user_specified_product_code
+            if not product_code:
+                product_code = flow_cell_info.product_code
+
+        # Find the protocol identifier for the required protocol:
+        protocol_info = protocols.find_protocol(
+            connection,
+            product_code=product_code,
+            kit=args.kit,
+            basecalling=args.basecalling,
+            basecall_config=args.basecall_config,
+            barcoding=args.barcoding,
+            barcoding_kits=args.barcode_kits,
+        )
+
+        if not protocol_info:
+            print("Failed to find protocol for position %s" % (pos.name))
+            print("Requested protocol:")
+            print("  product-code: %s" % args.product_code)
+            print("  kit: %s" % args.kit)
+            print("  basecalling: %s" % args.basecalling)
+            print("  basecall_config: %s" % args.basecall_config)
+            print("  barcode-kits: %s" % args.barcode_kits)
+            print("  barcoding: %s" % args.barcoding)
+            print("Protocol build error, consult application log.")
+            return []
+
+        # Store the identifier for later:
+        protocol_id = protocol_info.identifier
+
+        # Now select which arguments to pass to start protocol:
+        print("Starting protocol %s on position %s" % (protocol_id, pos.name))
+
+        # Set up user specified product code if requested:
+        if args.product_code:
+            connection.device.set_user_specified_product_code(
+                code=args.product_code
+            )
+
+        # Build arguments for starting protocol:
+        basecalling_args = None
+        if args.basecalling or args.basecall_config:
+            barcoding_args = None
+            alignment_args = None
+            if args.barcode_kits or args.barcoding:
+                barcoding_args = protocols.BarcodingArgs(
+                    args.barcode_kits,
+                    args.trim_barcodes,
+                    args.barcodes_both_ends,
+                    args.detect_mid_strand_barcodes,
+                    args.min_score,
+                    args.min_score_rear,
+                    args.min_score_mid,
                 )
 
-                if not protocol_info:
-                    print("Failed to find protocol for position %s" % (pos.name))
-                    print("Requested protocol:")
-                    print("  product-code: %s" % args.product_code)
-                    print("  kit: %s" % args.kit)
-                    print("  basecalling: %s" % args.basecalling)
-                    print("  basecall_config: %s" % args.basecall_config)
-                    print("  barcode-kits: %s" % args.barcode_kits)
-                    print("  barcoding: %s" % args.barcoding)
-                    errormessage="Protocol build error, consult application log."
-                else:
-                    # Store the identifier for later:
-                    protocol_identifiers[pos.name] = protocol_info.identifier
+            if args.alignment_reference:
+                alignment_args = protocols.AlignmentArgs(
+                    reference_files=[args.alignment_reference],
+                    bed_file=args.bed_file,
+                )
 
-                    # Start protocol on the requested postitions:
-                    print("Starting protocol on %s positions" % len(filtered_positions))
-                    for pos in filtered_positions:
+            basecalling_args = protocols.BasecallingArgs(
+                config=args.basecall_config,
+                barcoding=barcoding_args,
+                alignment=alignment_args,
+            )
 
-                        # Connect to the sequencing position:
-                        position_connection = pos.connect()
+        read_until_args = None
+        if args.read_until_filter:
+            read_until_args = protocols.ReadUntilArgs(
+                filter_type=args.read_until_filter,
+                reference_files=[args.read_until_reference],
+                bed_file=args.read_until_bed_file,
+                first_channel=None,  # These default to all channels.
+                last_channel=None,
+            )
 
-                        # Find the protocol identifier for the required protocol:
-                        protocol_identifier = protocol_identifiers[pos.name]
+        def build_output_arguments(args, name):
+            if not getattr(args, name):
+                return None
+            return protocols.OutputArgs(
+                reads_per_file=getattr(args, "%s_reads_per_file" % name)
+            )
 
-                        # Now select which arguments to pass to start protocol:
-                        print("Starting protocol %s on position %s" % (protocol_identifier, pos.name))
+        fastq_arguments = build_output_arguments(args, "fastq")
+        fast5_arguments = build_output_arguments(args, "fast5")
+        bam_arguments = build_output_arguments(args, "bam")
 
-                        # Set up user specified product code if requested:
-                        if args.product_code:
-                            position_connection.device.set_user_specified_product_code(
-                                code=args.product_code
-                            )
+        # print the protocol parameters
+        print("connection {connection}")
+        print("protocol_id {protocol_id}")
+        print("args.sample_id {args.sample_id}")
+        print("args.experiment_group {args.experiment_group}")
+        print("basecalling_args {basecalling_args}")
+        print("read_until_args {read_until_args}")
+        print(
+            "fastq_arguments {fastq_arguments}"
+        )  # fastq_arguments OutputArgs(reads_per_file=400)
+        print(
+            "fast5_arguments {fast5_arguments}"
+        )  # fast5_arguments OutputArgs(reads_per_file=400)
+        print("bam_arguments {bam_arguments}")
+        print(
+            "args.no_active_channel_selection "
+            "{args.no_active_channel_selection}"
+        )
+        print("args.mux_scan_period {args.mux_scan_period}")
+        print("args.experiment_duration {args.experiment_duration}")
+        print(
+            "args.extra_args {args.extra_args}"
+        )  # Any extra args passed.
 
-                        # Build arguments for starting protocol:
-                        basecalling_args = None
-                        if args.basecalling or args.basecall_config:
-                            barcoding_args = None
-                            alignment_args = None
-                            if args.barcode_kits or args.barcoding:
-                                barcoding_args = protocols.BarcodingArgs(
-                                    args.barcode_kits,
-                                    args.trim_barcodes,
-                                    args.barcodes_both_ends,
-                                    args.detect_mid_strand_barcodes,
-                                    args.min_score,
-                                    args.min_score_rear,
-                                    args.min_score_mid,
-                                )
+        # Now start the protocol:
+        run_id = protocols.start_protocol(
+            connection,
+            protocol_id,
+            sample_id=args.sample_id,
+            experiment_group=args.experiment_group,
+            basecalling=basecalling_args,
+            read_until=read_until_args,
+            fastq_arguments=fastq_arguments,
+            fast5_arguments=fast5_arguments,
+            bam_arguments=bam_arguments,
+            disable_active_channel_selection=args.no_active_channel_selection,
+            mux_scan_period=args.mux_scan_period,
+            experiment_duration=args.experiment_duration,
+            args=args.extra_args,  # Any extra args passed.
+        )
+        run_ids.append(run_id)
+    return run_ids
 
-                            if args.alignment_reference:
-                                alignment_args = protocols.AlignmentArgs(
-                                    reference_files=[args.alignment_reference], bed_file=args.bed_file,
-                                )
-
-                            basecalling_args = protocols.BasecallingArgs(
-                                config=args.basecall_config,
-                                barcoding=barcoding_args,
-                                alignment=alignment_args,
-                            )
-
-                        read_until_args = None
-                        if args.read_until_filter:
-                            read_until_args = protocols.ReadUntilArgs(
-                                filter_type=args.read_until_filter,
-                                reference_files=[args.read_until_reference],
-                                bed_file=args.read_until_bed_file,
-                                first_channel=None,  # These default to all channels.
-                                last_channel=None,
-                            )
-
-                        def build_output_arguments(args, name):
-                            if not getattr(args, name):
-                                return None
-                            return protocols.OutputArgs(
-                                reads_per_file=getattr(args, "%s_reads_per_file" % name)
-                            )
-
-                        fastq_arguments = build_output_arguments(args, "fastq")
-                        fast5_arguments = build_output_arguments(args, "fast5")
-                        bam_arguments = build_output_arguments(args, "bam")
-
-                        # print the protocol parameters
-                        print("position_connection "+str(position_connection))
-                        print("protocol_identifier "+str(protocol_identifier))
-                        print("args.sample_id "+str(args.sample_id))
-                        print("args.experiment_group "+str(args.experiment_group))
-                        print("basecalling_args "+str(basecalling_args))
-                        print("read_until_args "+str(read_until_args))
-                        print("fastq_arguments "+str(fastq_arguments)) #fastq_arguments OutputArgs(reads_per_file=400)
-                        print("fast5_arguments "+str(fast5_arguments)) #fast5_arguments OutputArgs(reads_per_file=400)
-                        print("bam_arguments "+str(bam_arguments))
-                        print("args.no_active_channel_selection"+str(args.no_active_channel_selection))
-                        print("args.mux_scan_period"+str(args.mux_scan_period))
-                        print("args.experiment_duration "+str(args.experiment_duration))
-                        print("args.extra_args "+str(args.extra_args))  # Any extra args passed.
-
-                        # Now start the protocol:
-                        run_id = protocols.start_protocol(
-                            position_connection,
-                            protocol_identifier,
-                            sample_id=args.sample_id,
-                            experiment_group=args.experiment_group,
-                            basecalling=basecalling_args,
-                            read_until=read_until_args,
-                            fastq_arguments=fastq_arguments,
-                            fast5_arguments=fast5_arguments,
-                            bam_arguments=bam_arguments,
-                            disable_active_channel_selection=args.no_active_channel_selection,
-                            mux_scan_period=args.mux_scan_period,
-                            experiment_duration=args.experiment_duration,
-                            args=args.extra_args,  # Any extra args passed.
-                        )
-
-                        #print("Started protocol %s" % run_id)
-    return errormessage+run_id # one of them should be ""
-
-
-def stopRun(minionId): # stop an existing run (if any) for a MinION device
-    manager=mk_manager()
-    positions = list(manager.flow_cell_positions())
-    filtered_positions = list(filter(lambda pos: pos.name == minionId, positions))
-    # Connect to the grpc port for the position:
-    connection = filtered_positions[0].connect()
+def stop_run(device_id):
+    """Stop an existing run (if any) for a MinION device and return the
+    protocol ID.
+    """
+    connection = connection_from_device_id(device_id)
     protocols = connection.protocol.list_protocol_runs()
-    bufferedRunIds = protocols.run_ids
-    thisMessage="No protocol running, nothing was stopped."
-    c=0
-    for b in bufferedRunIds:
-        try:
-            connection.protocol.stop_protocol()
-            thisMessage="Protocol "+b+" stopped on "+minionId+"."
-        except:
-            c=c+1
-    return thisMessage
+    protocol_id = protocols.run_ids[-1]
+    # TODO @HEJU in stopRun wird über bufferedRunIds geloopt. Notwendig?
+    try:
+        connection.protocol.stop_protocol()
+        return protocol_id
+    except grpc._channel._InactiveRpcError:
+        return None
 
-
-# from minknow_api demos, start_seq.py
 def is_position_selected(position, args):
-    """Find if the {position} is selected by command line arguments {args}."""
+    """Find if the {position} is selected by command line arguments
+    {args}.
+    Function from minknow_api demos, start_seq.py
+    """
     if args.position == position.name: # First check for name match:
         return True
     connected_position = position.connect()  # Then verify if the flow cell matches:
@@ -940,9 +939,8 @@ def is_position_selected(position, args):
 
 
 def device_status(device_id):
-    """MinKNOW status per device."""
-    position = position_from_device_id(device_id)
-    connection = position.connect()
+    """MinKNOW status for device."""
+    connection = connection_from_device_id(device_id)
     status = {
         "acquisition.get_acquisition_info().state": str(
             connection.acquisition.get_acquisition_info().state
@@ -960,22 +958,21 @@ def device_status(device_id):
     }
     return status
 
-
-def getActiveRun(deviceString):
-    manager=mk_manager()
-    positions = list(manager.flow_cell_positions())
-    filtered_positions = list(filter(lambda pos: pos.name == deviceString, positions))
-    connection = filtered_positions[0].connect() # Connect to the grpc port for the position
+def active_run(device_id):
+    """Returns active run id."""
+    connection = connection_from_device_id(device_id)
     try:
-        activeRun=connection.acquisition.get_current_acquisition_run().run_id # error if no acquisition is running, same as with acquisitio.current_status(), no acquisition until temperature reached
-    except:
-        activeRun="none"
-    return activeRun
+        # Error if no acquisition is running, same as with
+        # acquisitio.current_status(), no acquisition until
+        # temperature reached
+        active_run = connection.acquisition.get_current_acquisition_run().run_id
+    except grpc._channel._InactiveRpcError:
+        active_run = "none"
+    return active_run
 
 def real_device_activity(device_id):
     """Returns device activity by checking the target temperature."""
-    position = position_from_device_id(device_id)
-    connection = position.connect()
+    connection = connection_from_device_id(device_id)
     target_temp =str(
         connection.minion_device.get_settings().temperature_target.min
     )
@@ -986,73 +983,47 @@ def real_device_activity(device_id):
     }
     return device_activity.get(target_temp, "")
 
-
-def getThisRunState(deviceString): # obtain further information about a particular device / run
-    manager=mk_manager()
-    positions = list(manager.flow_cell_positions())
-    filtered_positions = list(filter(lambda pos: pos.name == deviceString, positions))
-    connection = filtered_positions[0].connect() # Connect to the grpc port for the position
+def run_state(device_id):
+    """Obtain further information about a particular device / run."""
+    connection = connection_from_device_id(device_id)
     try:
-        thisRunState="Run state for "+deviceString+": "
-        thisRunState=thisRunState+str(connection.protocol.get_current_protocol_run().state)+"/"
-        thisRunState=thisRunState+str(connection.acquisition.get_acquisition_info().state)
-    except:
-        thisRunState="No state information in MinKNOW buffer for "+deviceString
-    return thisRunState
+        state = f"Run state for {device_id}: "
+        state += str(connection.protocol.get_current_protocol_run().state)
+        state += "/"
+        state += str(connection.acquisition.get_acquisition_info().state)
+    except grpc._channel._InactiveRpcError:
+        state = f"No state information in MinKNOW buffer for {device_id}"
+    return state
 
-
-
-def getThisRunSampleID(deviceString): # get SampleID from MinKNOW by device, only available after data
-    manager=mk_manager()               # acquisition as been initiated by MinKNOW.
-    positions = list(manager.flow_cell_positions())
-    filtered_positions = list(filter(lambda pos: pos.name == deviceString, positions))
-    connection = filtered_positions[0].connect() # Connect to the grpc port for the position
+def run_sample_id(device_id):
+    """Get SampleID from MinKNOW by device, only available after data
+    acquisition as been initiated by MinKNOW.
+    """
+    connection = connection_from_device_id(device_id)
     try:
-        thisRunSampleID=connection.protocol.get_current_protocol_run().user_info.sample_id.value
-    except:
-        thisRunSampleID="No sampleId information in MinKNOW buffer for "+deviceString
-    return thisRunSampleID
+        sample_id = (
+            connection.protocol.get_current_protocol_run().user_info.sample_id.value
+        )
+    except grpc._channel._InactiveRpcError:
+        sample_id = (
+            f"No sampleId information in MinKNOW buffer for {device_id}"
+        )
+    return sample_id
 
-
-
-def getThisRunYield(deviceString): # get run yield by device. The data of the previous run will remain
-    manager=mk_manager()            # in the buffer until acquisition (not just a start) of a new run
-    positions = list(manager.flow_cell_positions()) # have been initiated.
-    filtered_positions = list(filter(lambda pos: pos.name == deviceString, positions))
-    connection = filtered_positions[0].connect() # Connect to the grpc port for the position
+def run_yield(device_id):
+    """Get run yield by device. The data of the previous run will remain in
+    the buffer until acquisition (not just a start) of a new run have been
+    initiated.
+    """
+    connection = connection_from_device_id(device_id)
     try:
-        acqinfo=connection.acquisition.get_acquisition_info()
-        thisRunYield="Run yield for "+deviceString+"("+acqinfo.run_id+"):&nbsp;"
-        thisRunYield=thisRunYield+str(acqinfo.yield_summary)
-    except:
-        thisRunYield="No yield information in MinKNOW buffer for "+deviceString
-    return thisRunYield
-
-
-
-def getThisRunOutput(deviceString,sampleName,runId): # get run yield by device, sampleName, runId
-    thisRunOutput=[-1,-1] # defaults in case of error / missing information
-    manager=mk_manager()            # in the buffer until acquisition (not just a start) of a new run
-    positions = list(manager.flow_cell_positions()) # have been initiated.
-    filtered_positions = list(filter(lambda pos: pos.name == deviceString, positions))
-    connection = filtered_positions[0].connect() # Connect to the grpc port for the position
-    readCount=-3
-    calledBases=-3
-    if getThisRunSampleID(deviceString)==sampleName: # check that runID and sampleID match
-        readCount=-4
-        calledBases=-4
-        if connection.acquisition.get_current_acquisition_run().run_id==runId:
-            if connection.acquisition.current_status()!="status: READY": # i.e., working
-                try:
-                    acq=connection.acquisition.get_acquisition_info()
-                    readCount=acq.yield_summary.basecalled_pass_read_count
-                    calledBases=acq.yield_summary.basecalled_pass_bases
-                except:
-                    readCount=-5
-                    calledBases=-5
-    thisRunOutput=[readCount,calledBases]
-    return thisRunOutput # shall be a list
-
+        acq_info = connection.acquisition.get_acquisition_info()
+        yield_ = f"Run yield for {device_id} ({acq_info.run_id}):&nbsp;"
+        yield_ += str(acq_info.yield_summary)
+    # TODO this exception has not been tested.
+    except grpc._channel._InactiveRpcError:
+        yield_ = f"No yield information in MinKNOW buffer for {device_id}"
+    return yield_
 
 def getThisRunEstimatedOutput(deviceString,sampleName,runId): # get run yield by device, sampleName, runId
     thisRunOutput=[-1,-1] # defaults in case of error / missing information
@@ -1062,7 +1033,7 @@ def getThisRunEstimatedOutput(deviceString,sampleName,runId): # get run yield by
     connection = filtered_positions[0].connect() # Connect to the grpc port for the position
     readCount=-3
     calledBases=-3
-    if getThisRunSampleID(deviceString)==sampleName: # check that runID and sampleID match
+    if run_sample_id(deviceString)==sampleName: # check that runID and sampleID match
         readCount=-4
         calledBases=-4
         if connection.acquisition.get_current_acquisition_run().run_id==runId:
@@ -1077,23 +1048,23 @@ def getThisRunEstimatedOutput(deviceString,sampleName,runId): # get run yield by
     thisRunOutput=[readCount,calledBases]
     return thisRunOutput # shall be a list
 
+def called_bases(device_id):
+    """Returns number of called bases."""
+    connection = connection_from_device_id(device_id)
+    # Check if device is working.
+    if connection.acquisition.current_status().status == READY:
+        return 0
+    else:
+        acquisition = connection.acquisition.get_acquisition_info()
+        called_bases = acquisition.yield_summary.estimated_selected_bases
+        return called_bases
 
-def position_from_device_id(device_id):
-    """Returns minion position """
-    position = next(
-        (pos for pos in minion_positions() if pos.name == device_id),
-        False,
-    )
-    if not position:
-        raise ValueError(f"'{device_id}' is not a valid Minion position.")
-    return position
 
 def run_information(device_id):
     """Get current run information. Only available after data acquisition
     has started.
     """
-    position = position_from_device_id(device_id)
-    connection = position.connect()
+    connection = connection_from_device_id(device_id)
     try:
         info = (f"Run information for {device_id}<br><br>"
                + str(connection.protocol.get_current_protocol_run()))
@@ -1102,7 +1073,7 @@ def run_information(device_id):
     return info
 
 def thisRunWatcherTerminator(deviceString,sampleName):
-    realRunId=getActiveRun(deviceString) #
+    realRunId=active_run(deviceString) #
     currentBases=getThisRunEstimatedOutput(deviceString,sampleName,realRunId)[1]
     currentBasesString=str(round(currentBases/1e6,2))
     wantedBasesString=str(round(NEEDED_NUMBER_OF_BASES/1e6,2))
@@ -1115,7 +1086,7 @@ def thisRunWatcherTerminator(deviceString,sampleName):
     myString=myString+"<hr>"
     myString=myString+"Last refresh at "+date_time_string_now()+".<hr>"
     if currentBases > NEEDED_NUMBER_OF_BASES:
-        stopRun(deviceString)
+        stop_run(deviceString)
         myString=myString+"STOPPED at "+date_time_string_now()
     elif currentBases==0:
         myString=myString+"IDLE / MUX / ETC"
@@ -1123,94 +1094,6 @@ def thisRunWatcherTerminator(deviceString,sampleName):
         myString=myString+"RUNNING"
     myString=myString+"</body></html>"
     return myString
-
-
-"""
-### 3. CNV Plotter
-"""
-
-
-
-
-"""
-### 4. UMAP Methylation Plotter
-"""
-
-"""
-### 5. Report Generator
-"""
-
-
-"""
-### 6. User Interface Functions
-"""
-
-
-# TODO changed
-# String patterns in sample names that exclude data from downstream analysis,
-# e.g., test runs
-def analysis_launch_table():
-    """Presents a html table from which analyses can be started in a post-hoc
-    manner.
-    """
-    analysis_runs = [run for run in get_runs() if
-        not any(pattern in run for pattern in ANALYSIS_EXCLUSION_PATTERNS)]
-    annotations = reference_annotations()
-    table = f"""
-        <tt>
-        <font size='-2'>
-        <table border=1>
-        <thead>
-        <tr>
-            <th align='left'><b>Sample ID </b></th>
-            <th align='left'><b>CpGs</b></th>
-            <th align='left'><b>CNV</b></th>"""
-    for a in annotations:
-        table += f"""
-            <th align='left'>
-                <b>UMAP against<br>{a.replace(".xlsx", "")}</b>
-            </th>"""
-    table += """
-        </tr>
-        </thead>
-        <tbody>"""
-    for _, run in enumerate(analysis_runs):
-        table += f"""
-        <tr>
-            <td>{run}</td>
-            <td>
-            <a href='./analysisLauncher?functionName=methylationPoller&sampleName={run}&refAnno=None'
-            target='_blank' rel='noopener noreferrer' title='{run}: CpGs'>
-                get CpGs
-            </a>
-            </td>
-            <td>
-            <a href='./analysisLauncher?functionName=cnvplot&sampleName={run}&refAnno=None'
-                target='_blank' rel='noopener noreferrer' title='{run}: CNV'>
-                    plot CNV
-            </a>
-            </td>"""
-        for a in annotations:
-            table += f"""
-            <td>
-            <a href='./analysisLauncher?functionName=umapplot&sampleName={run}&refAnno={a}'
-            target='_blank' rel='noopener noreferrer'
-            title='{run}: {a.replace(".xlsx", "")}'>
-                plot UMAP
-            </a>&nbsp;
-            <a href='./makePdf?sampleName={run}&refAnno={a}' target='_blank'
-            rel='noopener noreferrer' title='{run}: {a.replace(".xlsx", "")}'>
-                make PDF
-            </a>
-            </td>"""
-        table += """
-        </tr>"""
-    table += """
-        </tbody>
-        </table>
-        </font>
-        </tt>"""
-    return table
 
 def get_all_results():
     """Return list of all analysis result files in report directory sorted
@@ -1227,8 +1110,8 @@ def get_all_results():
     return [f[0] for f in files]
 
 def livePage(deviceString): # generate a live preview of the data analysis with the current PNG figures
-    thisSampleID=getThisRunSampleID(deviceString) # if there is a run that produces data, the run ID will exist
-    thisSampleRef=readReferenceDefinition(thisSampleID).replace(".xlsx", "")
+    thisSampleID=run_sample_id(deviceString) # if there is a run that produces data, the run ID will exist
+    thisSampleRef=read_reference(thisSampleID).replace(".xlsx", "")
     cnvPlotPath="reports/"+thisSampleID+"_CNVplot.png"
     umapAllPlotPath="reports/"+thisSampleID+"_"+thisSampleRef+"_UMAP_all.png"
     umapAllPlotlyPath="reports/"+thisSampleID+"_"+thisSampleRef+"_UMAP_all.html"
@@ -1323,7 +1206,7 @@ the Web UI cell below.
 
 
 
-class UserInterface(object):
+class UI(object):
     """The CherryPy Web UI Webserver class defines entrypoints and
     function calls.
     """
@@ -1349,7 +1232,7 @@ class UserInterface(object):
                 / psutil.virtual_memory().total
             ),
             "cpu": round(psutil.cpu_percent()),
-            "cpgs": UserInterface.cpgQueue,
+            "cpgs": UI.cpgQueue,
             "cnvp": len([p for p in mp.active_children() if p.name == "cnv"]),
             "umap": len([p for p in mp.active_children() if p.name == "umap"]),
         }
@@ -1374,100 +1257,43 @@ class UserInterface(object):
         html = menuheader('index', 15)
         if queue_name:
             if queue_name == "cpg":
-                UserInterface.cpgQueue = 0
+                UI.cpgQueue = 0
             if queue_name == "umap":
-                UserInterface.umapQueue = 0
+                UI.umapQueue = 0
             if queue_name == "cnvp":
-                UserInterface.cnvpQueue = 0
+                UI.cnvpQueue = 0
             html += queue_name + " queue reset"
         return html
-
-    @cherrypy.expose
-    def listPositions(self):
-        myString=menuheader(1,10)
-        positions=minion_positions()
-        for pos in positions:
-            n=str(pos.name) # pos.state does not tell much other than that the device is connected with USB ("running")
-            myString=myString+"<br><iframe src='DeviceStatusLive?deviceString="+n+"' height='200' width='600' title='"+n+"' border=3></iframe>"
-            myString=myString+"<iframe src='AnalysisStatusLive?deviceString="+n+"' height='200' width='600' title='"+n+"' border=3></iframe>"
-            myString=myString+"<br><a href='DeviceStatusLive?deviceString="+n+"' target='_blank' title='Click to open device status page in new tab or window'>"+n+"</a>"
-            myString=myString+", live state: "+real_device_activity(n)
-            activeRun=getActiveRun(n)
-            myString=myString+", active run: "+getActiveRun(n)
-            if activeRun!="none":
-                myString=myString+" <a href='launchAutoTerminator?sampleName="+getThisRunSampleID(n)+"&deviceString="+n+"' target='_blank'>"
-                myString=myString+"<br>Click this link to launch automatic run terminator after"+str(round(NEEDED_NUMBER_OF_BASES/1e6))+" MB.</a>"
-                myString=myString+"<br><font color=''#ff0000'><a href='stopSequencing?deviceId="+n+"' title='Clicking this will terminate the current run immediately! Use with care!'>terminate manually</a></font>"
-            myString=myString+"<br><br>"
-        myString=myString+"</body></html>"
-        return myString
 
     @cherrypy.expose
     def status(self):
         positions = [pos.name for pos in minion_positions()]
         device_activity = {pos:real_device_activity(pos) for pos in positions}
-        active_runs = {pos:getActiveRun(pos) for pos in positions}
-        sample_id = {pos:getThisRunSampleID(pos) for pos in positions}
-        print("--------------", positions)
+        active_runs = {pos:active_run(pos) for pos in positions}
+        sample_id = {pos:run_sample_id(pos) for pos in positions}
+        url_live_device = {
+            pos:url_for(UI.live_device_status, device_id=pos)
+            for pos in positions
+        }
+        url_analysis = {
+            pos:url_for(UI.AnalysisStatusLive, deviceString=pos)
+            for pos in positions
+        }
+        url_device = {
+            pos:url_for(UI.live_device_status, device_id=pos)
+            for pos in positions
+        }
         return render_template(
             "status.html",
             positions=positions,
             device_activity=device_activity,
+            url_live_device=url_live_device,
+            url_analysis=url_analysis,
+            url_device=url_device,
             active_runs=active_runs,
             sample_id=sample_id,
-            mega_bases=NEEDED_NUMBER_OF_BASES // 1e6)
-
-    @cherrypy.expose
-    def startSequencing(self,deviceId="",sampleId="",runDuration="",referenceFile="",startBiasVoltage=""):
-        myString=menuheader(2,0)
-        if sampleId:
-            if float(runDuration)>=0.1:
-                sys.argv = ['',
-                            '--host','localhost',
-                            '--position',deviceId,
-                            '--sample-id',sampleId,
-                            '--experiment-group',sampleId,
-                            '--experiment-duration',runDuration,
-                            '--basecalling',
-                            '--fastq',
-                            '--fastq-reads-per-file',readsPerFile,
-                            '--fast5',
-                            '--fast5-reads-per-file',readsPerFile,
-                            '--verbose',
-                            '--kit','SQK-RBK004',
-                            '--barcoding',
-                            '--barcode-kits','SQK-RBK004',
-                            '--','--start_bias_voltage',startBiasVoltage] # The "--" are required for so-called extra-arguments.
-                realRunId=startRun()
-                writeReferenceDefinition(sampleId,referenceFile)
-                myString=myString+"sequencing run started for "+sampleId+" on "+deviceId+" as "+realRunId+" with reference "+referenceFile
-                myString=myString+"<hr>"+run_information(deviceId)
-                myString=myString+'''<hr>Navigate to <b>MK1b Status</b> to launch the run terminator. It may take several minutes until the link for the
-                run terminator appears. This is due to the inexistent run state while the flow cell is being heated up to operation temperature.
-                In addition, you may want to navigate to <b>Analyze</b> and launch <b>get CpGs</b>.<br><br>
-                If you do not start the run terminator, you will have to terminate the run manually, or it will stop after the predefined time.'''
-        else:
-            myString=myString+'''<form action="startSequencing" method="GET">
-                Select an idle Mk1b:&nbsp;<select name="deviceId" id="deviceId">'''
-            positions=listMinionPositions()
-            for pos in positions:
-                thisPos=pos.name
-                if real_device_activity(thisPos)=="idle":
-                    if getFlowCellID(thisPos)!="":
-                        myString=myString+'<option value="'+thisPos+'">'+thisPos+': '+getFlowCellID(thisPos)+'</option>'
-            myString=myString+'''
-                </select>&nbsp; and enter the sample ID:&nbsp;<input type="text" name="sampleId" />
-                &nbsp;with start voltage&nbsp;<select name="startBiasVoltage" id="startBiasVoltage">'''
-            for vo in range(-180,-260,-5):
-                myString=myString+'<option value="'+str(vo)+'">'+str(vo)+' mV</option>'
-            myString=myString+'''</select>
-                &nbsp;for&nbsp;<input type="text" name="runDuration" value="72" />&nbsp;hours.
-                &nbsp;Reference set&nbsp;<select name="referenceFile" id="referenceFile">'''
-            for ref in getReferenceAnnotations():
-                myString=myString+'<option value="'+ref+'">'+ref+'</option>'
-            myString=myString+'&nbsp;<input type="submit" value="start sequencing now"/></form>'
-        return myString
-
+            mega_bases=NEEDED_NUMBER_OF_BASES // 1e6,
+        )
 
     @cherrypy.expose
     def start(
@@ -1480,26 +1306,13 @@ class UserInterface(object):
     ):
         start_now = bool(sample_id) and float(run_duration) >= 0.1
         if start_now:
-            sys.argv = [
-                "",
-                "--host", "localhost",
-                "--position", device_id,
-                "--sample-id", sample_id,
-                "--experiment-group", sample_id,
-                "--experiment-duration", run_duration,
-                "--basecalling",
-                "--fastq",
-                "--fastq-reads-per-file", READS_PER_FILE,
-                "--fast5",
-                "--fast5-reads-per-file", READS_PER_FILE,
-                "--verbose",
-                "--kit", "SQK-RBK004",
-                "--barcoding",
-                "--barcode-kits", "SQK-RBK004",
-                "--",  # Required for so-called extra-arguments.
-                "--start_bias_voltage", start_voltage,
-            ]
-            run_id = startRun()
+            run_ids = start_run(
+                device_id=device_id,
+                sample_id=sample_id,
+                run_duration=run_duration,
+                start_voltage=start_voltage,
+            )
+            # TODO if not run_ids:
             write_reference_name(sample_id, reference_id)
             return render_template(
                 "start.html",
@@ -1508,7 +1321,7 @@ class UserInterface(object):
                 sample_id=sample_id,
                 reference_id=reference_id,
                 device_id=device_id,
-                run_id=run_id,
+                run_id=" / ".join(run_ids),
                 mega_bases=NEEDED_NUMBER_OF_BASES // 1e6,
                 run_info=run_information(device_id),
             )
@@ -1526,73 +1339,25 @@ class UserInterface(object):
                 references=reference_annotations(),
             )
 
-
     @cherrypy.expose
-    def startTestrun(self,deviceId=""):
-        myString=menuheader('startTestrun', 0)
-        if deviceId:
-            sampleId=date_time_string_now()+"_TestRun_"+flow_cell_id(deviceId)
-            sys.argv = ['',
-                        '--host','localhost',
-                        '--position',deviceId,
-                        '--sample-id',sampleId,
-                        '--experiment-group',sampleId,
-                        '--experiment-duration','0.1',
-                        '--basecalling',
-                        '--fastq',
-                        '--fastq-reads-per-file',READS_PER_FILE,
-                        '--fast5',
-                        '--fast5-reads-per-file',READS_PER_FILE,
-                        '--verbose',
-                        '--kit','SQK-RBK004',
-                        '--barcoding',
-                        '--barcode-kits','SQK-RBK004']
-            realRunId=startRun()
-            myString=myString+"sequencing run started for "+sampleId+" on "+deviceId+" as "+realRunId
-            myString=myString+"<hr>"+run_information(deviceId)
-        else:
-            myString=myString+'''<form action="startTestrun" method="GET">
-                Select an idle Mk1b:&nbsp;<select name="deviceId" id="deviceId">'''
-            positions=minion_positions()
-            for pos in positions:
-                thisPos=pos.name
-                if real_device_activity(thisPos)=="idle":
-                    if flow_cell_id(thisPos)!="":
-                        myString=myString+'<option value="'+thisPos+'">'+thisPos+': '+flow_cell_id(thisPos)+'</option>'
-            myString=myString+'''
-                </select>&nbsp;<input type="submit" value="start test run now (0.1h)"/></form>'''
-        return myString
-
-    @cherrypy.expose
-    def test_run(self, device_id=""):
+    def start_test(self, device_id=""):
         if device_id:
             sample_id = (date_time_string_now() + "_TestRun_"
                 + flow_cell_id(device_id))
-            sys.argv = [
-                "",
-                "--host", "localhost",
-                "--position", device_id,
-                "--sample-id", sample_id,
-                "--experiment-group", sample_id,
-                "--experiment-duration", "0.1",
-                "--basecalling",
-                "--fastq",
-                "--fastq-reads-per-file", READS_PER_FILE,
-                "--fast5",
-                "--fast5-reads-per-file", READS_PER_FILE,
-                "--verbose",
-                "--kit", "SQK-RBK004",
-                "--barcoding",
-                "--barcode-kits", "SQK-RBK004",
-            ]
-            run_id = startRun()
+            run_ids = start_run(
+                device_id=device_id,
+                sample_id=sample_id,
+                run_duration="0.1",
+                start_voltage="-180",
+            )
+            # TODO if not run_ids:
             return render_template(
                 "start.html",
                 start_now=True,
                 sample_id=sample_id,
                 reference_id="TEST",
                 device_id=device_id,
-                run_id=run_id,
+                run_id=" / ".join(run_ids),
                 mega_bases=NEEDED_NUMBER_OF_BASES // 1e6,
                 run_info=run_information(device_id),
             )
@@ -1611,11 +1376,12 @@ class UserInterface(object):
             )
 
     @cherrypy.expose
-    def stopSequencing(self, deviceId=""):
-        myString=menuheader('listPositions', 0)
-        myString=myString + stopRun(deviceId)
-        myString=myString + "<br><br>Click on any menu item to proceed."
-        return myString
+    def stop_sequencing(self, device_id=""):
+        protocol_id = stop_run(device_id)
+        if protocol_id is None:
+            return "No protocol running, nothing was stopped."
+        else:
+            return f"Protocol {protocol_id} stopped on {device_id}."
 
     @cherrypy.expose
     def list_runs(self):
@@ -1654,12 +1420,6 @@ class UserInterface(object):
     def results(self):
         files = get_all_results()
         return render_template("results.html", files=files)
-
-    @cherrypy.expose
-    def analyze(self):
-        myString=menuheader('analyze',0)
-        myString=myString+analysis_launch_table()
-        return myString
 
     @cherrypy.expose
     def analysis(self, func="", samp="", ref="", new="False"):
@@ -1718,7 +1478,7 @@ class UserInterface(object):
 
         proc = mp.Process(
             target=make_plot,
-            args=(cnv_plt_data, UserInterface.cnv_lock),
+            args=(cnv_plt_data, UI.cnv_lock),
             name="cnv",
         )
         proc.start()
@@ -1745,7 +1505,7 @@ class UserInterface(object):
 
         proc = mp.Process(
             target=make_plot,
-            args=(umap_data, UserInterface.umap_lock),
+            args=(umap_data, UI.umap_lock),
             name="umap",
         )
         proc.start()
@@ -1797,9 +1557,9 @@ class UserInterface(object):
     @cherrypy.expose
     def live_device_status(self,device_id=""):
         is_sequencing = real_device_activity(device_id) == "sequencing"
-        sample_id = getThisRunSampleID(device_id)
-        run_state = getThisRunState(device_id)
-        run_yield = getThisRunYield(device_id)
+        sample_id = run_sample_id(device_id)
+        state = run_state(device_id)
+        yield_ = run_yield(device_id)
         status = None
         try:
             status = device_status(device_id)
@@ -1816,8 +1576,8 @@ class UserInterface(object):
             flow_cell_id=flow_cell_id(device_id),
             is_sequencing=is_sequencing,
             sample_id=sample_id,
-            run_yield=run_yield,
-            run_state=run_state,
+            yield_=yield_,
+            state=state,
             previous_activity=previous_activity,
         )
 
@@ -1829,28 +1589,11 @@ class UserInterface(object):
         return myString
 
     @cherrypy.expose
-    def analysisLauncher(self,functionName="",sampleName="",refAnno=""):
-        if functionName and sampleName and refAnno:
-            myString="<html><head><title>"+sampleName+" "+functionName+"</title></head><body>"
-            myString=myString+functionName+" launched for "+sampleName+" "
-            if refAnno!="None":
-                myString=myString+"against "+refAnno
-            myString=myString+" at "+date_time_string_now()+". "
-            myString=myString+"Frame below will display result upon completion, if this tab/window is kept open."
-            if refAnno=="None":
-                myString=myString+"<br><iframe src='./"+functionName+"?sampleName="+sampleName+"' height='95%' width='100%' title='"+sampleName+"' border=3></iframe>"
-            else:
-                myString=myString+"<br><iframe src='./"+functionName+"?sampleName="+sampleName+"&refAnno="+refAnno+"' height='95%' width='100%' title='"+sampleName+"' border=3></iframe>"
-        else:
-            myString="Nothing to launch. You may close this tab now."
-        return myString
-
-    @cherrypy.expose
     def cpgs(self, sample_name=""):
         """Generate a self-refreshing page to invoke methylation calling."""
-        UserInterface.cpg_sem.acquire()
+        UI.cpg_sem.acquire()
         stats = methylation_caller(sample_name)
-        UserInterface.cpg_sem.release()
+        UI.cpg_sem.release()
         return json.dumps(stats)
 
     @cherrypy.expose
@@ -1892,7 +1635,7 @@ def main():
             'tools.staticdir.dir': os.path.join(os.getcwd(), "static"),
         },
     }
-    cherrypy.quickstart(UserInterface(), "/", cherrypy_config)
+    cherrypy.quickstart(UI(), "/", cherrypy_config)
 
 if __name__ == "__main__":
     main()
