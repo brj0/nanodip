@@ -1122,76 +1122,6 @@ def livePage(deviceString): # generate a live preview of the data analysis with 
     ht=ht+"</tt></table><body></html>"
     return ht
 
-#TODO changed
-def menuheader(current_page, autorefresh=0):
-    """Generate a universal website header for the UI pages that
-    contains a simple main menu.
-    """
-    menu = {
-        "index":[
-            "Overview",
-            "General system information",
-        ],
-        "listPositions":[
-            "Mk1b Status",
-            "Live status of all connected Mk1b devices",
-        ],
-        "startSequencing":[
-            "Start seq.",
-            "Start a sequencing run on an idle Mk1b device",
-        ],
-        "startTestrun":[
-            "Start test run",
-            "Start a test seq. run on an idle Mk1b device to verify that the previous flow cell wash was successful.",
-        ],
-        "listExperiments":[
-            "Seq. runs",
-            "List all buffered runs. Will be purged upon MinKNOW backend restart.",
-        ],
-        "listRuns":[
-            "Results",
-            "List all completed analysis results",
-        ],
-        "analyze":[
-            "Analyze",
-            "Launch data analyses manually, e.g. for retrospective analysis",
-        ],
-        "about":[
-            "About NanoDiP",
-            "Version, etc.",
-        ],
-    }
-    html = f"""
-        <html>
-        <head>
-        <title>
-            NanoDiP Version {NANODIP_VERSION}
-        </title>"""
-    if autorefresh > 0:
-        html += f"<meta http-equiv='refresh' content='{autorefresh}'>"
-    html += """
-        </head>
-        <body>
-        <table border=0 cellpadding=2>
-        <tr>
-            <td>
-                <img src='img/EpiDiP_Logo_01.png' width='40px' height='40px'>
-            </td>"""
-    for key, value in menu.items():
-        selected_color = "#E0E0E0" if current_page == key else "white"
-        html += f"""
-            <td bgcolor='{selected_color}'>
-                <b>
-                <a href='{key}' title='{value[1]}'> {value[0]}
-                </a>
-                </b>
-            </td>"""
-    html += f"""
-        </tr>
-        </table>
-        <br>"""
-    return html
-
 """
 ### 6. CherryPy Web UI
 The browser-based user interface is based on CherryPy, which contains an
@@ -1204,17 +1134,14 @@ the Web UI cell below.
 """
 
 
-
-
 class UI(object):
     """The CherryPy Web UI Webserver class defines entrypoints and
     function calls.
     """
     # global variables within the CherryPy Web UI
-    cpgQueue = 0 # TODO use mutex instead
-    umapQueue = 0
-    cnvpQueue = 0
+    # TODO use Semaphore instead
     cnv_lock = mp.Lock()
+    # TODO use Semaphore instead
     umap_lock = mp.Lock()
     cpg_sem = threading.Semaphore()
 
@@ -1232,25 +1159,18 @@ class UI(object):
                 / psutil.virtual_memory().total
             ),
             "cpu": round(psutil.cpu_percent()),
-            "cpgs": UI.cpgQueue,
+            "cpgs": 1 - UI.cpg_sem._value,
             "cnvp": len([p for p in mp.active_children() if p.name == "cnv"]),
             "umap": len([p for p in mp.active_children() if p.name == "umap"]),
         }
-        return render_template("index.html", sys_stat=sys_stat)
-
-    @cherrypy.expose
-    def old(self):
-        """Titlepage."""
-        html = menuheader('index', 15)
-        html += "<tt><b>Computer:</b> "
-        html += str(socket.gethostname())
-        html += "</tt><br><br>"
-        return html
-
-    @cherrypy.expose
-    def restart(self):
-        cherrypy.engine.restart()
-        return render_template("restart.html")
+        # Calculate urls to avoid hardcoding urls in html templates.
+        return render_template(
+            "index.html",
+            sys_stat=sys_stat,
+            url_cpgs=url_for(UI.reset_queue, queue_name=sys_stat["cpgs"]),
+            url_cnvp=url_for(UI.reset_queue, queue_name=sys_stat["cnvp"]),
+            url_umap=url_for(UI.reset_queue, queue_name=sys_stat["umap"]),
+        )
 
     @cherrypy.expose
     def reset_queue(self, queue_name=""):
@@ -1266,32 +1186,40 @@ class UI(object):
         return html
 
     @cherrypy.expose
+    def restart(self):
+        cherrypy.engine.restart()
+        return render_template("restart.html")
+
+    @cherrypy.expose
     def status(self):
         positions = [pos.name for pos in minion_positions()]
-        device_activity = {pos:real_device_activity(pos) for pos in positions}
-        active_runs = {pos:active_run(pos) for pos in positions}
-        sample_id = {pos:run_sample_id(pos) for pos in positions}
-        url_live_device = {
-            pos:url_for(UI.live_device_status, device_id=pos)
-            for pos in positions
-        }
-        url_analysis = {
-            pos:url_for(UI.AnalysisStatusLive, deviceString=pos)
-            for pos in positions
-        }
-        url_device = {
-            pos:url_for(UI.live_device_status, device_id=pos)
-            for pos in positions
-        }
+        device_activity = {}
+        active_runs = {}
+        # Calculate urls to avoid hardcoding urls in html templates.
+        url_analysis = {}
+        url_device = {"none": UI.live_device_status.__name__}
+        url_auto_terminator = {}
+        url_stop_sequencing = {}
+        for pos in positions:
+            device_activity[pos] = real_device_activity(pos)
+            active_runs[pos] = active_run(pos)
+            url_analysis[pos] = url_for(UI.AnalysisStatusLive, deviceString=pos)
+            url_device[pos] = url_for(UI.live_device_status, device_id=pos)
+            url_auto_terminator[pos] = url_for(
+                    UI.launchAutoTerminator,
+                    sampleName=run_sample_id(pos),
+                    deviceString=pos,
+                )
+            url_stop_sequencing[pos] = url_for(UI.stop_sequencing, device_id=pos)
         return render_template(
             "status.html",
             positions=positions,
             device_activity=device_activity,
-            url_live_device=url_live_device,
+            url_auto_terminator=url_auto_terminator,
             url_analysis=url_analysis,
             url_device=url_device,
+            url_stop_sequencing=url_stop_sequencing,
             active_runs=active_runs,
-            sample_id=sample_id,
             mega_bases=NEEDED_NUMBER_OF_BASES // 1e6,
         )
 
@@ -1419,25 +1347,62 @@ class UI(object):
     @cherrypy.expose
     def results(self):
         files = get_all_results()
-        return render_template("results.html", files=files)
+        urls = {f:f"reports/{f}" for f in files}
+        return render_template(
+            "results.html",
+            files=files,
+            urls=urls,
+        )
 
     @cherrypy.expose
     def analysis(self, func="", samp="", ref="", new="False"):
         if func == "":
-            analysis_runs = [run for run in get_runs() if not any(pattern in run
-                for pattern in ANALYSIS_EXCLUSION_PATTERNS)]
-            annotations = [a.replace(".xlsx", "")
-                for a in reference_annotations()]
+            analysis_runs = [run for run in get_runs() if not any(
+                pattern in run for pattern in ANALYSIS_EXCLUSION_PATTERNS)
+            ]
+            annotations = [
+                a.replace(".xlsx", "") for a in reference_annotations()
+            ]
+            # Calculate urls to avoid hardcoding urls in html templates.
+            url_cnv = {}
+            url_cnv_new = {}
+            url_cpgs = {}
+            url_pdf = {}
+            url_umap = {}
+            url_umap_new = {}
+            for run in analysis_runs:
+                url_cnv[run] = url_for(UI.analysis, func="cnv", samp=run)
+                url_cnv_new[run] = url_for(
+                    UI.analysis, func="cnv", samp=run, new=True,
+                )
+                url_cpgs[run] = url_for(UI.analysis, func="cpgs", samp=run)
+                for a in annotations:
+                    url_umap_new[(run,a)] = url_for(
+                        UI.analysis, func="umap", samp=run, ref=a, new=True
+                    )
+                    url_umap[(run,a)] = url_for(
+                        UI.analysis, func="umap", samp=run, ref=a
+                    )
+                    url_pdf[(run,a)] = url_for(
+                        UI.make_pdf, samp=run, ref=a
+                    )
             return render_template(
                 "analysis_start.html",
                 analysis_runs=analysis_runs,
                 annotations=annotations,
+                url_cnv=url_cnv,
+                url_cnv_new=url_cnv_new,
+                url_cpgs=url_cpgs,
+                url_pdf=url_pdf,
+                url_umap=url_umap,
+                url_umap_new=url_umap_new,
             )
         if func == "cnv":
             genome = ReferenceGenome()
             genes = genome.genes.name.to_list()
             return render_template(
                 "analysis_cnv.html",
+                url_cnv=UI.cnv.__name__,
                 sample_name=samp,
                 genes=genes,
                 new=new,
@@ -1445,14 +1410,16 @@ class UI(object):
         if func == "umap":
             return render_template(
                 "analysis_umap.html",
+                url_umap=UI.umap.__name__,
                 sample_name=samp,
                 reference_name=ref,
                 new=new,
                 first_use = not binary_reference_data_exists(),
             )
-        if func == "cpg":
+        if func == "cpasg":
             return render_template(
                 "analysis_cpg.html",
+                url_cpgs=UI.cpgs.__name__,
                 start_time=date_time_string_now(),
                 sample_name=samp,
                 autorefresh="",

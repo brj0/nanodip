@@ -155,3 +155,17 @@ a.results {
   font-family: monospace;
   /*font-family: "Lucida Console", "Courier New", monospace;*/
 }
+
+iframe.live_device {
+  height: 220px;
+}
+
+div.device_box {
+  display: flex;
+  /*height: 220px;*/
+  /*width: 600px;*/
+  background-color: #f3f3f3;
+}
+div.device_element {
+  flex: 1;
+}

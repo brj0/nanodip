@@ -14,9 +14,9 @@
     free : {{ sys_stat.memory_free }}&percnt;<br>
     <br><b>CPU: </b><br>
     usage: {{ sys_stat.cpu }}&percnt;<br>
-    CpG active runs: {{ sys_stat.cpgs }} <a href="reset_queue?queue_name=cpg">reset queue</a><br>
-    CNVP active runs: {{ sys_stat.cnvp }} <a href="reset_queue?queue_name=cnvp">reset queue</a><br>
-    UMAP active runs: {{ sys_stat.umap}} <a href="reset_queue?queue_name=umap">reset queue</a><br>
+    CpG active runs: {{ sys_stat.cpgs }} <a href="{{url_cpgs}}">reset queue</a><br>
+    CNVP active runs: {{ sys_stat.cnvp }} <a href="{{url_cnvp}}">reset queue</a><br>
+    UMAP active runs: {{ sys_stat.umap}} <a href="{{url_umap}}">reset queue</a><br>
     <br><br>
     <a href="restart" class="show">Restart NanoDiP</a> <font color="#FF0000"><b>Use with caution!</b></font>
 {% endblock %}

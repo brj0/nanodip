@@ -22,9 +22,6 @@
   <div id="umap_all"></div>
   <div id="umap_cu"></div>
 
-<script src="static/js/jquery-1.11.1.min.js"></script>
-<script src="static/js/plotly-latest.min.js"></script>
-
 
 <script>
   function renderPlot(plotJSON, plotId){
@@ -43,7 +40,7 @@
     alert("Binary reference data has not been created yet. Takes several minutes.")
     {% endif %}
     $.ajax({
-      url: "/umap",
+      url: "{{url_umap}}",
       type: "GET",
       contentType: "application/json;charset=UTF-8",
       data: {
@@ -58,7 +55,7 @@
         document.getElementById("loader").style.display = "none";
         renderPlot(data, "umap_all");
         $.ajax({
-          url: "/umap",
+          url: "{{url_umap}}",
           type: "GET",
           contentType: "application/json;charset=UTF-8",
           data: {

@@ -5,7 +5,6 @@
 {% endblock %}
 
 {% block body %}
-  <script src="static/js/jquery-1.11.1.min.js"></script>
 
   Methylation calling process started at {{start_time}}
   <hr>
@@ -17,7 +16,7 @@
 <script>
   function getCpGs() {
       $.ajax({
-          url: "/cpgs",
+          url: "{{url_cpgs}}",
           type: "GET",
           contentType: "application/json;charset=UTF-8",
           data: {

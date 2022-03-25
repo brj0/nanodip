@@ -24,17 +24,17 @@
     <tr>
       <td>{{run}}</td>
       <td>
-        <a href="./analysis?func=cpg&samp={{run}}" class="show" target="_blank"
+        <a href="{{url_cpgs[run]}}" class="show" target="_blank"
         rel="noopener noreferrer" title="{{run}}: CpGs">
           get CpGs
         </a>
       </td>
       <td>
-        <a href="./analysis?func=cnv&samp={{run}}&new=True" class="show" target="_blank" rel="noopener noreferrer"
+        <a href="{{url_cnv_new[run]}}" class="show" target="_blank" rel="noopener noreferrer"
         title="make new CNV plot">
           new plot
         </a>
-        <a href="./analysis?func=cnv&samp={{run}}" class="show" target="_blank" rel="noopener noreferrer" title="make
+        <a href="{{url_cnv[run]}}" class="show" target="_blank" rel="noopener noreferrer" title="make
         CNV plot (read from disk if available)">
           plot
         </a>
@@ -42,15 +42,15 @@
 
       {% for a in annotations %}
       <td>
-        <a href="./analysis?func=umap&samp={{run}}&ref={{a}}&new=True" class="show" target="_blank" rel="noopener
+        <a href="{{url_umap_new[(run, a)]}}" class="show" target="_blank" rel="noopener
         noreferrer" title="make UMAP plot">
           new plot
         </a>&nbsp;
-        <a href="./analysis?func=umap&samp={{run}}&ref={{a}}" class="show" target="_blank"
+        <a href="{{url_umap[(run, a)]}}" class="show" target="_blank"
         rel="noopener noreferrer" title="make UMAP plot (read from disk if available)">
           plot
         </a>&nbsp;
-        <a href="./make_pdf?samp={{run}}&ref={{a}}" class="show" target="_blank" rel="noopener noreferrer" title="Generate and View PDF">
+        <a href="{{url_pdf[(run, a)]}}" class="show" target="_blank" rel="noopener noreferrer" title="Generate and View PDF">
           report
         </a>
       </td>

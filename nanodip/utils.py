@@ -58,15 +58,17 @@ def render_template(template_name, **context):
         loader=loader).get_template(template_name)
     return template.render(context)
 
-def url_for(func, **args):
+def url_for(url_func, **args):
     """Transforms a cherrypy function together with argument list to
-    href string.
+    url string.
+    Example:
+        url_for(CherryPyClass.url_func, var0=2, var1=7) == "url_func?var0=2&var1=7"
     Raises error if argument names are not correct.
     """
-    # Find variable names of func.
+    # Find variable names of url_func.
     default = []
     non_default = []
-    sig = inspect.signature(func)
+    sig = inspect.signature(url_func)
     for param in sig.parameters.values():
         if param.default is param.empty:
            non_default.append(param.name)
@@ -76,7 +78,7 @@ def url_for(func, **args):
     for param in args:
         if param not in default + non_default:
             raise ValueError(
-                f"'{param}' is not a valid Parameter of {func.__name__}."
+                f"'{param}' is not a valid Parameter of {url_func.__name__}."
             )
     # Check if all mandatory variables are supplied.
     for param in non_default:
@@ -84,7 +86,7 @@ def url_for(func, **args):
             raise ValueError(
                 f"Parameter '{param}' must be supplied."
             )
-    url = func.__name__
+    url = url_func.__name__
     if args:
         url += "?" + "&".join(
             [f"{key}={value}" for key, value in args.items()]

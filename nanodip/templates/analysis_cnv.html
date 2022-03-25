@@ -25,9 +25,6 @@
   <div class="loader" id="loader"></div>
   <div id="cnv"></div>
 
-<script src="static/js/jquery-1.11.1.min.js"></script>
-<script src="static/js/plotly-latest.min.js"></script>
-
 <script>
   function renderPlot(plotJSON, plotId){
     var config = {"scrollZoom": true};
@@ -41,7 +38,7 @@
   var cnvPlotBins;
   $(document).ready(function(){
       $.ajax({
-          url: "/cnv",
+          url: "{{url_cnv}}",
           type: "GET",
           contentType: "application/json;charset=UTF-8",
           data: {
@@ -60,7 +57,7 @@
   /*Reload CNV Plot when genes are chosen.*/
   $("#gene_list").on("change",function(){
       $.ajax({
-          url: "/cnv",
+          url: "{{url_cnv}}",
           type: "GET",
           contentType: "application/json;charset=UTF-8",
           data: {
