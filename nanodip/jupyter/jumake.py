@@ -91,25 +91,21 @@ def parse(content):
         else:
             parse_code_or_comment(content)
 
-with open('../nanodip.py', 'r') as f:
-    nanodip = f.readlines()
-with open('../config.py', 'r') as f:
-    config = f.readlines()
-with open('../utils.py', 'r') as f:
-    utils = f.readlines()
-with open('../data.py', 'r') as f:
-    data = f.readlines()
-with open('../plots.py', 'r') as f:
-    plots = f.readlines()
+module_names = ['nanodip', 'config', 'utils', 'data', 'plots', 'api', 'webui']
+nonodip_modules_dict = {}
+for name in module_names:
+    path = f'../{name}.py'
+    with open(path, 'r') as f:
+        nonodip_modules_dict[name] = f.readlines()
 
-nanodip_modules = [nanodip, config, utils, data, plots]
+nanodip_modules = list(nonodip_modules_dict.values())
 imports = external_imports(nanodip_modules)
 remove_imports(nanodip_modules)
 
 nb = nbf.v4.new_notebook()
 
-parse(nanodip)
-for m in [imports] + nanodip_modules[1:] + [nanodip]:
+parse(nanodip_modules[0])
+for m in [imports] + nanodip_modules[1:] + [nanodip_modules[0]]:
     parse(m)
 
 nbf.write(nb, 'nanodip.ipynb')

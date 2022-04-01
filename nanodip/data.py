@@ -35,7 +35,8 @@ from config import (
     RELEVANT_GENES,
 )
 from utils import (
-    date_time_string_now
+    date_time_string_now,
+    files_by_ending,
 )
 # end_internal_modules
 
@@ -293,19 +294,6 @@ class ReferenceGenome:
                "len", "midpoint", "relevant", "transcript",
                "loc",
         ]].to_csv(GENES, index=False, sep="\t")
-
-def files_by_ending(directory, sample_name, ending):
-    """Returns a list containing all sample output files with a given
-    ending.
-    """
-    sample_path = os.path.join(directory, sample_name)
-    output_files = []
-    for root, _, files in os.walk(sample_path):
-        output_files.extend(
-            [os.path.join(root, f)
-            for f in files if f.endswith(ending)]
-        )
-    return output_files
 
 class SampleData:
     """Container of sample data."""

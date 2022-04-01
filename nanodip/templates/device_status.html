@@ -6,6 +6,7 @@
   <meta http-equiv="refresh" content="">
   <title>{{device_id}}: {{flow_cell_id}}</title>
   <link rel="stylesheet" href="static/style.css">
+  <script src="static/js/jquery-1.11.1.min.js"></script>
 </head>
 
 {% if is_sequencing %}
@@ -28,10 +29,66 @@
 
       Sample ID: {{sample_id}}<br>
       {{state}}
-    <br>
-    {{yield_}}
+      <br>
+      {{yield_}}
+    </div>
+
+  {% if is_active %}
+  <br>
+  <div class="radio_device" id="{{device_id}}_live_status">
+  Launch automatic run terminator after {{needed_mega_bases}} MB:
+      <input type="radio" id="terminator_manually" name="terminator" value="manually">
+    <label for="terminator_manually">Off</label>
+
+    <input type="radio" id="terminator_on" name="terminator" value="on">
+    <label for="terminator_on">On</label>
+    &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;
+    <input type="radio" id="terminator_now" name="terminator" value="terminated">
+    <label for="terminator_now">Terminate now</label>
   </div>
+  {% endif %}
+
+  <script>
+    $(document).ready(function() {
+        $("#{{device_id}}_live_status input:radio").change(function(){
+          if ($(this).val() == "on") {
+            setAutoTerminate("{{device_id}}", "auto");
+          }
+          else if ($(this).val() == "manually") {
+            setAutoTerminate("{{device_id}}", "manually");
+          }
+          else if ($(this).val() == "terminated") {
+            $("#{{device_id}}_live_status").hide();
+            setAutoTerminate("{{device_id}}", "terminated");
+          }
+        });
+        {% if termination_type == "auto" %}
+        $("#terminator_on").prop("checked", true);
+        {% elif termination_type == "manually" %}
+        $("#terminator_manually").prop("checked", true);
+        {% elif termination_type == "terminated" %}
+        $("#{{device_id}}_live_status").hide();
+        {% endif %}
+    })
+  </script>
+
+  <script>
+    function setAutoTerminate(deviceId, value) {
+      $.ajax({
+        url: "{{url_auto_terminator["none"]}}",
+        type: "GET",
+        contentType: "application/json;charset=UTF-8",
+        data: {
+          "device_id": deviceId,
+          "termination_type": value,
+        },
+        dataType:"html",
+        success: function (data) {
+          console.log("Auto terminator of " + deviceId + " set to " + value)
+        }
+      });
+    }
+  </script>
 
 </body>
-
 </html>

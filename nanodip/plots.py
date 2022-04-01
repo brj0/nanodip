@@ -182,9 +182,9 @@ def umap_data_frame(sample, reference):
 def get_bin_edges(n_bins, genome):
     """Returns sequence of {n_bin} equal sized bins on chromosomes. Every bin is
     limited to one chromosome."""
-    if n_bins < 100:
+    if n_bins < 10:
         # TODO will raise if file empty.
-        raise ValueError("Binwidth too small.")
+        raise ValueError(f"Binwidth '{n_bins}' too small.")
     edges = np.linspace(0, genome.length, num=n_bins + 1).astype(int)
     # limit bins to only one chromosome
     for chrom_edge in genome.chrom.offset:

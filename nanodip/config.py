@@ -22,6 +22,7 @@ by NanoDiP are written into `NANODIP_REPORTS`.
 
 # start_external_modules
 import os
+from enum import Enum
 # end_external_modules
 
 # start_internal_modules
@@ -129,12 +130,15 @@ ENDINGS = {
     "cnv_bins_json": "_CNV_binsplot.json",
     "cnv_html": "_CNVplot.html",
     "cnv_json": "_CNVplot.json",
+    "cnv_png": "_CNVplot.png",
     "cpg_cnt":"_cpgcount.txt",
     "genes": "_genes.csv",
     "methyl": "_methyl_overlap.npy",
     "reads_csv": "_reads.csv",
     "relevant_genes": "_relevant_genes.csv",
+    "umap_all_html": "_UMAP_all.html",
     "umap_all_json": "_UMAP_all.json",
+    "umap_all_png": "_UMAP_all.png",
     "umap_csv": "_UMAP.csv",
     "umap_top_json": "_UMAP_top.json",
 }
@@ -161,3 +165,4 @@ SAMTOOLS = "/applications/samtools/samtools"
 # TODO del: R script that reads CpGs into simplified text file (absolute path)
 RSCRIPT = "/applications/R-4.0.3/bin/Rscript"
 READ_CPG_RSCRIPT="/applications/nanodip/readCpGs_mod02.R"
+

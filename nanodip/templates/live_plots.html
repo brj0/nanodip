@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="refresh" content="">
+  <title>Live plots</title>
+  <link rel="stylesheet" href="static/style.css">
+</head>
+
+<body>
+  <div class="mono">
+    Sample ID: {{sample_id}} with reference {{reference}}
+    <br>
+    <a href="{{cnv_plt_path_png}}" target="_blank">
+      <img align="Top" src="{{cnv_plt_path_png}}" width="350px" height="180px" alt="CNV plot will appear here">
+    </a>
+    <a href="{{umap_plt_path_html}}" target="_blank">
+      <img align="Top" src="{{umap_plt_path_png}}" width="350px" height="180px" alt="UMAP plot will appear here">
+    </a>
+  </div>
+</body>
+
+</html>

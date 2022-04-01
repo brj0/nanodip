@@ -4,6 +4,7 @@ import numpy as np
 import logging
 import os
 import argparse
+import grpc
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -55,10 +56,31 @@ from data import (
     ReferenceGenome,
     get_reference_methylation,
 )
-
-from plots import CNVData, UMAPData
+from plots import (
+    CNVData,
+    UMAPData,
+)
+from webui import (
+    Device,
+    Devices,
+    minion_positions,
+    run_information,
+    device_status,
+    active_run,
+    called_bases,
+    run_sample_id,
+    start_run,
+)
+from api import (
+    connection_from_device_id,
+    parse_args,
+    is_position_selected,
+    methylation_caller,
+)
+from utils import (
+    date_time_string_now,
+)
 import config, data, plots, nanodip
-from nanodip import methylation_caller
 
 sample_name = "B2021_48459_20211112_BC10"
 sample_name = "B2021_48700_20211112_BC11"
@@ -75,31 +97,18 @@ reference_name = "GSE90496_IfP01"
 # umapp = UMAPData(sample_name, reference_name)
 # umapp.make_umap_plot()
 
-import grpc
-
-from nanodip import (
-    mk_manager,
-    parse_args,
-    minion_positions,
-    run_information,
-    connection_from_device_id,
-    device_status,
-    active_run,
-    mk_manager,
-    called_bases,
-    run_sample_id,
-    date_time_string_now,
-    start_run,
-    is_position_selected,
-)
-
-
 device_id = "MN26636"
 sample_id = "test"
-# run_id = active_run(device_id)
 run_duration = "0.1"
 start_voltage = "-180"
-
-
+# run_id = active_run(device_id)
 # run_ids=start_run(device_id = "MN26636", sample_id = "test", run_duration = "0.1", start_voltage = "-180")
 
+l = Devices()
+l.get("a")
+l.get("b")
+l.get("c")
+l.get("f")
+print("l=",l)
+l.pop("c")
+print("l=",l)

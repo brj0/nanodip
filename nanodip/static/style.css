@@ -157,7 +157,7 @@ a.results {
 }
 
 iframe.live_device {
-  height: 220px;
+  height: 230px;
 }
 
 div.device_box {
@@ -166,6 +166,6 @@ div.device_box {
   /*width: 600px;*/
   background-color: #f3f3f3;
 }
-div.device_element {
+.device_element {
   flex: 1;
 }

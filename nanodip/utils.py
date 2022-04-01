@@ -1,7 +1,7 @@
 """
 ## Utils
 
-Contains utility functions.
+Contains general utility functions.
 """
 
 
@@ -15,7 +15,14 @@ import xhtml2pdf.pisa
 # end_external_modules
 
 # start_internal_modules
-from config import ILUMINA_CG_MAP
+from config import (
+    ILUMINA_CG_MAP,
+    ANNOTATIONS,
+    BARCODE_NAMES,
+    DATA,
+    NANODIP_REPORTS,
+    EXCLUDED_FROM_ANALYSIS,
+)
 # end_internal_modules
 
 def extract_referenced_cpgs(sample_methylation,
@@ -103,4 +110,83 @@ def date_time_string_now():
     """Return current date and time as a string to create timestamps."""
     now = datetime.datetime.now()
     return now.strftime("%Y%m%d_%H%M%S")
+
+def get_runs():
+    """Return list of run folders from MinKNOW data directory sorted by
+    modification time.
+    """
+    runs = []
+    for f in os.listdir(DATA):
+        if f not in EXCLUDED_FROM_ANALYSIS:
+            file_path = os.path.join(DATA, f)
+            mod_time = os.path.getmtime(file_path)
+            if os.path.isdir(file_path):
+                runs.append([f, mod_time])
+    # sort based on modif. date
+    runs.sort(key=lambda x: (x[1], x[0]), reverse=True)
+    # Remove date after sorting
+    return [x[0] for x in runs]
+
+def predominant_barcode(sample_name):
+    """Returns the predominante barcode within all fast5 files."""
+    fast5_files = files_by_ending(DATA, sample_name, ending=".fast5")
+    # TODO @HEJU im Original fehlt diese Zeile:
+    pass_fast5_files = [f for f in fast5_files if "_pass_" in f]
+    barcode_hits=[]
+    for barcode in BARCODE_NAMES:
+        barcode_hits.append(
+            len([f for f in pass_fast5_files if barcode in f])
+        )
+    max_barcode_cnt = max(barcode_hits)
+    if max_barcode_cnt > 1:
+        predominant_barcode = BARCODE_NAMES[
+            barcode_hits.index(max_barcode_cnt)
+        ]
+    else:
+        predominant_barcode = "undetermined"
+    return predominant_barcode
+
+def reference_annotations():
+    """Return list of all reference annotation files (MS Excel XLSX format)."""
+    annotations = []
+    for r in os.listdir(ANNOTATIONS):
+        if r.endswith(".xlsx"):
+            annotations.append(r)
+    return annotations
+
+
+def write_reference_name(sample_id, reference_name):
+    """Write the filename of the UMAP reference for the current run into
+    a text file.
+    """
+    path = os.path.join(
+        NANODIP_REPORTS, sample_id + "_selected_reference.txt"
+    )
+    with open(path, "w") as f:
+        f.write(reference_name)
+
+def read_reference(sample_id):
+    """Read the filename of the UMAP reference for the current sample."""
+    path = os.path.join(
+        NANODIP_REPORTS, sample_id + "_selected_reference.txt"
+    )
+    try:
+        with open(path, "r") as f:
+            reference = f.read()
+    except FileNotFoundError:
+        reference = ""
+    return reference
+
+def files_by_ending(directory, sample_name, ending):
+    """Returns a list containing all sample output files with a given
+    ending.
+    """
+    sample_path = os.path.join(directory, sample_name)
+    output_files = []
+    for root, _, files in os.walk(sample_path):
+        output_files.extend(
+            [os.path.join(root, f)
+            for f in files if f.endswith(ending)]
+        )
+    return output_files
 
