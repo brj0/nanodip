@@ -156,16 +156,26 @@ a.results {
   /*font-family: "Lucida Console", "Courier New", monospace;*/
 }
 
-iframe.live_device {
-  height: 230px;
-}
-
 div.device_box {
   display: flex;
   /*height: 220px;*/
   /*width: 600px;*/
   background-color: #f3f3f3;
+  padding: 5px;
 }
-.device_element {
+
+.preview_element {
+  height: 270px;
   flex: 1;
+  border: 0px;
+}
+
+img.plot_preview {
+  width: 350px;
+  height: 230px;
+}
+
+.plot_preview_row {
+  display: flex;
+  justify-content:space-evenly;
 }

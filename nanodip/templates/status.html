@@ -9,8 +9,8 @@
 {% for pos in positions %}
 
   <div class="device_box">
-    <div id="{{pos}}" class="device_element"></div>
-    <iframe class="device_element" src="{{url_analysis[pos]}}" height="200" width="600" title="{{pos}}" border=3></iframe>
+    <div id="{{pos}}" class="preview_element"></div>
+    <iframe class="preview_element" src="{{url_analysis[pos]}}" title="{{pos}}"></iframe>
   </div>
 
   <script>

@@ -1,5 +1,5 @@
 """
-### 6. CherryPy Web UI
+### CherryPy Web UI
 The browser-based user interface is based on CherryPy, which contains an
 intergrated web server and serves pages locally. Communication between the
 service and browser typically generates static web pages that may or may not
@@ -12,7 +12,6 @@ the Web UI cell below.
 # start_external_modules
 import cherrypy
 import json
-from numba import jit # TODO del
 import pandas as pd
 import psutil
 import shutil
@@ -43,6 +42,7 @@ from utils import (
     date_time_string_now,
     reference_annotations,
     get_runs,
+    predominant_barcode,
     render_template,
     read_reference,
     url_for,
@@ -190,7 +190,6 @@ class UI(object):
         # Calculate urls to avoid hardcoding urls in html templates.
         url_analysis = {}
         url_device = {"none": UI.live_device_status.__name__}
-        # TODO
         for pos in positions:
             device_activity[pos] = real_device_activity(pos)
             url_analysis[pos] = url_for(UI.live_plots, device_id=pos)
@@ -221,7 +220,6 @@ class UI(object):
                 run_duration=run_duration,
                 start_voltage=start_voltage,
             )
-            # TODO if not run_ids:
             write_reference_name(sample_id, reference_id)
             return render_template(
                 "start.html",
@@ -259,7 +257,6 @@ class UI(object):
                 run_duration="0.1",
                 start_voltage="-180",
             )
-            # TODO if not run_ids:
             return render_template(
                 "start.html",
                 start_now=True,
@@ -341,9 +338,7 @@ class UI(object):
             analysis_runs = [run for run in get_runs() if not any(
                 pattern in run for pattern in ANALYSIS_EXCLUSION_PATTERNS)
             ]
-            annotations = [
-                a.replace(".xlsx", "") for a in reference_annotations()
-            ]
+            annotations = reference_annotations()
             # Calculate urls to avoid hardcoding urls in html templates.
             url_cnv = {}
             url_cnv_new = {}
@@ -410,8 +405,6 @@ class UI(object):
 
     @cherrypy.expose
     def cnv(self, samp, genes="", new="False"):
-        t0=time.time()
-        print("NEW**********************",new)
         try:
             cnv_plt_data = CNVData(samp)
         except FileNotFoundError:
@@ -420,10 +413,8 @@ class UI(object):
         def make_plot(cnv_data, lock):
             """Plot function for multiprocessing."""
             lock.acquire()
-            print("CNV_LOCK_ON**********************")
             if not cnv_data.files_on_disk() or new == "True":
                 cnv_data.make_cnv_plot()
-            print("CNV_LOCK_OFF**********************")
             lock.release()
 
         proc = mp.Process(
@@ -434,13 +425,11 @@ class UI(object):
         proc.start()
         proc.join()
         cnv_plt_data.read_from_disk()
-        print("CNV=====================", time.time()-t0)
 
         return cnv_plt_data.plot_cnv_and_genes([genes])
 
     @cherrypy.expose
     def umap(self, samp, ref, close_up="", new="False"):
-        t0=time.time()
         try:
             umap_data = UMAPData(samp, ref)
         except FileNotFoundError:
@@ -450,7 +439,11 @@ class UI(object):
             """Plot function for multiprocessing."""
             lock.acquire()
             if not plt_data.files_on_disk() or new == "True":
-                plt_data.make_umap_plot()
+                try:
+                    plt_data.make_umap_plot()
+                except ValueError:
+                    raise cherrypy.HTTPError(405, "No data to plot.")
+                    
             lock.release()
 
         proc = mp.Process(
@@ -467,17 +460,28 @@ class UI(object):
 
         return umap_data.plot_json
 
-    @cherrypy.expose # TODO crash if files not on disk
+    @cherrypy.expose
     def make_pdf(self, samp=None, ref=None):
         path = os.path.join(NANODIP_REPORTS, samp + "_cpgcount.txt")
-        with open(path, "r") as f:
-            overlap_cnt = f.read()
-
+        try:
+            with open(path, "r") as f:
+                overlap_cnt = f.read()
+        except FileNotFoundError:
+            raise cherrypy.HTTPError(
+                405, 
+                "CpG count file not found. Probably UMAP not completed."
+            )
         path = os.path.join(NANODIP_REPORTS, samp + "_alignedreads.txt")
-        with open(path, "r") as f:
-            read_numbers = f.read()
+        try:
+            with open(path, "r") as f:
+                read_numbers = f.read()
+        except FileNotFoundError:
+            raise cherrypy.HTTPError(
+                405, 
+                "Aligned reads file not found. Probably UMAP not completed."
+            )
 
-        cnv_path = os.path.join(NANODIP_REPORTS, samp + "_CNVplot.png") #TODO png
+        cnv_path = os.path.join(NANODIP_REPORTS, samp + "_CNVplot.png")
         umap_path = os.path.join(
             NANODIP_REPORTS,
             samp + "_" + ref + "_UMAP_top.png",
@@ -519,8 +523,8 @@ class UI(object):
             previous_activity = True
         except Exception as e:
             # TODO catch correct exception.
-            print(e)
-            sys.exit(1) # TODO del
+            print("Name of the catched exception:", e)
+            sys.exit(1)
             previous_activity = False
         return render_template(
             "device_status.html",
@@ -574,7 +578,7 @@ class UI(object):
             return ""
         # if there is a run that produces data, the run ID will exist
         sample_id = run_sample_id(device_id)
-        reference = read_reference(sample_id).replace(".xlsx", "")
+        reference = read_reference(sample_id)
         cnv_plt_path_png = os.path.join(
             "reports", sample_id + ENDINGS["cnv_png"]
         )
@@ -602,6 +606,11 @@ class UI(object):
         stats = methylation_caller(sample_name)
         UI.cpg_sem.release()
         return json.dumps(stats)
+
+    @cherrypy.expose
+    def change_voltage(self, device_id="", voltage=""):      
+        set_bias_voltage(device_id, voltage)
+        return render_template(voltage=voltage)
 
 def start_webserver():
     """Start CherryPy Webserver."""

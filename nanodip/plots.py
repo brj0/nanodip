@@ -39,6 +39,7 @@ from data import (
 from utils import (
     convert_html_to_pdf,
     render_template,
+    discrete_colors,
 )
 # end_internal_modules
 
@@ -59,14 +60,22 @@ def umap_plot_from_data(sample, reference, umap_data_frame, close_up):
         + f"{len(sample.cpg_overlap)} CpGs"
     if close_up:
         umap_title = "Close-up " + umap_title
+    methyl_classes_colors = discrete_colors(umap_data_frame.methylation_class)
+    methyl_classes = umap_data_frame.methylation_class[1:].to_list()
+    methyl_classes.sort()
     umap_plot = px.scatter(
         umap_data_frame,
         x="x",
         y="y",
-        labels={"x":"UMAP 0", "y":"UMAP 1", "color":"WHO class"},
+        labels={"x":"UMAP 0", "y":"UMAP 1", "methylation_class":"WHO class"},
         title=umap_title,
         color="methylation_class",
+        color_discrete_map={
+            sample.name: "#ff0000",
+            **discrete_colors(methyl_classes)
+        },
         hover_name="id",
+        category_orders={"methylation_class": [sample.name] + methyl_classes},
         hover_data=["description"],
         render_mode=PLOTLY_RENDER_MODE,
         template="simple_white",
@@ -122,7 +131,7 @@ def umap_data_frame(sample, reference):
         sample: sample to analyse
         reference: reference data
     """
-    import umap #TODO move to beginning
+    import umap #Moved to beginning due to long loading time (13.5s)
 
     logger.info(
         f"UMAP Plot initiated for {sample.name} and reference {reference.name}."
@@ -136,14 +145,14 @@ def umap_data_frame(sample, reference):
     logger.info(f"Sample CpG Sites No:\n{len(sample.cpg_sites)}")
     logger.info(f"Sample CpG overlap No before:\n{sample.cpg_overlap}")
 
+    if sample.cpg_sites.empty:
+        logger.info("UMAP done. No Matrix created, no overlapping data.")
+        raise ValueError("Sample has no overlapping CpG's with reference.")
+
     # Calculate overlap of sample CpG's with reference CpG's (some probes have
     # been skipped from the reference set, e.g. sex chromosomes).
     sample.set_cpg_overlap(reference)
     logger.info(f"Sample read. CpG overlap No after:\n{len(sample.cpg_overlap)}")
-
-    if not sample.cpg_overlap:
-        logger.info("UMAP done. No Matrix created, no overlapping data.")
-        raise ValueError("Sample has no overlapping CpG's with reference.")
 
     # Extract reference and sample methylation according to CpG overlap.
     reference_methylation = get_reference_methylation(sample,
@@ -168,8 +177,8 @@ def umap_data_frame(sample, reference):
     umap_sample = umap_2d[0]
     umap_df = pd.DataFrame({
         "distance": [np.linalg.norm(z - umap_sample) for z in umap_2d],
-        "methylation_class":  [sample.name] + reference.methylation_class,
-        "description":  ["Sample tested"] + reference.description,
+        "methylation_class": [sample.name] + reference.methylation_class,
+        "description":  ["Analysis sample"] + reference.description,
         "id": [sample.name] + reference.specimen_ids,
         "x": umap_2d[:,0],
         "y": umap_2d[:,1],
@@ -182,9 +191,6 @@ def umap_data_frame(sample, reference):
 def get_bin_edges(n_bins, genome):
     """Returns sequence of {n_bin} equal sized bins on chromosomes. Every bin is
     limited to one chromosome."""
-    if n_bins < 10:
-        # TODO will raise if file empty.
-        raise ValueError(f"Binwidth '{n_bins}' too small.")
     edges = np.linspace(0, genome.length, num=n_bins + 1).astype(int)
     # limit bins to only one chromosome
     for chrom_edge in genome.chrom.offset:
@@ -434,10 +440,17 @@ class UMAPData:
         )
         plot_path = self.path + ENDINGS["umap_all_json"]
         cu_plot_path = self.path + ENDINGS["umap_top_json"]
+        umap_df_path = os.path.join(NANODIP_REPORTS,
+            "%s_%s%s" % (self.sample_name,
+                         self.reference_name,
+                         ENDINGS["umap_csv"])
+        )
 
         return (os.path.exists(plot_path) and
                 os.path.exists(cu_plot_path) and
-                os.path.exists(methyl_overlap_path))
+                os.path.exists(methyl_overlap_path) and
+                os.path.exists(umap_df_path)
+        )
 
     def read_from_disk(self):
         methyl_overlap_path = os.path.join(NANODIP_REPORTS,
@@ -461,6 +474,14 @@ class UMAPData:
         # Read Methylation Matrix.
         self.methyl_overlap = np.load(methyl_overlap_path,
             allow_pickle=True)
+
+        # Read UMAP Matrix.
+        file_path = os.path.join(NANODIP_REPORTS,
+            "%s_%s%s" % (self.sample_name,
+                         self.reference_name,
+                         ENDINGS["umap_csv"])
+        )
+        self.umap_df = pd.read_csv(file_path)
 
 
 def TODO():

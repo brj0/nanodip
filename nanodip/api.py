@@ -697,6 +697,14 @@ def run_information(device_id):
         info = f"No protocol information in MinKNOW buffer for {device_id}"
     return info
 
+def set_bias_voltage(device_id, voltage):
+    """Change MinKnow bias voltage. Returns previous and new current voltage
+    as dictionary.
+    """
+    connection = connection_from_device_id(device_id)
+    previous_voltage = connection.device.get_bias_voltage().bias_voltage
+    connection.device.set_bias_voltage(bias_voltage=float(voltage))
+
 def get_all_results():
     """Return list of all analysis result files in report directory sorted
     by modification time.
@@ -751,8 +759,8 @@ def single_file_methylation_caller(analysis_dir, file_name):
     # Methylation caller.
     methyl_calling = [
         F5C, "call-methylation",
-        #"--disable-cuda=yes",   # TODO for debugging on CPU only. Must be del.
-        "-B2000000", "-K400",   # set B to 2 megabases (GPU) and 0.4 kreads
+        #"--disable-cuda=yes",   # For debugging on CPU only.
+        "-B2000000", "-K400",    # Set B to 2 megabases (GPU) and 0.4 kreads
         "-b", base_path + "-reads_sorted.bam",
         "-g", REFERENCE_GENOME_FA,
         "-r", base_path + ".fastq",

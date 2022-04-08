@@ -323,8 +323,7 @@ class SampleData:
         self.reads = read_positions
 
     def get_read_cpgs(sample_name):
-        """Get all Ilumina methylation sites with methylaton status
-        within a samples reads.
+        """Get all Ilumina methylation CpG-sites extracted so far.
 
         Args:
             sample_name: sample name to be analysed
@@ -340,7 +339,7 @@ class SampleData:
             raise FileNotFoundError(sample_path)
 
         cpg_files = files_by_ending(NANODIP_OUTPUT, sample_name,
-                                     ending="methoverlap.tsv")
+                                    ending="methoverlap.tsv")
 
         methylation_info = pd.DataFrame()
 

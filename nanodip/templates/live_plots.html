@@ -12,12 +12,15 @@
   <div class="mono">
     Sample ID: {{sample_id}} with reference {{reference}}
     <br>
-    <a href="{{cnv_plt_path_png}}" target="_blank">
-      <img align="Top" src="{{cnv_plt_path_png}}" width="350px" height="180px" alt="CNV plot will appear here">
-    </a>
-    <a href="{{umap_plt_path_html}}" target="_blank">
-      <img align="Top" src="{{umap_plt_path_png}}" width="350px" height="180px" alt="UMAP plot will appear here">
-    </a>
+    <br>
+    <div class="plot_preview_row">
+      <a href="{{cnv_plt_path_png}}" target="_blank">
+        <img class="plot_preview" src="{{cnv_plt_path_png}}" alt="CNV plot will appear here">
+      </a>
+      <a href="{{umap_plt_path_html}}" target="_blank">
+        <img class="plot_preview" align="Top" src="{{umap_plt_path_png}}" alt="UMAP plot will appear here">
+      </a>
+    </div>
   </div>
 </body>
 

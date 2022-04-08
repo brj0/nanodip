@@ -162,7 +162,3 @@ IMAGES ="/applications/nanodip"
 F5C = "/applications/f5c/f5c"
 MINIMAP2 = "/applications/nanopolish/minimap2/minimap2"
 SAMTOOLS = "/applications/samtools/samtools"
-# TODO del: R script that reads CpGs into simplified text file (absolute path)
-RSCRIPT = "/applications/R-4.0.3/bin/Rscript"
-READ_CPG_RSCRIPT="/applications/nanodip/readCpGs_mod02.R"
-

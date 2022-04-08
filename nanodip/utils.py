@@ -7,6 +7,8 @@ Contains general utility functions.
 
 # start_external_modules
 import datetime
+import colorsys
+import hashlib    
 import inspect
 import jinja2
 import os
@@ -107,7 +109,7 @@ def convert_html_to_pdf(source_html, output_file):
     return pisa_status.err
 
 def date_time_string_now():
-    """Return current date and time as a string to create timestamps."""
+    """Return current date and time as a string to create time stamps."""
     now = datetime.datetime.now()
     return now.strftime("%Y%m%d_%H%M%S")
 
@@ -128,7 +130,7 @@ def get_runs():
     return [x[0] for x in runs]
 
 def predominant_barcode(sample_name):
-    """Returns the predominante barcode within all fast5 files."""
+    """Returns the predominant barcode within all fast5 files."""
     fast5_files = files_by_ending(DATA, sample_name, ending=".fast5")
     # TODO @HEJU im Original fehlt diese Zeile:
     pass_fast5_files = [f for f in fast5_files if "_pass_" in f]
@@ -152,7 +154,7 @@ def reference_annotations():
     for r in os.listdir(ANNOTATIONS):
         if r.endswith(".xlsx"):
             annotations.append(r)
-    return annotations
+    return [a.replace(".xlsx", "") for a in annotations]
 
 
 def write_reference_name(sample_id, reference_name):
@@ -189,4 +191,30 @@ def files_by_ending(directory, sample_name, ending):
             for f in files if f.endswith(ending)]
         )
     return output_files
+
+def discrete_colors(variables):
+    """Pseudorandom color scheme based on hashed values. Colors
+    will be fixed to string, platform independently.
+        Args:
+            variables: List of strings.
+        Returns:
+            Dictionary of color scheme for all string elements.
+    """
+    color = {}
+    for var in set(variables):
+        hash_str = hashlib.md5(bytes(var, "utf-8")).digest()
+        hash1 = int.from_bytes(hash_str[:8], byteorder="big")
+        hash2 = int.from_bytes(hash_str[8:12], byteorder="big")
+        hash3 = int.from_bytes(hash_str[12:], byteorder="big")
+        hue = hash1 % 365
+        saturation = hash2 % 90 + 10
+        lightness = hash3 % 40 + 30
+        # hsl has to be transformed to rgb, since otherwise not all colors
+        # are displayed correctly, probably due to plotly bug.
+        rgb_bin = colorsys.hls_to_rgb(hue/365, lightness/100, saturation/100)
+        rgb = tuple(int(256 * x) for x in rgb_bin)
+        color[var] = f"rgb{rgb}"
+
+    return color
+
 

@@ -2,20 +2,21 @@
 
 """
 ## NanoDiP all-in-one Jupyter Notebook
-*J. Hench, S. Frank, C. Hultschig and J. Brugger, Neuropathology, IfP Basel,
-2021*
 
-This software is provided free of charge and warranty; by using it you agree
-to do this on your own risk. The authors shall not be held liable for any
-damage caused by this software. We have assembled this and tested it to the
-best of our knowledge.
+*J. Hench, C. Hultschig, J. Brugger, and S. Frank, Neuropathology, IfP Basel,
+2021-2022*
+
+This software is provided free of charge and warranty; by using it you agree to
+do this on your own risk. The authors shall not be held liable for any damage
+caused by this software. We have assembled this and tested it to the best of
+our knowledge.
 
 The purpose of NanoDiP (Nanopore Digital Pathology) is to compare low-coverage
-Nanopore sequencing data from natively extracted DNA sequencing runs against
-a flexibly adaptable collection of 450K/850K Illumina Infinium Methylation
-array data. These data have to be preprocessed into binary beta value files;
-this operation is performed in R (uses minfi to read raw array data) and
-outputs bindary float files (one per dataset). These beta values files (e.g.,
+Nanopore sequencing data from natively extracted DNA sequencing runs against a
+flexibly adaptable collection of 450K/850K Illumina Infinium Methylation array
+data. These data have to be preprocessed into binary beta value files; this
+operation is performed in R (uses minfi to read raw array data) and outputs
+bindary float files (one per dataset). These beta values files (e.g.,
 204949770141_R03C01_betas_filtered.bin) are named according to the array ID
 (Sentrix ID) followed by the suffix. A collection of betas_filtered.bin files
 can be provided in a static manner and XLSX (Microsoft Excel) tables can be
@@ -37,20 +38,41 @@ execution. Then, in Chromium Browser, navigate to http://localhost:8080/ and
 preferably bookmark this location for convenience. In case of errors, you may
 just again click the same button *restart the kernel, re-run the whole notebook
 (with dialog)*.
-___
 
-### Technical Details
-
+___ ### Technical Details
 * Tested with Python 3.7.5; 3.8.8 fails to load minknow_api in jupyter
-  notebook.
-* Verified to run on Ubuntu 18.04/Jetpack on ARMv8 and x86_64 CPUs; not
-  tested on Windows and Mac OS. The latter two platforms are unsupported, we
-  do not intend to support them.
-* **CAUTION**: Requires a *patched* version of minknow api, file
-  `[VENV]/lib/python3.7/site-packages/minknow_api/tools/protocols.py`.
-  Without the patch, the generated fast5 sequencing data will be unreadable
-  with f5c or nanopolish (wrong compression algorithm, which is the default in
-  the MinKNOW backend).
+* notebook.  Verified to run on Ubuntu 18.04/Jetpack on ARMv8 and x86_64 CPUs;
+* not tested on Windows and Mac OS. The latter two platforms are unsupported,
+* we do not intend to support them.  **CAUTION**: Requires a *patched* version
+* of minknow api, file
+* `[VENV]/lib/python3.7/site-packages/minknow_api/tools/protocols.py`. Without
+* the patch, the generated fast5 sequencing data will be unreadable with f5c or
+* nanopolish (wrong compression algorithm, which is the default in the MinKNOW
+* backend).
+
+___ ### Headless / Command Line Mode CherryPy, the underlying web server of
+NanoDiP allows for headless (command line-based) utilization of the software
+besides or instead of browser-based use. Hence, the software may be operated as
+a post-hoc analysis pipeline for previously acquired data. This is particularly
+useful for benchmarking and validation purposes.
+
+#### Examples: Generate copy number of for sample
+**GBM_RTK2_20210311_Testrun_BC06**: `curl
+'http://localhost:8080/cnvplot?sampleName=GBM_RTK2_20210311_Testrun_BC06'`
+
+Calculate UMAP plot for sample **GBM_RTK2_20210311_Testrun_BC06** with
+reference annotation **AllIDATv2_20210804.xlsx**: `curl
+'http://localhost:8080/umapplot?sampleName=GBM_RTK2_20210311_Testrun_BC06&refAnno=AllIDATv2_20210804.xlsx'`
+
+Assemble PDF report for sample **GBM_RTK2_20210311_Testrun_BC06** with
+reference annotation **AllIDATv2_20210804.xlsx**: `curl
+'http://localhost:8080/makePdf?sampleName=GBM_RTK2_20210311_Testrun_BC06&refAnno=AllIDATv2_20210804.xlsx'`
+
+### Version Details
+
+**30:** UMAP report score / PDF (NanoDiP)
+
+**32:** UMAP report score / PDF (EpiDiP)
 """
 
 # Verify running Python version (should be 3.7.5) and adjust jupyter notebook.
