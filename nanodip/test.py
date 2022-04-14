@@ -23,10 +23,13 @@ from config import (
     CHERRYPY_HOST,
     CHERRYPY_PORT,
     CNV_GRID,
+    CNV_LINK,
     CNV_URL_PREFIX,
     CNV_URL_SUFFIX,
     DATA,
     DEBUG_MODE,
+    EPIDIP_SERVER,
+    EPIDIP_UMAP_COORDINATE_FILES,
     ENDINGS,
     EXCLUDED_FROM_ANALYSIS,
     F5C,
@@ -49,6 +52,8 @@ from config import (
 )
 from utils import (
     date_time_string_now,
+    discrete_colors,
+    composite_path,
 )
 from data import (
     get_sample_methylation,
@@ -60,6 +65,7 @@ from data import (
 from plots import (
     CNVData,
     UMAPData,
+    pie_chart,
 )
 from webui import (
     Device,
@@ -96,48 +102,25 @@ reference = ReferenceData(reference_name)
 umapp = UMAPData(sample_name, reference_name)
 umapp.read_from_disk()
 
-sample = SampleData(sample_name)
-reference = ReferenceData(reference_name) # time: 3.6s
-sample.set_cpg_overlap(reference)
-#plot = plots.umap_plot_from_data(
+umapp.sample = SampleData(sample_name)
+umapp.reference = ReferenceData(reference_name)
+umapp.sample.set_cpg_overlap(reference)
+# plot = plots.umap_plot_from_data(
 #    sample,
 #    reference,
 #    umapp.umap_df,
 #    close_up=False,
-#)
+# )
 ## Write UMAP plot to disk.
-#file_path = os.path.join(
+# file_path = os.path.join(
 #    NANODIP_REPORTS, "__UMAP_TEST__.html"
-#)
-#plot.write_html(file_path, config=dict({"scrollZoom": True}))
+# )
+# plot.write_html(file_path, config=dict({"scrollZoom": True}))
 
-umapp.cu_umap_df = umapp.umap_df.sort_values(
-    by="distance"
-)[:UMAP_PLOT_TOP_MATCHES + 1]
 
-def pie_chart(data_frame):
-    pass    
+# pie_chart(umapp)
 
-num_per_class = umapp.cu_umap_df[1:].groupby(["methylation_class"]).size().reset_index(name="counts")
 
-pie_chart = px.pie(
-    num_per_class,
-    values="counts",
-    names="methylation_class",
-    #color_discrete_sequence=kdf["colorString"],
-    title="Neighbors in ",
-    width=450,
-    height=400,
-)
-file_path = os.path.join(
-    NANODIP_REPORTS, "__piechart_TEST__.html"
-)
-pie_chart.write_html(file_path, config=dict({"scrollZoom": True}))
-
-        color_discrete_map={
-            sample.name: "#ff0000",
-            **discrete_colors(methyl_classes)
-        },
 # device_id = "MN26636"
 # sample_id = "test"
 # run_duration = "0.1"
@@ -153,5 +136,49 @@ pie_chart.write_html(file_path, config=dict({"scrollZoom": True}))
 # print("l=",l)
 # l.pop("c")
 # print("l=",l)
+
+from urllib import request
+
+sentrix_id = "201869680197_R07C01"
+# wget -O umapLocalFile "http://s1665.rootserver.io/umap_links/UMAP_all_bVals_top_25000.xlsx"
+umap_coordinates = "UMAP_all_bVals_top_25000.xlsx"
+
+
+umap_coordinates_local = composite_path(
+    NANODIP_REPORTS, sentrix_id, umap_coordinates[:-5], ENDINGS["umap_xlsx"]
+)
+
+URL = EPIDIP_SERVER + umap_coordinates
+response = request.urlretrieve(URL, umap_coordinates_local)
+
+cnv_local = composite_path(NANODIP_REPORTS, sentrix_id, ENDINGS["cnv_pdf"])
+URL = CNV_LINK % sentrix_id
+response = request.urlretrieve(URL, cnv_local)
+
+
+def downloadEpidipCoordinates(umapFile,sentrixid,referenceFile):
+    umapLocalFile=nanodipReportDir+"/"+sentrixid+"_"+referenceFile.replace(".xlsx","")+"_UMAP.xlsx"
+    cnvLocalFile=nanodipReportDir+"/"+sentrixid+"_CNVplot.pdf"
+    p=subprocess.run(["wget", "-O",
+                      umapLocalFile,
+                      epidipUmapCoordUrlRoot+umapFile],
+                      capture_output=True)
+    epidipDownloadStatus='exit status: '+str(p.returncode)+'\nstdout: '+str(p.stdout.decode())+'\nstderr: '+str(p.stderr.decode())
+    p=subprocess.run(["wget", "-O",
+                      cnvLocalFile,
+                      cnvLinkPrefix+sentrixid+cnvLinkSuffix],
+                      capture_output=True)
+    epidipDownloadStatus=epidipDownloadStatus+'<hr>exit status: '+str(p.returncode)+'\nstdout: '+str(p.stdout.decode())+'\nstderr: '+str(p.stderr.decode())
+    p=subprocess.run(["pdftoppm","-png","-f","1","-l","1",
+                      cnvLocalFile,
+                      cnvLocalFile.replace(".pdf","")],
+                      capture_output=True)
+    epidipDownloadStatus=epidipDownloadStatus+'<hr>exit status: '+str(p.returncode)+'\nstdout: '+str(p.stdout.decode())+'\nstderr: '+str(p.stderr.decode())
+    p=subprocess.run(["mv",
+                      cnvLocalFile.replace(".pdf","-1.png"),
+                      cnvLocalFile.replace(".pdf",".png")],
+                      capture_output=True)
+    epidipDownloadStatus=epidipDownloadStatus+'<hr>exit status: '+str(p.returncode)+'\nstdout: '+str(p.stdout.decode())+'\nstderr: '+str(p.stderr.decode())
+    return str(epidipDownloadStatus)
 
 

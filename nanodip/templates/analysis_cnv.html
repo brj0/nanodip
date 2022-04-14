@@ -30,6 +30,7 @@
     var config = {"scrollZoom": true};
     Plotly.setPlotConfig(config);
     Plotly.plot(plotId, plotJSON,{});
+    Plotly.relayout(plotId, {height: "800", width: "1580"})
     /*Plotly.newPlot("cnv", plotJSON,{});*/
   }
 </script>

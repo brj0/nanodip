@@ -39,6 +39,7 @@ from config import (
 )
 from utils import (
     convert_html_to_pdf,
+    composite_path,
     date_time_string_now,
     reference_annotations,
     get_runs,
@@ -61,6 +62,7 @@ from api import (
     run_sample_id,
     run_state,
     run_yield,
+    set_bias_voltage,
     start_run,
     stop_run,
 )
@@ -462,7 +464,7 @@ class UI(object):
 
     @cherrypy.expose
     def make_pdf(self, samp=None, ref=None):
-        path = os.path.join(NANODIP_REPORTS, samp + "_cpgcount.txt")
+        path = composite_path(NANODIP_REPORTS, samp, "cpgcount.txt")
         try:
             with open(path, "r") as f:
                 overlap_cnt = f.read()
@@ -471,7 +473,7 @@ class UI(object):
                 405, 
                 "CpG count file not found. Probably UMAP not completed."
             )
-        path = os.path.join(NANODIP_REPORTS, samp + "_alignedreads.txt")
+        path = composite_path(NANODIP_REPORTS, samp, ENDINGS["aligned_reads"])
         try:
             with open(path, "r") as f:
                 read_numbers = f.read()
@@ -481,10 +483,12 @@ class UI(object):
                 "Aligned reads file not found. Probably UMAP not completed."
             )
 
-        cnv_path = os.path.join(NANODIP_REPORTS, samp + "_CNVplot.png")
-        umap_path = os.path.join(
-            NANODIP_REPORTS,
-            samp + "_" + ref + "_UMAP_top.png",
+        cnv_path = composite_path(NANODIP_REPORTS, samp, ENDINGS["cnv_png"])
+        umap_path = composite_path(
+            NANODIP_REPORTS, samp, ref, ENDINGS["umap_top_png"],
+        )
+        pie_chart_path = composite_path(
+            NANODIP_REPORTS, samp, ref, ENDINGS["pie"]
         )
 
         html_report = render_template(
@@ -498,11 +502,16 @@ class UI(object):
             reference=ref,
             cnv_path=cnv_path,
             umap_path=umap_path,
+            pie_chart_path=pie_chart_path,
         )
-        report_name = samp + "_" + ref + "_NanoDiP_report.pdf"
-        report_path = os.path.join(NANODIP_REPORTS, report_name)
+        report_path = composite_path(
+            NANODIP_REPORTS, samp, ref, ENDINGS["report"],
+        )
+        server_report_path = composite_path(
+            "reports", samp, ref, ENDINGS["report"],
+        )
         convert_html_to_pdf(html_report, report_path)
-        raise cherrypy.HTTPRedirect(os.path.join("reports", report_name))
+        raise cherrypy.HTTPRedirect(server_report_path)
 
     @cherrypy.expose
     def about(self):
@@ -579,16 +588,16 @@ class UI(object):
         # if there is a run that produces data, the run ID will exist
         sample_id = run_sample_id(device_id)
         reference = read_reference(sample_id)
-        cnv_plt_path_png = os.path.join(
-            "reports", sample_id + ENDINGS["cnv_png"]
+        cnv_plt_path_png = composite_path(
+            "reports", sample_id, ENDINGS["cnv_png"],
         )
-        umap_plt_path_png = os.path.join(
+        umap_plt_path_png = composite_path(
             "reports",
-            sample_id + "_" + reference + ENDINGS["umap_all_png"],
+            sample_id, reference, ENDINGS["umap_all_png"],
         )
-        umap_plt_path_html = os.path.join(
+        umap_plt_path_html = composite_path(
             "reports",
-            sample_id + "_" + reference + ENDINGS["umap_all_html"],
+            sample_id, reference, ENDINGS["umap_all_html"],
         )
         return render_template(
             "live_plots.html",

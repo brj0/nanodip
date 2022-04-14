@@ -22,6 +22,7 @@ from config import (
     ANNOTATIONS,
     BARCODE_NAMES,
     DATA,
+    ENDINGS,
     NANODIP_REPORTS,
     EXCLUDED_FROM_ANALYSIS,
 )
@@ -194,7 +195,7 @@ def files_by_ending(directory, sample_name, ending):
 
 def discrete_colors(variables):
     """Pseudorandom color scheme based on hashed values. Colors
-    will be fixed to string, platform independently.
+    of methylation classes will be fixed to their name.
         Args:
             variables: List of strings.
         Returns:
@@ -217,4 +218,12 @@ def discrete_colors(variables):
 
     return color
 
-
+def composite_path(directory, *args):
+    """Generate composite file-paths of the type
+        'directory/arg1_arg2_arg3'
+    """
+    file_name = "_".join([str(x) for x in args])
+    return os.path.join(
+        directory,
+        file_name,
+    )

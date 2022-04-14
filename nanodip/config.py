@@ -117,30 +117,34 @@ EXCLUDED_FROM_ANALYSIS = [
 
 # List of file name sections that identify past runs.
 RESULT_ENDINGS = {
-    "cnv_png": "_CNVplot.png",
-    "ranking": "_NanoDiP_ranking.pdf",
-    "report": "_NanoDiP_report.pdf",
-    "umap_all": "_UMAP_all.html",
-    "umap_top": "_UMAP_top.html",
+    "cnv_png": "CNVplot.png",
+    "ranking": "NanoDiP_ranking.pdf",
+    "report": "NanoDiP_report.pdf",
+    "umap_all": "UMAP_all.html",
+    "umap_top": "UMAP_top.html",
 }
 
 ENDINGS = {
     **RESULT_ENDINGS,
-    "aligned_reads": "_alignedreads.txt",
-    "cnv_bins_json": "_CNV_binsplot.json",
-    "cnv_html": "_CNVplot.html",
-    "cnv_json": "_CNVplot.json",
-    "cnv_png": "_CNVplot.png",
-    "cpg_cnt":"_cpgcount.txt",
-    "genes": "_genes.csv",
-    "methyl": "_methyl_overlap.npy",
-    "reads_csv": "_reads.csv",
-    "relevant_genes": "_relevant_genes.csv",
-    "umap_all_html": "_UMAP_all.html",
-    "umap_all_json": "_UMAP_all.json",
-    "umap_all_png": "_UMAP_all.png",
-    "umap_csv": "_UMAP.csv",
-    "umap_top_json": "_UMAP_top.json",
+    "aligned_reads": "alignedreads.txt",
+    "cnv_bins_json": "CNV_binsplot.json",
+    "cnv_html": "CNVplot.html",
+    "cnv_json": "CNVplot.json",
+    "cnv_pdf": "CNVplot.pdf",
+    "cnv_png": "CNVplot.png",
+    "cpg_cnt":"cpgcount.txt",
+    "genes": "genes.csv",
+    "methyl": "methyl_overlap.npy",
+    "pie": "pie.png",
+    "reads_csv": "reads.csv",
+    "relevant_genes": "relevant_genes.csv",
+    "umap_all_html": "UMAP_all.html",
+    "umap_all_json": "UMAP_all.json",
+    "umap_all_png": "UMAP_all.png",
+    "umap_csv": "UMAP.csv",
+    "umap_top_json": "UMAP_top.json",
+    "umap_top_png": "UMAP_top.png",
+    "umap_xlsx": "UMAP.xlsx",
 }
 
 DEBUG_MODE = True
@@ -162,3 +166,16 @@ IMAGES ="/applications/nanodip"
 F5C = "/applications/f5c/f5c"
 MINIMAP2 = "/applications/nanopolish/minimap2/minimap2"
 SAMTOOLS = "/applications/samtools/samtools"
+
+
+EPIDIP_SERVER = "http://s1665.rootserver.io/umap_links/"
+EPIDIP_UMAP_COORDINATE_FILES = [
+    "UMAP_all_bVals_top_25000.xlsx",
+    "UMAP_all_bVals_top_50000.xlsx",
+    "UMAP_all_bVals_top_75000.xlsx",
+    "gpumap_25000.xlsx",        
+    "gpumap_50000.xlsx",
+    "gpumap_75000.xlsx",
+]
+
+CNV_LINK = "http://s1665.rootserver.io/umapplot01/%s_CNV_IFPBasel_annotations.pdf" 

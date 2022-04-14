@@ -13,10 +13,10 @@
   <img src="static/img/EpiDiP_Logo_01.png" width="30px" align="top">&nbsp;&nbsp;
   NanoDiP Report for Sample {{sample_name}}
 </h1>
-<table border='0'>
+<table border="0">
   <tr>
-    <td width='100'>Generated on</td>
-    <td width='10'>:</td>
+    <td width="100">Generated on</td>
+    <td width="10">:</td>
     <td>{{sys_name}} / {{date}}</td>
   </tr>
   <tr>
@@ -41,13 +41,23 @@
   </tr>
 </table>
 
-<h2>Methylation UMAP plot</h2>
-<img src="{{umap_path}}" width='500'>
+<hr>
 
-<br>
+<table border="0">
+  <tr>
+    <td valign="top"><b>Methylation UMAP plot</b>
+      <img src="{{umap_path}}" width="350">
+    </td>
+    <td valign="top"><b>Methylation UMAP Score</b>
+      <img src="{{pie_chart_path}}" width="350">
+    </td>
+  </tr>
+</table>
 
-<h2>Copy number variation plot</h2>
-<img src="{{cnv_path}}" width='700'>
+<hr>
+
+<b>Copy number plot</b>
+<img src="{{cnv_path}}" width="700">
 
 </body>
 
