@@ -72,6 +72,7 @@ from webui import (
     Devices,
     minion_positions,
     run_information,
+    download_epidip_data,
     device_status,
     active_run,
     called_bases,
@@ -127,7 +128,6 @@ umapp.sample.set_cpg_overlap(reference)
 # start_voltage = "-180"
 # run_id = active_run(device_id)
 # run_ids=start_run(device_id = "MN26636", sample_id = "test", run_duration = "0.1", start_voltage = "-180")
-
 # l = Devices()
 # l.get("a")
 # l.get("b")
@@ -137,48 +137,21 @@ umapp.sample.set_cpg_overlap(reference)
 # l.pop("c")
 # print("l=",l)
 
-from urllib import request
+
 
 sentrix_id = "201869680197_R07C01"
-# wget -O umapLocalFile "http://s1665.rootserver.io/umap_links/UMAP_all_bVals_top_25000.xlsx"
-umap_coordinates = "UMAP_all_bVals_top_25000.xlsx"
+umap_matrix = "UMAP_all_bVals_top_25000.xlsx"
+reference_id = "GSE90496_IfP01"
 
 
-umap_coordinates_local = composite_path(
-    NANODIP_REPORTS, sentrix_id, umap_coordinates[:-5], ENDINGS["umap_xlsx"]
-)
+def epidip_report(sentrix_id, reference_id, reference_umap):
+    pass
 
-URL = EPIDIP_SERVER + umap_coordinates
-response = request.urlretrieve(URL, umap_coordinates_local)
-
-cnv_local = composite_path(NANODIP_REPORTS, sentrix_id, ENDINGS["cnv_pdf"])
-URL = CNV_LINK % sentrix_id
-response = request.urlretrieve(URL, cnv_local)
+download_epidip_data(sentrix_id, umap_matrix)
+umap_data = UMAPData(sentrix_id, reference_id)
+umap_data.read_precalculated_umap_matrix(umap_matrix)
 
 
-def downloadEpidipCoordinates(umapFile,sentrixid,referenceFile):
-    umapLocalFile=nanodipReportDir+"/"+sentrixid+"_"+referenceFile.replace(".xlsx","")+"_UMAP.xlsx"
-    cnvLocalFile=nanodipReportDir+"/"+sentrixid+"_CNVplot.pdf"
-    p=subprocess.run(["wget", "-O",
-                      umapLocalFile,
-                      epidipUmapCoordUrlRoot+umapFile],
-                      capture_output=True)
-    epidipDownloadStatus='exit status: '+str(p.returncode)+'\nstdout: '+str(p.stdout.decode())+'\nstderr: '+str(p.stderr.decode())
-    p=subprocess.run(["wget", "-O",
-                      cnvLocalFile,
-                      cnvLinkPrefix+sentrixid+cnvLinkSuffix],
-                      capture_output=True)
-    epidipDownloadStatus=epidipDownloadStatus+'<hr>exit status: '+str(p.returncode)+'\nstdout: '+str(p.stdout.decode())+'\nstderr: '+str(p.stderr.decode())
-    p=subprocess.run(["pdftoppm","-png","-f","1","-l","1",
-                      cnvLocalFile,
-                      cnvLocalFile.replace(".pdf","")],
-                      capture_output=True)
-    epidipDownloadStatus=epidipDownloadStatus+'<hr>exit status: '+str(p.returncode)+'\nstdout: '+str(p.stdout.decode())+'\nstderr: '+str(p.stderr.decode())
-    p=subprocess.run(["mv",
-                      cnvLocalFile.replace(".pdf","-1.png"),
-                      cnvLocalFile.replace(".pdf",".png")],
-                      capture_output=True)
-    epidipDownloadStatus=epidipDownloadStatus+'<hr>exit status: '+str(p.returncode)+'\nstdout: '+str(p.stdout.decode())+'\nstderr: '+str(p.stderr.decode())
-    return str(epidipDownloadStatus)
 
-
+# umap_data.draw_pie_chart()
+# umap_data.save_ranking_report()

@@ -134,7 +134,7 @@ def umap_data_frame(sample, reference):
         sample: sample to analyse
         reference: reference data
     """
-    import umap #Moved to beginning due to long loading time (13.5s)
+    import umap #Moved here due to long loading time (13.5s)
 
     logger.info(
         f"UMAP Plot initiated for {sample.name} and reference {reference.name}."
@@ -369,18 +369,24 @@ class UMAPData:
     def __init__(self, sample_name, reference_name):
         self.sample_name = sample_name
         self.reference_name = reference_name
-        self.path = composite_path(
-            NANODIP_REPORTS,
-            sample_name, reference_name, "",
-        )
 
     def make_umap_plot(self):
         """Invoke umap plot algorithm and save to disk."""
         self.sample = SampleData(self.sample_name)
-        self.reference = ReferenceData(self.reference_name) # time: 3.6s
+        self.reference = ReferenceData(self.reference_name)
         self.methyl_overlap, self.umap_df = umap_data_frame(
             self.sample, self.reference
         )
+        # Save Methylation Matrix.
+        np.save(self.path("methyl"), self.methyl_overlap)
+
+        self.draw_scatter_plots()
+        self.draw_pie_chart()
+
+        # Save close up ranking report.
+        self.save_ranking_report() # Time consumption 0.4s
+
+    def draw_scatter_plots(self):
         self.plot = umap_plot_from_data(
             self.sample,
             self.reference,
@@ -399,13 +405,36 @@ class UMAPData:
         )
         logger.info("UMAP close-up plot generated.")
 
-        self.pie_chart = pie_chart(self)
-
         # Convert to json.
         self.plot_json = self.plot.to_json()
         self.cu_plot_json = self.cu_plot.to_json()
 
-        self.save_to_disk()
+        # Save UMAP Matrix.
+        self.umap_df.to_csv(self.path("umap_csv"), index=False)
+
+        # Write UMAP plot to disk.
+        file_path = self.path("umap_all")
+        self.plot.write_html(file_path, config=dict({"scrollZoom": True}))
+        self.plot.write_json(file_path[:-4] + "json")
+        self.plot.write_image(file_path[:-4] + "png") # Time consumption 1.8s
+
+        # Write UMAP close-up plot to disk.
+        file_path = self.path("umap_top")
+        self.cu_plot.write_html(file_path, config=dict({"scrollZoom": True}))
+        self.cu_plot.write_json(file_path[:-4] + "json")
+
+        # Time consumption 0.9s
+        self.cu_plot.write_image(
+            file_path[:-4] + "png", width=450, height=400, scale=3
+        )
+
+    def draw_pie_chart(self):
+        self.pie_chart = pie_chart(self)
+
+        # Write pie chart to disk.
+        self.pie_chart.write_image(
+            self.path("pie"), width=450, height=400, scale=3
+        )
 
     def save_ranking_report(self):
         """Save pdf containing the nearest neighbours from umap analyis."""
@@ -413,131 +442,98 @@ class UMAPData:
 
         html_report = render_template("umap_report.html", rows=rows)
 
-        file_path = composite_path(
-            NANODIP_REPORTS,
-            self.sample_name, self.reference_name, ENDINGS["ranking"],
-        )
-        convert_html_to_pdf(html_report, file_path)
+        convert_html_to_pdf(html_report, self.path("ranking"))
 
-        file_path = composite_path(
-            NANODIP_REPORTS, self.sample_name, ENDINGS["cpg_cnt"],
-        )
-        with open(file_path, "w") as f:
+        with open(self.path("cpg_cnt"), "w") as f:
             f.write("%s" % len(self.sample.cpg_overlap))
 
-    def save_to_disk(self):
-        # Save Methylation Matrix.
-        file_path = composite_path(
+    def path(self, ending):
+        return composite_path(
             NANODIP_REPORTS,
-            self.sample_name, self.reference_name, ENDINGS["methyl"],
+            self.sample_name, self.reference_name, ENDINGS[ending],
         )
-        np.save(file_path, self.methyl_overlap)
-
-        # Save UMAP Matrix.
-        file_path = composite_path(
-            NANODIP_REPORTS,
-            self.sample_name, self.reference_name, ENDINGS["umap_csv"],
-        )
-        self.umap_df.to_csv(file_path, index=False)
-
-        # Write UMAP plot to disk.
-        file_path = composite_path(
-            NANODIP_REPORTS,
-            self.sample_name, self.reference_name, ENDINGS["umap_all"],
-        )
-        self.plot.write_html(file_path, config=dict({"scrollZoom": True}))
-        self.plot.write_json(file_path[:-4] + "json")
-        self.plot.write_image(file_path[:-4] + "png") # Time consumption 1.8s
-
-        # Write UMAP close-up plot to disk.
-        file_path = composite_path(
-            NANODIP_REPORTS,
-            self.sample_name, self.reference_name, ENDINGS["umap_top"],
-        )
-        self.cu_plot.write_html(file_path, config=dict({"scrollZoom": True}))
-        self.cu_plot.write_json(file_path[:-4] + "json")
-        # Time consumption 0.9s
-        self.cu_plot.write_image(
-            file_path[:-4] + "png", width=450, height=400, scale=3
-        )
-
-        # Write pie chart to disk.
-        file_path = composite_path(
-            NANODIP_REPORTS,
-            self.sample_name, self.reference_name, ENDINGS["pie"],
-        )
-        self.pie_chart.write_image(file_path, width=450, height=400, scale=3)
-
-        # Save close up ranking report.
-        self.save_ranking_report() # Time consumption 0.4s
-
 
     def files_on_disk(self):
-        methyl_overlap_path = composite_path(
-            NANODIP_REPORTS,
-            self.sample_name, self.reference_name, ENDINGS["methyl"],
-        )
-        plot_path = self.path + ENDINGS["umap_all_json"]
-        cu_plot_path = self.path + ENDINGS["umap_top_json"]
-        umap_df_path = composite_path(
-            NANODIP_REPORTS,
-            self.sample_name, self.reference_name, ENDINGS["umap_csv"],
-        )
-
-        return (os.path.exists(plot_path) and
-                os.path.exists(cu_plot_path) and
-                os.path.exists(methyl_overlap_path) and
-                os.path.exists(umap_df_path)
+        return (
+            os.path.exists(self.path("methyl")) and
+            os.path.exists(self.path("umap_all_json")) and
+            os.path.exists(self.path("umap_top_json")) and
+            os.path.exists(self.path("umap_csv"))
         )
 
     def read_from_disk(self):
-        methyl_overlap_path = composite_path(
-            NANODIP_REPORTS,
-            self.sample_name, self.reference_name, ENDINGS["methyl"],
-        )
-        plot_path = self.path + ENDINGS["umap_all_json"]
-        cu_plot_path = self.path + ENDINGS["umap_top_json"]
+        methyl_overlap_path = self.path("methyl")
+        plot_path = self.path("umap_all_json")
+        cu_plot_path = self.path("umap_top_json")
 
         # Read UMAP plot as json.
         with open(plot_path, "r") as f:
             self.plot_json = f.read()
-        #self.plot = from_json(self.plot_json)
 
         # Read UMAP close-up plot as json.
         with open(cu_plot_path, "r") as f:
             self.cu_plot_json = f.read()
-        #self.cu_plot = from_json(self.cu_plot_json)
 
         # Read Methylation Matrix.
         self.methyl_overlap = np.load(methyl_overlap_path,
             allow_pickle=True)
 
         # Read UMAP Matrix.
-        file_path = composite_path(
-            NANODIP_REPORTS,
-            self.sample_name, self.reference_name, ENDINGS["umap_csv"],
-        )
-        self.umap_df = pd.read_csv(file_path)
+        self.umap_df = pd.read_csv(self.path("umap_csv"))
 
+    def read_precalculated_umap_matrix(self, umap_matrix):
+        self.reference = ReferenceData(self.reference_name)
+        path_xlsx = composite_path(
+            NANODIP_REPORTS,
+            self.sample_name,
+            umap_matrix.replace(".xlsx", ""),
+            ENDINGS["umap_xlsx"],
+        )
+        precalculated_umap = pd.read_excel(
+            path_xlsx,
+            header=0,
+            names=["id", "x", "y"],
+            engine="openpyxl",
+        )
+
+        reference_df = pd.DataFrame(
+            zip(
+                self.reference.specimen_ids,
+                self.reference.methylation_class,
+                self.reference.description,
+            ),
+            columns=["id", "methylation_class", "description"],
+        )
+        self.umap_df = pd.merge(
+            precalculated_umap, reference_df, on = "id"
+        )
+        umap_sample = self.umap_df[["x","y"]].loc[
+            self.umap_df.id==self.sample_name
+        ].values
+        import pdb; pdb.set_trace()
+        self.umap_df.distance = [
+            np.linalg.norm(z - umap_sample)
+            for z in self.umap_df.loc[["x", "y"]]
+        ]
 
 class CNVData:
     """CNV data container and methods for invoking cnv plot algorithm."""
     genome = ReferenceGenome()
     def __init__(self, sample_name):
         self.sample_name = sample_name
-        self.path = composite_path(NANODIP_REPORTS, sample_name, "")
+        self.base_path = composite_path(NANODIP_REPORTS, sample_name, "")
 
     def read_from_disk(self):
-        plot_path = self.path + ENDINGS["cnv_json"]
-        genes_path = self.path + ENDINGS["genes"]
+        plot_path = self.base_path + ENDINGS["cnv_json"]
+        genes_path = self.base_path + ENDINGS["genes"]
         with open(plot_path, "r") as f:
             self.plot_json = f.read()
         self.plot = from_json(self.plot_json)
         self.genes = pd.read_csv(genes_path)
 
     def files_on_disk(self):
-        plot_path = self.path + ENDINGS["cnv_json"]
-        genes_path = self.path + ENDINGS["genes"]
+        plot_path = self.base_path + ENDINGS["cnv_json"]
+        genes_path = self.base_path + ENDINGS["genes"]
         return (
             os.path.exists(plot_path) and
             os.path.exists(genes_path)
@@ -565,22 +561,22 @@ class CNVData:
 
     def save_to_disk(self):
         self.plot.write_html(
-            self.path + ENDINGS["cnv_html"],
+            self.base_path + ENDINGS["cnv_html"],
             config=dict({"scrollZoom": True}),
         )
-        write_json(self.plot, self.path + ENDINGS["cnv_json"])
+        write_json(self.plot, self.base_path + ENDINGS["cnv_json"])
         # time consuming operation (1.96s)
         self.plot.write_image(
-            self.path + ENDINGS["cnv_png"], width=1280, height=720, scale=3,
+            self.base_path + ENDINGS["cnv_png"], width=1280, height=720, scale=3,
         )
-        with open(self.path + ENDINGS["aligned_reads"], "w") as f:
+        with open(self.base_path + ENDINGS["aligned_reads"], "w") as f:
             f.write("%s" % len(self.sample.reads))
-        with open(self.path + ENDINGS["reads_csv"], "w") as f:
+        with open(self.base_path + ENDINGS["reads_csv"], "w") as f:
             write = csv.writer(f)
             write.writerows(self.sample.reads)
-        self.genes.to_csv(self.path + ENDINGS["genes"], index=False)
+        self.genes.to_csv(self.base_path + ENDINGS["genes"], index=False)
         self.relevant_genes.to_csv(
-            self.path + ENDINGS["relevant_genes"],
+            self.base_path + ENDINGS["relevant_genes"],
             index=False,
         )
 

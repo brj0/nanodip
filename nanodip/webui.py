@@ -10,6 +10,8 @@ the Web UI cell below.
 """
 
 # start_external_modules
+from pdf2image import convert_from_path
+from urllib import request
 import cherrypy
 import json
 import pandas as pd
@@ -29,9 +31,12 @@ from config import (
     BROWSER_FAVICON,
     CHERRYPY_HOST,
     CHERRYPY_PORT,
+    CNV_LINK,
     DATA,
     DEBUG_MODE,
     ENDINGS,
+    EPIDIP_SERVER,
+    EPIDIP_UMAP_COORDINATE_FILES,
     IMAGES,
     NANODIP_REPORTS,
     NEEDED_NUMBER_OF_BASES,
@@ -128,6 +133,30 @@ class Devices:
         out += ", ".join([str(d) for d in self.list])
         out += "]"
         return out
+
+def download_epidip_data(sentrix_id, reference_umap):
+    """Downloads UMAP plot coordinates of reference data and CNV plot of
+    sample with given Sentrix ID.
+    """
+    umap_coordinates_local = composite_path(
+        NANODIP_REPORTS,
+        sentrix_id,
+        reference_umap[:-5],
+        ENDINGS["umap_xlsx"],
+    )
+
+    URL = EPIDIP_SERVER + reference_umap
+    response = request.urlretrieve(URL, umap_coordinates_local)
+
+    cnv_local = composite_path(NANODIP_REPORTS, sentrix_id, ENDINGS["cnv_pdf"])
+    URL = CNV_LINK % sentrix_id
+    response = request.urlretrieve(URL, cnv_local)
+
+    image = convert_from_path(cnv_local)[0]
+    image.save(cnv_local.replace("pdf", "png"), "png")
+
+def epidip_report(sentrix_id, reference_id, reference_umap):
+    pass
 
 class UI(object):
     """The CherryPy Web UI Webserver class defines entrypoints and
@@ -438,7 +467,7 @@ class UI(object):
             raise cherrypy.HTTPError(405, "URL not allowed")
 
         def make_plot(plt_data, lock):
-            """Plot function for multiprocessing."""
+            """Plot functirn for multiprocessing."""
             lock.acquire()
             if not plt_data.files_on_disk() or new == "True":
                 try:
@@ -512,10 +541,6 @@ class UI(object):
         )
         convert_html_to_pdf(html_report, report_path)
         raise cherrypy.HTTPRedirect(server_report_path)
-
-    @cherrypy.expose
-    def about(self):
-        return render_template("about.html")
 
     @cherrypy.expose
     def live_device_status(self, device_id=""):
@@ -620,6 +645,24 @@ class UI(object):
     def change_voltage(self, device_id="", voltage=""):      
         set_bias_voltage(device_id, voltage)
         return render_template(voltage=voltage)
+
+    @cherrypy.expose
+    def epidip_report(self, sentrix_id=None, reference_id=None, reference_umap=None):
+        if sentrix_id and reference_umap:
+            epidip_report(sentrix_id, reference_id, reference_umap)
+        else:
+            return render_template(
+                "epidip_report.html",
+                sentrix_id=sentrix_id,
+                reference_umap=reference_umap,
+                epidip_umaps=EPIDIP_UMAP_COORDINATE_FILES,
+                references=reference_annotations(),
+            )
+    
+    @cherrypy.expose
+    def about(self):
+        return render_template("about.html")
+
 
 def start_webserver():
     """Start CherryPy Webserver."""

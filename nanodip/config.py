@@ -53,7 +53,7 @@ REFERENCE_METHYLATION_SHAPE = os.path.join(REFERENCE_METHYLATION_DATA, "shape.cs
 # Genome reference data
 CHROMOSOMES = os.path.join(REFERENCE_DATA, "hg19_cnv", "hg19_chromosomes.tsv")
 
-# Human reference genome in fa/minimap2 mmi format.
+# Human relerencn ce genome in fa/minimap2 mmi format.
 REFERENCE_GENOME_FA = "/applications/reference_data/minimap_data/hg19.fa"
 REFERENCE_GENOME_MMI = "/applications/reference_data/minimap_data/hg19_20201203.mmi"
 
@@ -167,7 +167,6 @@ F5C = "/applications/f5c/f5c"
 MINIMAP2 = "/applications/nanopolish/minimap2/minimap2"
 SAMTOOLS = "/applications/samtools/samtools"
 
-
 EPIDIP_SERVER = "http://s1665.rootserver.io/umap_links/"
 EPIDIP_UMAP_COORDINATE_FILES = [
     "UMAP_all_bVals_top_25000.xlsx",
@@ -177,5 +176,4 @@ EPIDIP_UMAP_COORDINATE_FILES = [
     "gpumap_50000.xlsx",
     "gpumap_75000.xlsx",
 ]
-
 CNV_LINK = "http://s1665.rootserver.io/umapplot01/%s_CNV_IFPBasel_annotations.pdf" 
