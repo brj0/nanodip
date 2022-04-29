@@ -115,9 +115,13 @@ requires manual patching after installation with pip.
 from webui import (
     start_webserver,
 )
+from utils import (
+    sanity_check,
+)
 # end_internal_modules
 
 if __name__ == "__main__":
+    sanity_check()
     start_webserver()
 
 """

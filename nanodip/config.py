@@ -60,7 +60,7 @@ REFERENCE_GENOME_MMI = "/applications/reference_data/minimap_data/hg19_20201203.
 # HG19 Gene data
 # https://hgdownload.soe.ucsc.edu/goldenPath/hg19/bigZips/genes/hg19.refGene.gtf.gz
 GENES_RAW = os.path.join(REFERENCE_DATA, "hg19_cnv", "hg19.refGene.gtf")
-GENES = os.path.join(REFERENCE_DATA, "hg19_cnv", "hg19_genes.csv") # TODO crash if file changed
+GENES = os.path.join(REFERENCE_DATA, "hg19_cnv", "hg19_genes.csv")
 RELEVANT_GENES = os.path.join(REFERENCE_DATA, "hg19_cnv", "relevant_genes.csv")
 
 # Beta values above cutoff will be interpreted as methylated.
@@ -86,7 +86,7 @@ NEEDED_NUMBER_OF_BASES = 150_000_000
 CNV_URL_PREFIX = "http://s1665.rootserver.io/umapplot01/"
 CNV_URL_SUFFIX = "_CNV_IFPBasel_annotations.pdf"
 
-CNV_GRID = "/applications/reference_data/hg19_cnv/grid.json" # TODO to /tmp/nanodip
+CNV_GRID = "/applications/reference_data/hg19_cnv/grid.json"
 
 # Number of reference cases to be shown in subplot including copy
 # number profile links (not advisable >200, plotly will become really
@@ -116,7 +116,7 @@ EXCLUDED_FROM_ANALYSIS = [
 ]
 
 # List of file name sections that identify past runs.
-RESULT_ENDINGS = {
+RESULT_ENDING = {
     "cnv_png": "CNVplot.png",
     "ranking": "NanoDiP_ranking.pdf",
     "report": "NanoDiP_report.pdf",
@@ -124,8 +124,8 @@ RESULT_ENDINGS = {
     "umap_top": "UMAP_top.html",
 }
 
-ENDINGS = {
-    **RESULT_ENDINGS,
+ENDING = {
+    **RESULT_ENDING,
     "aligned_reads": "alignedreads.txt",
     "cnv_bins_json": "CNV_binsplot.json",
     "cnv_html": "CNVplot.html",

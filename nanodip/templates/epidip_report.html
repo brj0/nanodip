@@ -7,7 +7,7 @@
 {% block body %}
   <!-- EpiDiP report for {{sentrix_id}} with {{reference_umap}} -->
   <hr>
-  <form action="epidipReport" method="GET">
+  <form action="epidip_report" method="GET">
   &nbsp;
   <input type="text" name="sentrix_id" />
   &nbsp;
@@ -19,7 +19,7 @@
   &nbsp;
   Reference set
   &nbsp;
-  <select name="referenceFile" id="referenceFile">
+  <select name="reference_id" id="reference_id">
     {% for ref in references %}
     <option value="{{ref}}">{{ref}}</option>
     {% endfor %}

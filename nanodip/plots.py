@@ -24,7 +24,7 @@ from config import (
     CNV_GRID,
     CNV_URL_PREFIX,
     CNV_URL_SUFFIX,
-    ENDINGS,
+    ENDING,
     NANODIP_REPORTS,
     PLOTLY_RENDER_MODE,
     UMAP_PLOT_TOP_MATCHES,
@@ -217,7 +217,7 @@ def pie_chart(umap_data):
         color="methylation_class",
         color_discrete_map=discrete_colors(num_per_class.methylation_class),
         title=(
-            f"Nearest UMAP neighbors for {sample.name} <br><sup>"
+            f"Nearest UMAP neighbors for {umap_data.sample_name} <br><sup>"
             f"Reference: {reference.name} "
             f"({len(reference.annotated_specimens)}"
             f"cases), {len(sample.cpg_overlap)} CpGs</sup>"
@@ -243,7 +243,9 @@ def get_cnv(read_positions, genome):
     read_start_positions = [i[0] for i in read_positions]
 
     copy_numbers, bin_edges = np.histogram(
-        read_start_positions, bins=get_bin_edges(n_bins, genome), range=[0, genome.length]
+        read_start_positions,
+        bins=get_bin_edges(n_bins, genome),
+        range=[0, genome.length],
     )
 
     bin_midpoints = (bin_edges[1:] + bin_edges[:-1])/2
@@ -369,11 +371,11 @@ class UMAPData:
     def __init__(self, sample_name, reference_name):
         self.sample_name = sample_name
         self.reference_name = reference_name
+        self.sample = SampleData(self.sample_name)
+        self.reference = ReferenceData(self.reference_name)
 
     def make_umap_plot(self):
         """Invoke umap plot algorithm and save to disk."""
-        self.sample = SampleData(self.sample_name)
-        self.reference = ReferenceData(self.reference_name)
         self.methyl_overlap, self.umap_df = umap_data_frame(
             self.sample, self.reference
         )
@@ -450,7 +452,7 @@ class UMAPData:
     def path(self, ending):
         return composite_path(
             NANODIP_REPORTS,
-            self.sample_name, self.reference_name, ENDINGS[ending],
+            self.sample_name, self.reference_name, ENDING[ending],
         )
 
     def files_on_disk(self):
@@ -487,14 +489,14 @@ class UMAPData:
             NANODIP_REPORTS,
             self.sample_name,
             umap_matrix.replace(".xlsx", ""),
-            ENDINGS["umap_xlsx"],
+            ENDING["umap_xlsx"],
         )
         precalculated_umap = pd.read_excel(
             path_xlsx,
             header=0,
             names=["id", "x", "y"],
             engine="openpyxl",
-        )
+        )   # TODO better use csv. Time consumption 4.4s
 
         reference_df = pd.DataFrame(
             zip(
@@ -504,17 +506,21 @@ class UMAPData:
             ),
             columns=["id", "methylation_class", "description"],
         )
+        if not self.sample_name in reference_df.id.values:
+            reference_df.loc[len(reference_df.index)] = [
+                self.sample_name, self.sample_name, "Analysis Sample"
+            ]
         self.umap_df = pd.merge(
             precalculated_umap, reference_df, on = "id"
         )
-        umap_sample = self.umap_df[["x","y"]].loc[
+        umap_sample = self.umap_df[["x", "y"]].loc[
             self.umap_df.id==self.sample_name
         ].values
-        import pdb; pdb.set_trace()
-        self.umap_df.distance = [
-            np.linalg.norm(z - umap_sample)
-            for z in self.umap_df.loc[["x", "y"]]
+        self.umap_df["distance"] = [
+            np.linalg.norm([z.x, z.y] - umap_sample)
+            for z in self.umap_df.itertuples()
         ]
+        self.umap_df = self.umap_df.sort_values(by="distance")
 
 class CNVData:
     """CNV data container and methods for invoking cnv plot algorithm."""
@@ -524,16 +530,16 @@ class CNVData:
         self.base_path = composite_path(NANODIP_REPORTS, sample_name, "")
 
     def read_from_disk(self):
-        plot_path = self.base_path + ENDINGS["cnv_json"]
-        genes_path = self.base_path + ENDINGS["genes"]
+        plot_path = self.base_path + ENDING["cnv_json"]
+        genes_path = self.base_path + ENDING["genes"]
         with open(plot_path, "r") as f:
             self.plot_json = f.read()
         self.plot = from_json(self.plot_json)
         self.genes = pd.read_csv(genes_path)
 
     def files_on_disk(self):
-        plot_path = self.base_path + ENDINGS["cnv_json"]
-        genes_path = self.base_path + ENDINGS["genes"]
+        plot_path = self.base_path + ENDING["cnv_json"]
+        genes_path = self.base_path + ENDING["genes"]
         return (
             os.path.exists(plot_path) and
             os.path.exists(genes_path)
@@ -561,22 +567,22 @@ class CNVData:
 
     def save_to_disk(self):
         self.plot.write_html(
-            self.base_path + ENDINGS["cnv_html"],
+            self.base_path + ENDING["cnv_html"],
             config=dict({"scrollZoom": True}),
         )
-        write_json(self.plot, self.base_path + ENDINGS["cnv_json"])
+        write_json(self.plot, self.base_path + ENDING["cnv_json"])
         # time consuming operation (1.96s)
         self.plot.write_image(
-            self.base_path + ENDINGS["cnv_png"], width=1280, height=720, scale=3,
+            self.base_path + ENDING["cnv_png"], width=1280, height=720, scale=3,
         )
-        with open(self.base_path + ENDINGS["aligned_reads"], "w") as f:
+        with open(self.base_path + ENDING["aligned_reads"], "w") as f:
             f.write("%s" % len(self.sample.reads))
-        with open(self.base_path + ENDINGS["reads_csv"], "w") as f:
+        with open(self.base_path + ENDING["reads_csv"], "w") as f:
             write = csv.writer(f)
             write.writerows(self.sample.reads)
-        self.genes.to_csv(self.base_path + ENDINGS["genes"], index=False)
+        self.genes.to_csv(self.base_path + ENDING["genes"], index=False)
         self.relevant_genes.to_csv(
-            self.base_path + ENDINGS["relevant_genes"],
+            self.base_path + ENDING["relevant_genes"],
             index=False,
         )
 
@@ -589,12 +595,16 @@ class CNVData:
         genes["cn_obs"] = genes.interval.apply(
             lambda z: number_of_reads(read_start_pos, z)
         )
-        genes["cn_norm"] = genes.apply(
-            lambda z: z["cn_obs"]/z["len"] * bin_width, # TODO exp/norm not compatible
+        genes["cn_per_mega_base"] = genes.apply(
+            lambda z: z["cn_obs"]/z["len"] * 1e6, # TODO auto draw extreme values
             axis=1,
         )
         genes["cn_exp"] = genes.apply(
             lambda z: len(self.sample.reads)*z["len"]/CNVData.genome.length,
+            axis=1,
+        )
+        genes["cn_obs_exp_ratio"] = genes.apply(
+            lambda z: z["cn_obs"]/z["cn_exp"],
             axis=1,
         )
         genes = genes.sort_values(by="cn_obs", ascending=False)

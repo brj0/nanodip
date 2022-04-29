@@ -32,7 +32,7 @@ from config import (
     REFERENCE_GENOME_FA,
     REFERENCE_GENOME_FA,
     REFERENCE_GENOME_MMI,
-    RESULT_ENDINGS,
+    RESULT_ENDING,
     SAMTOOLS,
     THIS_HOST,
 )
@@ -711,7 +711,7 @@ def get_all_results():
     """
     files = []
     for f in os.listdir(NANODIP_REPORTS):
-        for e in RESULT_ENDINGS.values():
+        for e in RESULT_ENDING.values():
             if f.endswith(e):
                 mod_time = os.path.getmtime(
                     os.path.join(NANODIP_REPORTS, f)
@@ -821,7 +821,6 @@ def methylation_caller(sample_name, analyze_one=True):
             ".fast5", ".fastq"
         ).replace("fast5_pass", "fastq_pass")
 
-    # TODO @HEJU Daten mit _fail_ werden so nicht ausgeschlossen. Gewollt?
     fast5q_file_pairs = [
         [f, from_5_to_q(f)] for f in fast5_files
         if os.path.exists(from_5_to_q(f))

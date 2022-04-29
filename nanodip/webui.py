@@ -34,7 +34,7 @@ from config import (
     CNV_LINK,
     DATA,
     DEBUG_MODE,
-    ENDINGS,
+    ENDING,
     EPIDIP_SERVER,
     EPIDIP_UMAP_COORDINATE_FILES,
     IMAGES,
@@ -142,21 +142,18 @@ def download_epidip_data(sentrix_id, reference_umap):
         NANODIP_REPORTS,
         sentrix_id,
         reference_umap[:-5],
-        ENDINGS["umap_xlsx"],
+        ENDING["umap_xlsx"],
     )
 
     URL = EPIDIP_SERVER + reference_umap
     response = request.urlretrieve(URL, umap_coordinates_local)
 
-    cnv_local = composite_path(NANODIP_REPORTS, sentrix_id, ENDINGS["cnv_pdf"])
+    cnv_local = composite_path(NANODIP_REPORTS, sentrix_id, ENDING["cnv_pdf"])
     URL = CNV_LINK % sentrix_id
     response = request.urlretrieve(URL, cnv_local)
 
     image = convert_from_path(cnv_local)[0]
     image.save(cnv_local.replace("pdf", "png"), "png")
-
-def epidip_report(sentrix_id, reference_id, reference_umap):
-    pass
 
 class UI(object):
     """The CherryPy Web UI Webserver class defines entrypoints and
@@ -502,7 +499,7 @@ class UI(object):
                 405, 
                 "CpG count file not found. Probably UMAP not completed."
             )
-        path = composite_path(NANODIP_REPORTS, samp, ENDINGS["aligned_reads"])
+        path = composite_path(NANODIP_REPORTS, samp, ENDING["aligned_reads"])
         try:
             with open(path, "r") as f:
                 read_numbers = f.read()
@@ -512,12 +509,12 @@ class UI(object):
                 "Aligned reads file not found. Probably UMAP not completed."
             )
 
-        cnv_path = composite_path(NANODIP_REPORTS, samp, ENDINGS["cnv_png"])
+        cnv_path = composite_path(NANODIP_REPORTS, samp, ENDING["cnv_png"])
         umap_path = composite_path(
-            NANODIP_REPORTS, samp, ref, ENDINGS["umap_top_png"],
+            NANODIP_REPORTS, samp, ref, ENDING["umap_top_png"],
         )
         pie_chart_path = composite_path(
-            NANODIP_REPORTS, samp, ref, ENDINGS["pie"]
+            NANODIP_REPORTS, samp, ref, ENDING["pie"]
         )
 
         html_report = render_template(
@@ -534,10 +531,10 @@ class UI(object):
             pie_chart_path=pie_chart_path,
         )
         report_path = composite_path(
-            NANODIP_REPORTS, samp, ref, ENDINGS["report"],
+            NANODIP_REPORTS, samp, ref, ENDING["report"],
         )
         server_report_path = composite_path(
-            "reports", samp, ref, ENDINGS["report"],
+            "reports", samp, ref, ENDING["report"],
         )
         convert_html_to_pdf(html_report, report_path)
         raise cherrypy.HTTPRedirect(server_report_path)
@@ -614,15 +611,15 @@ class UI(object):
         sample_id = run_sample_id(device_id)
         reference = read_reference(sample_id)
         cnv_plt_path_png = composite_path(
-            "reports", sample_id, ENDINGS["cnv_png"],
+            "reports", sample_id, ENDING["cnv_png"],
         )
         umap_plt_path_png = composite_path(
             "reports",
-            sample_id, reference, ENDINGS["umap_all_png"],
+            sample_id, reference, ENDING["umap_all_png"],
         )
         umap_plt_path_html = composite_path(
             "reports",
-            sample_id, reference, ENDINGS["umap_all_html"],
+            sample_id, reference, ENDING["umap_all_html"],
         )
         return render_template(
             "live_plots.html",
@@ -647,9 +644,19 @@ class UI(object):
         return render_template(voltage=voltage)
 
     @cherrypy.expose
-    def epidip_report(self, sentrix_id=None, reference_id=None, reference_umap=None):
-        if sentrix_id and reference_umap:
-            epidip_report(sentrix_id, reference_id, reference_umap)
+    def epidip_report(
+        self,
+        sentrix_id=None,
+        reference_id=None,
+        reference_umap=None,
+    ):
+        if sentrix_id and reference_id and reference_umap:
+            download_epidip_data(sentrix_id, reference_umap)
+            umap_data = UMAPData(sentrix_id, reference_id)
+            umap_data.read_precalculated_umap_matrix(reference_umap)
+            umap_data.draw_pie_chart()
+            umap_data.draw_scatter_plots()
+            UI.make_pdf(self, samp=sentrix_id, ref=reference_id)
         else:
             return render_template(
                 "epidip_report.html",

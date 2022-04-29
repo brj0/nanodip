@@ -234,6 +234,9 @@ class ReferenceGenome:
     def __iter__(self):
         return self.chrom.itertuples()
 
+    def __len__(self):
+        return self.length
+
     def set_genes(self):
         """Read and set genes from csv file."""
         self.genes = pd.read_csv(
@@ -300,7 +303,7 @@ class SampleData:
     def __init__(self, name):
         self.name = name
         self.cpg_sites = SampleData.get_read_cpgs(name)
-        self.cpg_overlap = None
+        self.cpg_overlap = set()
         self.cpg_overlap_index = None
         self.reads = None
 
@@ -333,11 +336,6 @@ class SampleData:
             methylation status.
         """
 
-        sample_path = os.path.join(NANODIP_OUTPUT, sample_name)
-
-        if not os.path.exists(sample_path):
-            raise FileNotFoundError(sample_path)
-
         cpg_files = files_by_ending(NANODIP_OUTPUT, sample_name,
                                     ending="methoverlap.tsv")
 
@@ -359,7 +357,7 @@ class SampleData:
 
         Some probes have been skipped from the reference set, e.g. sex
         chromosomes.
-        """ #TODO is this true?
+        """
         self.cpg_overlap = set(self.cpg_sites["cpg_site"]).intersection(
             reference.cpg_sites.keys())
 

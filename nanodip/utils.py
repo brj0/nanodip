@@ -13,25 +13,69 @@ import inspect
 import jinja2
 import os
 import pandas as pd
+import warnings
 import xhtml2pdf.pisa
 # end_external_modules
 
 # start_internal_modules
 from config import (
-    ILUMINA_CG_MAP,
     ANNOTATIONS,
+    ANNOTATIONS_ABBREVIATIONS_BASEL,
+    ANNOTATIONS_ABBREVIATIONS_TCGA,
     BARCODE_NAMES,
+    BETA_VALUES,
+    BROWSER_FAVICON,
+    CHROMOSOMES,
     DATA,
-    ENDINGS,
-    NANODIP_REPORTS,
+    ENDING,
     EXCLUDED_FROM_ANALYSIS,
+    F5C,
+    GENES,
+    GENES_RAW,
+    ILUMINA_CG_MAP,
+    MINIMAP2,
+    NANODIP_REPORTS,
+    REFERENCE_GENOME_FA,
+    REFERENCE_GENOME_MMI,
+    RELEVANT_GENES,
+    SAMTOOLS,
 )
 # end_internal_modules
+
+def sanity_check():
+    """Checks if reference data is available and generates a warning
+    if necessary.
+    """
+    requested_files = [
+        BETA_VALUES,
+        ANNOTATIONS_ABBREVIATIONS_BASEL,
+        ANNOTATIONS_ABBREVIATIONS_TCGA,
+        ILUMINA_CG_MAP,
+        CHROMOSOMES,
+        REFERENCE_GENOME_FA,
+        REFERENCE_GENOME_MMI,
+        GENES_RAW,
+        GENES,
+        RELEVANT_GENES,
+        BROWSER_FAVICON,
+        F5C,
+        MINIMAP2,
+        SAMTOOLS,
+    ]
+    for f in requested_files:
+        f_name = os.path.basename(f)
+        if not os.path.exists(f):
+            warnings.warn(
+                f"File '{f}' not found.\nFunctionality may be restricted.",
+                RuntimeWarning,
+            )
 
 def extract_referenced_cpgs(sample_methylation,
                             output_overlap,
                             output_overlap_cnt):
     """Extract ilumina CpG sites including methylation status from sample.
+    Sex chromosomes are removed.
+
     Args:
         sample_methylation: methylation file of sample
         output_overlap: file path of CpG overlap
@@ -50,11 +94,11 @@ def extract_referenced_cpgs(sample_methylation,
     # Extract singelton CpG's
     cpgs = cpgs.loc[cpgs["num_cpgs_in_group"] == 1]
     cpgs = cpgs.loc[
-       (~cpgs["chromosome"].isin(["chrX", "chrY"])) # TODO is this necessary?
+       (~cpgs["chromosome"].isin(["chrX", "chrY"]))
        & (~cpgs["ilmnid"].duplicated())
     ]
     cpgs["is_methylated"] = 0
-    cpgs.loc[cpgs["methylated_frequency"] > 0.5 ,"is_methylated"] = 1
+    cpgs.loc[cpgs["methylated_frequency"] > 0.5, "is_methylated"] = 1
     # Write overlap Data Frame
     cpgs[["ilmnid", "is_methylated"]].to_csv(
         output_overlap, header=False, index=False, sep="\t")
@@ -133,7 +177,6 @@ def get_runs():
 def predominant_barcode(sample_name):
     """Returns the predominant barcode within all fast5 files."""
     fast5_files = files_by_ending(DATA, sample_name, ending=".fast5")
-    # TODO @HEJU im Original fehlt diese Zeile:
     pass_fast5_files = [f for f in fast5_files if "_pass_" in f]
     barcode_hits=[]
     for barcode in BARCODE_NAMES:
