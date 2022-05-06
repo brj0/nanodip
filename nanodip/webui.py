@@ -13,6 +13,7 @@ the Web UI cell below.
 from pdf2image import convert_from_path
 from urllib import request
 import cherrypy
+import grpc
 import json
 import pandas as pd
 import psutil
@@ -37,10 +38,8 @@ from config import (
     ENDING,
     EPIDIP_SERVER,
     EPIDIP_UMAP_COORDINATE_FILES,
-    IMAGES,
     NANODIP_REPORTS,
     NEEDED_NUMBER_OF_BASES,
-    VERBOSITY,
 )
 from utils import (
     convert_html_to_pdf,
@@ -162,6 +161,7 @@ class UI(object):
     # global variables within the CherryPy Web UI
     # TODO use Semaphore instead
     cnv_lock = mp.Lock()
+    cnv_sem = threading.Semaphore()
     # TODO use Semaphore instead
     umap_lock = mp.Lock()
     cpg_sem = threading.Semaphore()
@@ -552,10 +552,7 @@ class UI(object):
         try:
             status = device_status(device_id)
             previous_activity = True
-        except Exception as e:
-            # TODO catch correct exception.
-            print("Name of the catched exception:", e)
-            sys.exit(1)
+        except grpc._channel._InactiveRpcError:
             previous_activity = False
         return render_template(
             "device_status.html",
@@ -682,6 +679,8 @@ def start_webserver():
         cherrypy.log.screen = False
         cherrypy.config.update({'log.screen': False})
         cherrypy.config.update({ "environment": "embedded" })
+    cherrypy.log.access_file = composite_path(NANODIP_REPORTS, "cherrypy.log")
+    cherrypy.log.error_file = composite_path(NANODIP_REPORTS, "cherrypy.log")
 
     print(f"NanoDiP server running at http://{CHERRYPY_HOST}:{CHERRYPY_PORT}")
 
@@ -689,10 +688,6 @@ def start_webserver():
         '/favicon.ico': {
             'tools.staticfile.on': True,
             'tools.staticfile.filename': BROWSER_FAVICON,
-        },
-        '/img': {
-            'tools.staticdir.on': True,
-            'tools.staticdir.dir': IMAGES,
         },
         '/reports': {
             'tools.staticdir.on': True,

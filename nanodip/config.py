@@ -22,13 +22,11 @@ by NanoDiP are written into `NANODIP_REPORTS`.
 
 # start_external_modules
 import os
-from enum import Enum
 # end_external_modules
 
 # start_internal_modules
 # end_internal_modules
 
-NANODIP_VERSION = 31
 __version__ = "31"
 
 # Data directories for MinKNOW and NanoDiP output.
@@ -53,7 +51,7 @@ REFERENCE_METHYLATION_SHAPE = os.path.join(REFERENCE_METHYLATION_DATA, "shape.cs
 # Genome reference data
 CHROMOSOMES = os.path.join(REFERENCE_DATA, "hg19_cnv", "hg19_chromosomes.tsv")
 
-# Human relerencn ce genome in fa/minimap2 mmi format.
+# Human reference genome in fa/minimap2 mmi format.
 REFERENCE_GENOME_FA = "/applications/reference_data/minimap_data/hg19.fa"
 REFERENCE_GENOME_MMI = "/applications/reference_data/minimap_data/hg19_20201203.mmi"
 
@@ -82,9 +80,8 @@ READS_PER_FILE = "400"
 # Number of basecalled bases until run termination occurs.
 NEEDED_NUMBER_OF_BASES = 150_000_000
 
-# URL prefix/suffix to load PDF with CNV plot for a given Sentrix ID.
-CNV_URL_PREFIX = "http://s1665.rootserver.io/umapplot01/"
-CNV_URL_SUFFIX = "_CNV_IFPBasel_annotations.pdf"
+# URL to load PDF with CNV plot for a given Sentrix ID (substituted for '%s')
+CNV_LINK = "http://s1665.rootserver.io/umapplot01/%s_CNV_IFPBasel_annotations.pdf" 
 
 CNV_GRID = "/applications/reference_data/hg19_cnv/grid.json"
 
@@ -132,7 +129,7 @@ ENDING = {
     "cnv_json": "CNVplot.json",
     "cnv_pdf": "CNVplot.pdf",
     "cnv_png": "CNVplot.png",
-    "cpg_cnt":"cpgcount.txt",
+    "cpg_cnt": "cpgcount.txt",
     "genes": "genes.csv",
     "methyl": "methyl_overlap.npy",
     "pie": "pie.png",
@@ -149,7 +146,7 @@ ENDING = {
 
 DEBUG_MODE = True
 # 0=low log verbosity, 1=high log verbosity (with timestamps, for benchmarking and debugging)
-VERBOSITY = 0 # TODO replace by logger
+VERBOSITY = 0 # TODO implement this
 
 # Host and port on which the NanoDiP UI will be served
 CHERRYPY_HOST = "localhost"
@@ -158,9 +155,6 @@ CHERRYPY_PORT = 8080
 
 # The web browser favicon file for this application.
 BROWSER_FAVICON = "/applications/nanodip/nanodip/static/img/favicon.ico"
-
-# The location where image files for the web application are stored.
-IMAGES ="/applications/nanodip"
 
 # Paths to binaries for methylation calling.
 F5C = "/applications/f5c/f5c"
@@ -176,4 +170,3 @@ EPIDIP_UMAP_COORDINATE_FILES = [
     "gpumap_50000.xlsx",
     "gpumap_75000.xlsx",
 ]
-CNV_LINK = "http://s1665.rootserver.io/umapplot01/%s_CNV_IFPBasel_annotations.pdf" 

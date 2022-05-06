@@ -44,6 +44,9 @@ from utils import (
 )
 # end_internal_modules
 
+# Define logger
+logger = logging.getLogger(__name__)
+
 def minknow_manager():
     """Construct a manager using the host and port provided. This is
     used to connect to the MinKNOW service trough the MK API.
@@ -380,9 +383,9 @@ def start_run(
     # Parse arguments to be passed to started protocols:
     args = parse_args(args_list)
 
-    # Specify --verbose on the command line to get extra details.
-    if args.verbose:
-        logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+    # # Specify --verbose on the command line to get extra details.
+    # if args.verbose:
+        # logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 
     # Find which positions we are going to start protocol on:
     positions = [
@@ -782,11 +785,29 @@ def single_file_methylation_caller(analysis_dir, file_name):
         methyl_calling,
         methyl_frequency,
     ]
-    # TODO check for successful termination
+
+    def log_subprocess_output(pipe):
+        """Logs subprocess (to file) and also sends output to stdout."""
+        stdout_data, stderr_data = pipe.communicate()
+        for line in stdout_data.decode().split("\n"):
+            logger.info(line)
+            print(line)
+        for line in stderr_data.decode().split("\n"):
+            logger.info(line)
+            print(line)
+
     for cmd in commands:
         cmd_str = " ".join(cmd)
-        p = subprocess.Popen(cmd_str, shell=True, stdout=subprocess.PIPE)
-        p.wait()
+        process = subprocess.Popen(
+            cmd_str,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        log_subprocess_output(process)
+        exit_code = process.wait()
+        if exit_code != 0:
+            logger.error("Error occured on subprocess '%s'", cmd[0])
     # Calculate CpG overlap.
     extract_referenced_cpgs(
         base_path + "-freq.tsv",

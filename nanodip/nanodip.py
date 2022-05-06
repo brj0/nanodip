@@ -109,7 +109,18 @@ requires manual patching after installation with pip.
 
 # python_modules_to_import
 # start_external_modules
+import logging
+import sys
 # end_external_modules
+
+# Set logging options
+logging.basicConfig(
+    filename="/data/nanodip_reports/nanodip.log",
+    # stream=sys.stdout,
+    level=logging.DEBUG,
+    format="%(levelname)s %(filename)s,%(lineno)d [%(asctime)s]: %(message)s",
+    filemode="w",
+)
 
 # start_internal_modules
 from webui import (

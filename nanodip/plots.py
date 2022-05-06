@@ -22,8 +22,7 @@ import time
 # start_internal_modules
 from config import (
     CNV_GRID,
-    CNV_URL_PREFIX,
-    CNV_URL_SUFFIX,
+    CNV_LINK,
     ENDING,
     NANODIP_REPORTS,
     PLOTLY_RENDER_MODE,
@@ -44,6 +43,8 @@ from utils import (
 )
 # end_internal_modules
 
+# Define logger
+logger = logging.getLogger(__name__)
 
 def umap_plot_from_data(sample, reference, umap_data_frame, close_up):
     """Create and return umap plot from UMAP data.
@@ -104,12 +105,11 @@ def umap_plot_from_data(sample, reference, umap_data_frame, close_up):
         umap_plot.update_traces(marker=dict(size=5))
         # Add hyperlinks
         for _, row in umap_data_frame.iloc[1:].iterrows():
+            URL = CNV_LINK % row["id"]
             umap_plot.add_annotation(
                 x=row["x"],
                 y=row["y"],
-                text="<a href='" + CNV_URL_PREFIX + row["id"]
-                    + CNV_URL_SUFFIX
-                    + "' target='_blank'>&nbsp;</a>",
+                text=f"<a href='{URL}' target='_blank'>&nbsp;</a>",
                 showarrow=False,
                 arrowhead=1,
             )
@@ -314,7 +314,7 @@ def cnv_plot_from_data(data_x, data_y, E_y, sample_name, read_num, genome):
     grid = cnv_grid(genome)
     # Expected value: horizontal line.
     grid.add_hline(y=E_y, line_color="black", line_width=1)
-    cnv_plot = px.scatter(
+    plot = px.scatter(
         x=data_x,
         y=data_y,
         labels={
@@ -327,14 +327,14 @@ def cnv_plot_from_data(data_x, data_y, E_y, sample_name, read_num, genome):
         color_continuous_scale="Portland",
         render_mode=PLOTLY_RENDER_MODE,
     )
-    cnv_plot.update_traces(
+    plot.update_traces(
         hovertemplate="Copy Numbers = %{y} <br>",
     )
-    cnv_plot.update_layout(
+    plot.update_layout(
         grid.layout,
         yaxis_range = [-0.5, 2*E_y],
     )
-    return cnv_plot
+    return plot
 
 def number_of_reads(read_start_pos, interval):
     """Return the number of starting sequences whithin interval. Reads must
@@ -344,17 +344,16 @@ def number_of_reads(read_start_pos, interval):
     i_right = bisect.bisect_left(read_start_pos, right)
     return len(read_start_pos[i_left:i_right])
 
-def get_cnv_plot(sample, bin_midpoints, cnv, genome):
+def cnv_plot(sample, bin_midpoints, cnv, genome):
     """Create a genome-wide copy number plot and save data on dist."""
     logger.info(f"CNVP start")
     logger.info(f"Read positions:\n{sample.reads[:100]}")
-
     logger.info(f"Bin midpoints:\n{bin_midpoints}")
     logger.info(f"CNV:\n{cnv}")
 
     avg_read_per_bin = len(sample.reads) // len(bin_midpoints)
 
-    cnv_plot = cnv_plot_from_data(
+    plot = cnv_plot_from_data(
         data_x=bin_midpoints,
         data_y=cnv,
         E_y = avg_read_per_bin,
@@ -364,7 +363,7 @@ def get_cnv_plot(sample, bin_midpoints, cnv, genome):
     )
 
     logger.info(f"CNVP done")
-    return cnv_plot
+    return plot
 
 class UMAPData:
     """Umap data container and methods for invoking umap plot algorithm."""
@@ -552,7 +551,9 @@ class CNVData:
             self.sample.reads,
             CNVData.genome,
         )
-        self.plot = get_cnv_plot(
+        if len(self.bin_midpoints) == 0:
+            raise ValueError("no points to plot")
+        self.plot = cnv_plot(
             sample=self.sample,
             bin_midpoints=self.bin_midpoints,
             cnv=self.cnv,
@@ -644,20 +645,3 @@ class CNVData:
                 y=genes.cn_obs,
             ))
         return plot.to_json()
-
-
-# create and cofigure logger
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-formatter = logging.Formatter(
-    "%(levelname)s %(asctime)s %(lineno)d - %(message)s")
-file_handler = logging.FileHandler(
-    os.path.join(NANODIP_REPORTS, "nanodip.log"),
-    "w",
-)
-file_handler.setFormatter(formatter)
-logger.addHandler(file_handler)
-
-## output to console
-# stream_handler = logging.StreamHandler()
-# logger.addHandler(stream_handler)

@@ -28,8 +28,6 @@ from config import (
     CHROMOSOMES,
     CNV_GRID,
     CNV_LINK,
-    CNV_URL_PREFIX,
-    CNV_URL_SUFFIX,
     DATA,
     DEBUG_MODE,
     ENDING,
@@ -40,11 +38,9 @@ from config import (
     GENES,
     GENES_RAW,
     ILUMINA_CG_MAP,
-    IMAGES,
     MINIMAP2,
     NANODIP_OUTPUT,
     NANODIP_REPORTS,
-    NANODIP_VERSION,
     NEEDED_NUMBER_OF_BASES,
     PLOTLY_RENDER_MODE,
     READS_PER_FILE,
@@ -55,7 +51,6 @@ from config import (
     SAMTOOLS,
     THIS_HOST,
     UMAP_PLOT_TOP_MATCHES,
-    VERBOSITY,
 )
 from utils import (
     date_time_string_now,
@@ -107,7 +102,7 @@ reference = ReferenceData(reference_name)
 # genome = ReferenceGenome()
 
 # data.make_binary_reference_data()
-# cnv = CNVData(sample_name)
+cnv = CNVData(sample_name)
 
 umapp = UMAPData(sample_name, reference_name)
 umapp.read_from_disk()
@@ -137,17 +132,17 @@ G_len = CNVData.genome.length
 p_0 = g_len/G_len
 N = 11161
 
-def binomial_ci_wilson(success, trials):
+def binomial_ci_wilson(hits, trials):
     """Return 0.99 conficence intervall of binomial distribution
     using inexact Wilson method.
     """
-    p_hat = success/trials
+    p_hat = hits/trials
     return [
         p_hat - 2.58*math.sqrt(p_hat*(1 - p_hat) / trials),
         p_hat + 2.58*math.sqrt(p_hat*(1 - p_hat) / trials),
     ]
 
-def extreme_cn(observed, gene_length, sample):
+def _extreme_cn(observed, gene_length, sample):
     """Returns true iff expected copy number is outside of
     binomial confidence intervall of observed values.
     """
@@ -157,8 +152,51 @@ def extreme_cn(observed, gene_length, sample):
     trials = len(sample.reads)
     p_low, p_up = binomial_ci_wilson(observed, trials)
     return p_low > p_0 or p_0 > p_up
+
+from scipy.stats import binom
+
+def extreme_cn(observed, gene_length, sample):
+    """Returns true if and only if observed copy number is outside of
+    0.99 binomial confidence interval.
+    """
+    p_hit = gene_length / len(CNVData.genome)
+    if not sample.reads:
+        sample.set_reads()
+    trials = len(sample.reads)
+    lower = binom.ppf(0.001, trials, p_hit)
+    upper = binom.ppf(0.999, trials, p_hit)
+    # lower = trials*p_hit - 3.29*math.sqrt(trials*p_hit*(1 - p_hit))
+    # upper = trials*p_hit + 3.29*math.sqrt(trials*p_hit*(1 - p_hit))
+    return lower > observed or observed > upper
     
+cnv.read_from_disk()
 
+genes = cnv.genes
 
+genes["extreme_cn"] = genes.apply(
+    lambda z: extreme_cn(z["cn_obs"], z["len"], sample),
+    axis=1,
+)
+
+def binom_p_value(observed, gene_length, sample):
+    p_hit = gene_length / len(CNVData.genome)
+    if not sample.reads:
+        sample.set_reads()
+    trials = len(sample.reads)
+    cdf = binom.cdf(observed, trials, p_hit)
+    return cdf if cdf < 0.5 else (1 - cdf)
+
+genes["cn_p_value"] = genes.apply(
+    lambda z: binom_p_value(z["cn_obs"], z["len"], sample),
+    axis=1,
+)
+genes[genes.extreme_cn == True]
+binom.cdf (20, 70, 0.3083573487)
+binom.cdf (20, 70, 0.3083573487)
 p_low, p_up = binomial_ci_wilson(obs, N) 
 b = extreme_cn(obs, g_len, sample)
+
+p=0.7
+N=100
+binom.ppf(0.025, N, p)
+N*p - 1.96*math.sqrt(N*p*(1-p))

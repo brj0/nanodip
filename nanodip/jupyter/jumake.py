@@ -2,20 +2,25 @@
 
 """
 Run this script to parses the whole nanodip code and merge into one single
-jupyter notebook file whithin this directory.
+jupyter notebook file within this directory.
 """
 
 import nbformat as nbf
 import re
+import sys
 from distutils.dir_util import copy_tree
+from shutil import rmtree
+import argparse
+import os
 
-START_EXTERNAL = '# start_external_modules\n'
-END_EXTERNAL = '# end_external_modules\n'
-START_INTERNAL = '# start_internal_modules\n'
-END_INTERNAL = '# end_internal_modules\n'
+START_EXTERNAL = "# start_external_modules\n"
+END_EXTERNAL = "# end_external_modules\n"
+START_INTERNAL = "# start_internal_modules\n"
+END_INTERNAL = "# end_internal_modules\n"
 
 def external_imports(modules):
     """Return all external module imports used."""
+
     def external_modules(content):
         start = content.index(START_EXTERNAL) + 1
         end = content.index(END_EXTERNAL)
@@ -44,27 +49,29 @@ def remove_imports(modules):
         remove_module_imports(m)
 
 def parse_code_or_comment(content):
-    comment = ''
+    comment = ""
     # Parse comment above code
     while content:
         line = content[0]
-        if not (re.match('^( )*#', line) or line.isspace()):
+        if not (re.match("^( )*#", line) or line.isspace()):
             break
         comment += line
         content.pop(0)
-    code = ''
+    code = ""
     first_run = True
     # Parse code
     while content:
         line = content[0]
-        if line.startswith('"""') or line.startswith('#'):
+        if line.startswith('"""') or line.startswith("#"):
             break
-        if not first_run and (line.startswith('def ') or line.startswith('class')):
+        if not first_run and (
+            line.startswith("def ") or line.startswith("class")
+        ):
             break
         code += line
         first_run = False
         content.pop(0)
-    nb['cells'].append(nbf.v4.new_code_cell((comment + code).rstrip()))
+    nb["cells"].append(nbf.v4.new_code_cell((comment + code).rstrip()))
 
 def parse_markdown(content):
     markdown = content[0][3:]  # Text immediately after """
@@ -72,7 +79,7 @@ def parse_markdown(content):
     while content:
         line = content.pop(0)
         if line.startswith('"""'):
-            nb['cells'].append(nbf.v4.new_markdown_cell(markdown))
+            nb["cells"].append(nbf.v4.new_markdown_cell(markdown))
             break
         markdown += line
 
@@ -82,7 +89,7 @@ def parse(content):
         if line.isspace():
             # Skip whitespace.
             content.pop(0)
-        elif line.startswith('# python_modules_to_import'):
+        elif line.startswith("# python_modules_to_import"):
             # interrupt to include modules
             content.pop(0)
             break
@@ -91,23 +98,62 @@ def parse(content):
         else:
             parse_code_or_comment(content)
 
-module_names = ['nanodip', 'config', 'utils', 'data', 'plots', 'api', 'webui']
-nonodip_modules_dict = {}
-for name in module_names:
-    path = f'../{name}.py'
-    with open(path, 'r') as f:
-        nonodip_modules_dict[name] = f.readlines()
+def command_line_arguments():
+    parser = argparse.ArgumentParser(
+        description="Create jupyter notebook in nanodip/jupyter")
+    parser.add_argument(
+        "--clear",
+        "-c",
+        action="store_true",
+        help="Delete notebook and associated files",
+    )
+    return parser.parse_args()
 
-nanodip_modules = list(nonodip_modules_dict.values())
-imports = external_imports(nanodip_modules)
-remove_imports(nanodip_modules)
 
-nb = nbf.v4.new_notebook()
+if __name__ == "__main__":
+    cmd_args = command_line_arguments()
+    script_path = sys.path[0]
+    if os.getcwd() != script_path:
+        sys.exit(f"Please change to {script_path}")
+    if cmd_args.clear:
+        try:
+            os.remove('nanodip.ipynb')
+        except FileNotFoundError:
+            pass
+        for d in ['static', 'templates', '.ipynb_checkpoints/']:
+            try:
+                rmtree(d)
+            except FileNotFoundError:
+                pass
+        print("notebook cleared.")
+    else:
+        module_names = [
+            "nanodip",
+            "config",
+            "utils",
+            "data",
+            "plots",
+            "api",
+            "webui",
+        ]
+        nonodip_modules_dict = {}
+        for name in module_names:
+            path = f"../{name}.py"
+            with open(path, "r") as f:
+                nonodip_modules_dict[name] = f.readlines()
 
-parse(nanodip_modules[0])
-for m in [imports] + nanodip_modules[1:] + [nanodip_modules[0]]:
-    parse(m)
+        nanodip_modules = list(nonodip_modules_dict.values())
+        imports = external_imports(nanodip_modules)
+        remove_imports(nanodip_modules)
 
-nbf.write(nb, 'nanodip.ipynb')
-copy_tree('../static','static')
-copy_tree('../templates','templates')
+        nb = nbf.v4.new_notebook()
+
+        parse(nanodip_modules[0])
+        for m in [imports] + nanodip_modules[1:] + [nanodip_modules[0]]:
+            parse(m)
+
+        nbf.write(nb, "nanodip.ipynb")
+        copy_tree("../static", "static")
+        copy_tree("../templates", "templates")
+
+        print("Notebook successfully created.")
