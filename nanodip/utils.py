@@ -32,7 +32,7 @@ from config import (
     F5C,
     GENES,
     GENES_RAW,
-    ILUMINA_CG_MAP,
+    ILLUMINA_CG_MAP,
     MINIMAP2,
     NANODIP_REPORTS,
     REFERENCE_GENOME_FA,
@@ -44,13 +44,13 @@ from config import (
 
 def sanity_check():
     """Checks if reference data is available and generates a warning
-    if necessary.
+    otherwise.
     """
     requested_files = [
         BETA_VALUES,
         ANNOTATIONS_ABBREVIATIONS_BASEL,
         ANNOTATIONS_ABBREVIATIONS_TCGA,
-        ILUMINA_CG_MAP,
+        ILLUMINA_CG_MAP,
         CHROMOSOMES,
         REFERENCE_GENOME_FA,
         REFERENCE_GENOME_MMI,
@@ -63,7 +63,6 @@ def sanity_check():
         SAMTOOLS,
     ]
     for f in requested_files:
-        f_name = os.path.basename(f)
         if not os.path.exists(f):
             warnings.warn(
                 f"File '{f}' not found.\nFunctionality may be restricted.",
@@ -73,7 +72,7 @@ def sanity_check():
 def extract_referenced_cpgs(sample_methylation,
                             output_overlap,
                             output_overlap_cnt):
-    """Extract ilumina CpG sites including methylation status from sample.
+    """Extract Illumina CpG sites including methylation status from sample.
     Sex chromosomes are removed.
 
     Args:
@@ -82,7 +81,7 @@ def extract_referenced_cpgs(sample_methylation,
         output_overlap_cnt: file path of CpG overlap count
     """
     reference_cpgs = pd.read_csv(
-        ILUMINA_CG_MAP,
+        ILLUMINA_CG_MAP,
         delimiter="\t",
         names=["ilmnid", "chromosome", "strand", "start"],
     )
@@ -93,6 +92,7 @@ def extract_referenced_cpgs(sample_methylation,
     cpgs = pd.merge(sample_cpgs, reference_cpgs, on=["chromosome", "start"])
     # Extract singelton CpG's
     cpgs = cpgs.loc[cpgs["num_cpgs_in_group"] == 1]
+    # Remove duplicates and sex chromosomes
     cpgs = cpgs.loc[
        (~cpgs["chromosome"].isin(["chrX", "chrY"]))
        & (~cpgs["ilmnid"].duplicated())
@@ -101,12 +101,14 @@ def extract_referenced_cpgs(sample_methylation,
     cpgs.loc[cpgs["methylated_frequency"] > 0.5, "is_methylated"] = 1
     # Write overlap Data Frame
     cpgs[["ilmnid", "is_methylated"]].to_csv(
-        output_overlap, header=False, index=False, sep="\t")
+        output_overlap, header=False, index=False, sep="\t",
+    )
     # Write number of CpG's
     with open(output_overlap_cnt, "w") as f:
         f.write(f"{len(cpgs)}")
 
 def render_template(template_name, **context):
+    """Renders jinja2 templates to HTML."""
     loader = jinja2.FileSystemLoader("templates")
     template = jinja2.Environment(
         loader=loader).get_template(template_name)
@@ -116,7 +118,8 @@ def url_for(url_func, **args):
     """Transforms a cherrypy function together with argument list to
     url string.
     Example:
-        url_for(CherryPyClass.url_func, var0=2, var1=7) == "url_func?var0=2&var1=7"
+        url_for(CherryPyClass.url_func, var0=2, var1=7)
+        == "url_func?var0=2&var1=7"
     Raises error if argument names are not correct.
     """
     # Find variable names of url_func.
@@ -148,10 +151,9 @@ def url_for(url_func, **args):
     return url
 
 def convert_html_to_pdf(source_html, output_file):
-    """Create PDF from html-string."""
+    """Create PDF from HTML-string."""
     with open(output_file, "w+b") as f:
         pisa_status = xhtml2pdf.pisa.CreatePDF(source_html, dest=f)
-    return pisa_status.err
 
 def date_time_string_now():
     """Return current date and time as a string to create time stamps."""
@@ -169,16 +171,28 @@ def get_runs():
             mod_time = os.path.getmtime(file_path)
             if os.path.isdir(file_path):
                 runs.append([f, mod_time])
-    # sort based on modif. date
+    # Sort based on modification date
     runs.sort(key=lambda x: (x[1], x[0]), reverse=True)
     # Remove date after sorting
     return [x[0] for x in runs]
 
-def predominant_barcode(sample_name):
+def files_by_ending(directory, sample_id, ending):
+    """Returns a list containing all sample output files with a given
+    ending.
+    """
+    sample_path = os.path.join(directory, sample_id)
+    output_files = []
+    for root, _, files in os.walk(sample_path):
+        output_files.extend(
+            [os.path.join(root, f) for f in files if f.endswith(ending)]
+        )
+    return output_files
+
+def predominant_barcode(sample_id):
     """Returns the predominant barcode within all fast5 files."""
-    fast5_files = files_by_ending(DATA, sample_name, ending=".fast5")
+    fast5_files = files_by_ending(DATA, sample_id, ending=".fast5")
     pass_fast5_files = [f for f in fast5_files if "_pass_" in f]
-    barcode_hits=[]
+    barcode_hits = []
     for barcode in BARCODE_NAMES:
         barcode_hits.append(
             len([f for f in pass_fast5_files if barcode in f])
@@ -200,67 +214,6 @@ def reference_annotations():
             annotations.append(r)
     return [a.replace(".xlsx", "") for a in annotations]
 
-
-def write_reference_name(sample_id, reference_name):
-    """Write the filename of the UMAP reference for the current run into
-    a text file.
-    """
-    path = os.path.join(
-        NANODIP_REPORTS, sample_id + "_selected_reference.txt"
-    )
-    with open(path, "w") as f:
-        f.write(reference_name)
-
-def read_reference(sample_id):
-    """Read the filename of the UMAP reference for the current sample."""
-    path = os.path.join(
-        NANODIP_REPORTS, sample_id + "_selected_reference.txt"
-    )
-    try:
-        with open(path, "r") as f:
-            reference = f.read()
-    except FileNotFoundError:
-        reference = ""
-    return reference
-
-def files_by_ending(directory, sample_name, ending):
-    """Returns a list containing all sample output files with a given
-    ending.
-    """
-    sample_path = os.path.join(directory, sample_name)
-    output_files = []
-    for root, _, files in os.walk(sample_path):
-        output_files.extend(
-            [os.path.join(root, f)
-            for f in files if f.endswith(ending)]
-        )
-    return output_files
-
-def discrete_colors(variables):
-    """Pseudorandom color scheme based on hashed values. Colors
-    of methylation classes will be fixed to their name.
-        Args:
-            variables: List of strings.
-        Returns:
-            Dictionary of color scheme for all string elements.
-    """
-    color = {}
-    for var in set(variables):
-        hash_str = hashlib.md5(bytes(var, "utf-8")).digest()
-        hash1 = int.from_bytes(hash_str[:8], byteorder="big")
-        hash2 = int.from_bytes(hash_str[8:12], byteorder="big")
-        hash3 = int.from_bytes(hash_str[12:], byteorder="big")
-        hue = hash1 % 365
-        saturation = hash2 % 90 + 10
-        lightness = hash3 % 40 + 30
-        # hsl has to be transformed to rgb, since otherwise not all colors
-        # are displayed correctly, probably due to plotly bug.
-        rgb_bin = colorsys.hls_to_rgb(hue/365, lightness/100, saturation/100)
-        rgb = tuple(int(256 * x) for x in rgb_bin)
-        color[var] = f"rgb{rgb}"
-
-    return color
-
 def composite_path(directory, *args):
     """Generate composite file-paths of the type
         'directory/arg1_arg2_arg3'
@@ -270,3 +223,47 @@ def composite_path(directory, *args):
         directory,
         file_name,
     )
+
+def write_reference_name(sample_id, reference_id):
+    """Write the filename of the UMAP reference for the current run into
+    a text file. Used to find png plot preview of sample under analysis.
+    """
+    file_path = composite_path(NANODIP_REPORTS, sample_id, ENDING["sel_ref"])
+    with open(file_path, "w") as f:
+        f.write(reference_id)
+
+def read_reference(sample_id):
+    """Read the filename of the UMAP reference for the current sample.
+    Used to find png plot preview of sample under analysis.
+    """
+    file_path = composite_path(NANODIP_REPORTS, sample_id, ENDING["sel_ref"])
+    try:
+        with open(file_path, "r") as f:
+            reference = f.read()
+    except FileNotFoundError:
+        reference = ""
+    return reference
+
+def discrete_colors(names):
+    """Pseudorandom color scheme based on hashed values. Colors
+    of methylation classes will be fixed to their name.
+        Args:
+            names: List of strings.
+        Returns:
+            Dictionary of color scheme for all string elements.
+    """
+    color = {}
+    for var in set(names):
+        hash_str = hashlib.md5(bytes(var, "utf-8")).digest()
+        hash1 = int.from_bytes(hash_str[:8], byteorder="big")
+        hash2 = int.from_bytes(hash_str[8:12], byteorder="big")
+        hash3 = int.from_bytes(hash_str[12:], byteorder="big")
+        hue = hash1 % 365
+        saturation = hash2 % 91 + 10
+        lightness = hash3 % 41 + 30
+        # hsl has to be transformed to rgb, since otherwise not all colors
+        # are displayed correctly, probably due to plotly bug.
+        rgb_frac = colorsys.hls_to_rgb(hue/364, lightness/100, saturation/100)
+        rgb = tuple(int(255 * x) for x in rgb_frac)
+        color[var] = f"rgb{rgb}"
+    return color

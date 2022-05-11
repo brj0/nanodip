@@ -90,9 +90,9 @@ threading options for multithreaded modules need to be set as
 environment-specific parameters. One way to do so is through the *os* module.
 """
 
-# execution-wide multithreading options, set according to your hardware. Jetson
+# Execution-wide multithreading options, set according to your hardware. Jetson
 # AGX: suggest "2" needs to be set before importing other modules that query
-# these parameters
+# these parameters.
 import os
 os.environ["NUMBA_NUM_THREADS"] = "2"
 os.environ["OPENBLAS_NUM_THREADS"] = "2"
@@ -117,7 +117,7 @@ import sys
 logging.basicConfig(
     filename="/data/nanodip_reports/nanodip.log",
     # stream=sys.stdout,
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(levelname)s %(filename)s,%(lineno)d [%(asctime)s]: %(message)s",
     filemode="w",
 )
@@ -139,14 +139,14 @@ if __name__ == "__main__":
 ### ^^^ LIVE LOG ABOVE ^^^
 All CherryPy access will be logged here, including live progress bars for
 computationally intense analyses. Detailed access logging is turned off by
-default (accessLogging is False), but can be turned on,e.g., for debugging,
+default (accessLogging is False), but can be turned on, e.g., for debugging,
 in the configuration section at the beginning of this notebook. While it is not
 required to have at look at these during normal operation, information
 contained in the log may be helpful in troubleshooting. Line numbers in error
 messages indicated here typically match those given in the respective Jupyter
 Notebook cells.
 
-To preseve these messages, halt the Python kernel, save and close the notebook
+To preserve these messages, halt the Python kernel, save and close the notebook
 to send it for support. This makes sure that the code as well as the error
 messages will be preserved.
 

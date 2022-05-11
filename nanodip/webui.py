@@ -36,7 +36,7 @@ from config import (
     DATA,
     DEBUG_MODE,
     ENDING,
-    EPIDIP_SERVER,
+    UMAP_LINK,
     EPIDIP_UMAP_COORDINATE_FILES,
     NANODIP_REPORTS,
     NEEDED_NUMBER_OF_BASES,
@@ -72,7 +72,7 @@ from api import (
 )
 from data import (
     binary_reference_data_exists,
-    ReferenceGenome,
+    Genome,
 )
 from plots import (
     CNVData,
@@ -144,7 +144,7 @@ def download_epidip_data(sentrix_id, reference_umap):
         ENDING["umap_xlsx"],
     )
 
-    URL = EPIDIP_SERVER + reference_umap
+    URL = UMAP_LINK % reference_umap
     response = request.urlretrieve(URL, umap_coordinates_local)
 
     cnv_local = composite_path(NANODIP_REPORTS, sentrix_id, ENDING["cnv_pdf"])
@@ -193,9 +193,9 @@ class UI(object):
             url_umap=url_for(UI.reset_queue, queue_name=sys_stat["umap"]),
         )
 
+    # TODO del
     @cherrypy.expose
     def reset_queue(self, queue_name=""):
-        html = menuheader('index', 15)
         if queue_name:
             if queue_name == "cpg":
                 UI.cpgQueue = 0
@@ -402,7 +402,7 @@ class UI(object):
                 url_umap_new=url_umap_new,
             )
         if func == "cnv":
-            genome = ReferenceGenome()
+            genome = Genome()
             genes = genome.genes.name.to_list()
             return render_template(
                 "analysis_cnv.html",

@@ -31,13 +31,13 @@ from config import (
     DATA,
     DEBUG_MODE,
     ENDING,
-    EPIDIP_SERVER,
+    UMAP_LINK,
     EPIDIP_UMAP_COORDINATE_FILES,
     EXCLUDED_FROM_ANALYSIS,
     F5C,
     GENES,
     GENES_RAW,
-    ILUMINA_CG_MAP,
+    ILLUMINA_CG_MAP,
     MINIMAP2,
     NANODIP_OUTPUT,
     NANODIP_REPORTS,
@@ -60,9 +60,9 @@ from utils import (
 )
 from data import (
     get_sample_methylation,
-    SampleData,
-    ReferenceData,
-    ReferenceGenome,
+    Sample,
+    Reference,
+    Genome,
     get_reference_methylation,
 )
 from plots import (
@@ -91,15 +91,19 @@ from api import (
 )
 import config, data, plots, nanodip, utils, api
 
+# Define logger
+logger = logging.getLogger(__name__)
+
+
 sample_name = "B2021_48459_20211112_BC10"
 sample_name = "B2021_48700_20211112_BC11"
 sample_name = "test28"
 reference_name = "GSE90496_IfP01"
 reference_name = "AllIDATv2_20210804"
 
-sample = SampleData(sample_name)
-reference = ReferenceData(reference_name)
-# genome = ReferenceGenome()
+sample = Sample(sample_name)
+reference = Reference(reference_name)
+# genome = Genome()
 
 # data.make_binary_reference_data()
 cnv = CNVData(sample_name)
@@ -107,8 +111,8 @@ cnv = CNVData(sample_name)
 umapp = UMAPData(sample_name, reference_name)
 umapp.read_from_disk()
 
-umapp.sample = SampleData(sample_name)
-umapp.reference = ReferenceData(reference_name)
+umapp.sample = Sample(sample_name)
+umapp.reference = Reference(reference_name)
 umapp.sample.set_cpg_overlap(reference)
 
 # sentrix_id = "201869680197_R07C01"
@@ -129,18 +133,20 @@ obs = 17
 g_len = 189060
 G_len = CNVData.genome.length
 
-p_0 = g_len/G_len
+p_0 = g_len / G_len
 N = 11161
+
 
 def binomial_ci_wilson(hits, trials):
     """Return 0.99 conficence intervall of binomial distribution
     using inexact Wilson method.
     """
-    p_hat = hits/trials
+    p_hat = hits / trials
     return [
-        p_hat - 2.58*math.sqrt(p_hat*(1 - p_hat) / trials),
-        p_hat + 2.58*math.sqrt(p_hat*(1 - p_hat) / trials),
+        p_hat - 2.58 * math.sqrt(p_hat * (1 - p_hat) / trials),
+        p_hat + 2.58 * math.sqrt(p_hat * (1 - p_hat) / trials),
     ]
+
 
 def _extreme_cn(observed, gene_length, sample):
     """Returns true iff expected copy number is outside of
@@ -153,7 +159,9 @@ def _extreme_cn(observed, gene_length, sample):
     p_low, p_up = binomial_ci_wilson(observed, trials)
     return p_low > p_0 or p_0 > p_up
 
+
 from scipy.stats import binom
+
 
 def extreme_cn(observed, gene_length, sample):
     """Returns true if and only if observed copy number is outside of
@@ -168,15 +176,7 @@ def extreme_cn(observed, gene_length, sample):
     # lower = trials*p_hit - 3.29*math.sqrt(trials*p_hit*(1 - p_hit))
     # upper = trials*p_hit + 3.29*math.sqrt(trials*p_hit*(1 - p_hit))
     return lower > observed or observed > upper
-    
-cnv.read_from_disk()
 
-genes = cnv.genes
-
-genes["extreme_cn"] = genes.apply(
-    lambda z: extreme_cn(z["cn_obs"], z["len"], sample),
-    axis=1,
-)
 
 def binom_p_value(observed, gene_length, sample):
     p_hit = gene_length / len(CNVData.genome)
@@ -186,17 +186,28 @@ def binom_p_value(observed, gene_length, sample):
     cdf = binom.cdf(observed, trials, p_hit)
     return cdf if cdf < 0.5 else (1 - cdf)
 
-genes["cn_p_value"] = genes.apply(
-    lambda z: binom_p_value(z["cn_obs"], z["len"], sample),
-    axis=1,
-)
-genes[genes.extreme_cn == True]
-binom.cdf (20, 70, 0.3083573487)
-binom.cdf (20, 70, 0.3083573487)
-p_low, p_up = binomial_ci_wilson(obs, N) 
+
+cnv.read_from_disk()
+
+genes = cnv.genes
+
+# genes["extreme_cn"] = genes.apply(
+# lambda z: extreme_cn(z["cn_obs"], z["len"], sample),
+# axis=1,
+# )
+
+# genes["cn_p_value"] = genes.apply(
+# lambda z: binom_p_value(z["cn_obs"], z["len"], sample),
+# axis=1,
+# )
+# genes[genes.extreme_cn == True]
+
+binom.cdf(20, 70, 0.3083573487)
+binom.cdf(20, 70, 0.3083573487)
+p_low, p_up = binomial_ci_wilson(obs, N)
 b = extreme_cn(obs, g_len, sample)
 
-p=0.7
-N=100
+p = 0.7
+N = 100
 binom.ppf(0.025, N, p)
-N*p - 1.96*math.sqrt(N*p*(1-p))
+N * p - 1.96 * math.sqrt(N * p * (1 - p))

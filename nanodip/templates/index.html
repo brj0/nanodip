@@ -6,14 +6,14 @@
 
 {% block body %}
     <b>Computer: </b>{{ sys_stat.hostname }}<br><br>
-    <b>SSD or HDD usage</b><br>
+    <b>Disk usage</b><br>
     Total: {{ sys_stat.disk_total }} GB<br>
     Used : {{ sys_stat.disk_used }} GB<br>
     Free : {{ sys_stat.disk_free }} GB<br>
     <br><b>Memory</b><br>
-    free : {{ sys_stat.memory_free }}&percnt;<br>
+    Free : {{ sys_stat.memory_free }}&percnt;<br>
     <br><b>CPU: </b><br>
-    usage: {{ sys_stat.cpu }}&percnt;<br>
+    Usage: {{ sys_stat.cpu }}&percnt;<br>
     CpG active runs: {{ sys_stat.cpgs }} <a href="{{url_cpgs}}">reset queue</a><br>
     CNVP active runs: {{ sys_stat.cnvp }} <a href="{{url_cnvp}}">reset queue</a><br>
     UMAP active runs: {{ sys_stat.umap}} <a href="{{url_umap}}">reset queue</a><br>

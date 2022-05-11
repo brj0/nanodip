@@ -1,8 +1,8 @@
 """
 ## Plots
 
-Create Methylation UMAP plot.
-Create Copy Number Variation plot.
+Functions for creating methylation UMAP plot.
+Functions for creating Copy Number Variation plot.
 """
 
 # start_external_modules
@@ -29,9 +29,9 @@ from config import (
     UMAP_PLOT_TOP_MATCHES,
 )
 from data import (
-    ReferenceData,
-    ReferenceGenome,
-    SampleData,
+    Reference,
+    Genome,
+    Sample,
     get_reference_methylation,
     get_sample_methylation,
 )
@@ -59,12 +59,11 @@ def umap_plot_from_data(sample, reference, umap_data_frame, close_up):
     umap_sample = umap_data_frame.iloc[0]
     umap_title = (
         f"UMAP for {sample.name} <br><sup>Reference: {reference.name} "
-        f"({len(reference.annotated_specimens)} cases), "
+        f"({len(reference.specimens)} cases), "
         f"{len(sample.cpg_overlap)} CpGs </sup>"
     )
     if close_up:
         umap_title = "Close-up " + umap_title
-    methyl_classes_colors = discrete_colors(umap_data_frame.methylation_class)
     methyl_classes = umap_data_frame.methylation_class[1:].to_list()
     methyl_classes.sort()
     umap_plot = px.scatter(
@@ -76,7 +75,7 @@ def umap_plot_from_data(sample, reference, umap_data_frame, close_up):
         color="methylation_class",
         color_discrete_map={
             sample.name: "#ff0000",
-            **discrete_colors(methyl_classes)
+            **discrete_colors(methyl_classes),
         },
         hover_name="id",
         category_orders={"methylation_class": [sample.name] + methyl_classes},
@@ -136,53 +135,42 @@ def umap_data_frame(sample, reference):
     """
     import umap #Moved here due to long loading time (13.5s)
 
-    logger.info(
-        f"UMAP Plot initiated for {sample.name} and reference {reference.name}."
-    )
-    logger.info(f"Reference Annotation:\n{reference.annotation}")
-    logger.info(f"Reference CpG Sites No:\n{len(reference.cpg_sites)}")
-    logger.info(f"Reference Specimens No:\n{len(reference.specimens)}")
-    logger.info(
-        f"Reference Annotated specimens: {len(reference.annotated_specimens)}"
-    )
-    logger.info(f"Sample CpG Sites No:\n{len(sample.cpg_sites)}")
-    logger.info(f"Sample CpG overlap No before:\n{sample.cpg_overlap}")
+    logger.info(f"Start UMAP for {sample.name} / {reference.name}.")
+    logger.info(reference)
 
-    if sample.cpg_sites.empty:
+    if sample.methyl_df.empty:
         logger.info("UMAP done. No Matrix created, no overlapping data.")
         raise ValueError("Sample has no overlapping CpG's with reference.")
 
     # Calculate overlap of sample CpG's with reference CpG's (some probes have
     # been skipped from the reference set, e.g. sex chromosomes).
     sample.set_cpg_overlap(reference)
-    logger.info(f"Sample read. CpG overlap No after:\n{len(sample.cpg_overlap)}")
+    logger.info(sample)
 
     # Extract reference and sample methylation according to CpG overlap.
     reference_methylation = get_reference_methylation(sample,
                                                       reference)
-    logger.info(f"""Reference methylation extracted:
-                {reference_methylation}""")
+    logger.info(f"Reference methylation extracted:\n{reference_methylation}")
+
     sample_methylation = get_sample_methylation(sample, reference)
-    logger.info(f"""Sample methylation extracted:
-                {sample_methylation}""")
-    logger.info("UMAP algorithm initiated.")
+    logger.info(f"Sample methylation extracted:\n{sample_methylation}")
 
     # Calculate UMAP Nx2 Matrix. Time intensive (~1min).
     methyl_overlap = np.vstack([sample_methylation, reference_methylation])
+    logger.info("UMAP algorithm initiated.")
     umap_2d = umap.UMAP(verbose=True).fit_transform(methyl_overlap)
+    logger.info("UMAP algorithm done.")
 
     # Free memory
     del reference_methylation
     del sample_methylation
-
-    logger.info("UMAP algorithm done.")
 
     umap_sample = umap_2d[0]
     umap_df = pd.DataFrame({
         "distance": [np.linalg.norm(z - umap_sample) for z in umap_2d],
         "methylation_class": [sample.name] + reference.methylation_class,
         "description":  ["Analysis sample"] + reference.description,
-        "id": [sample.name] + reference.specimen_ids,
+        "id": [sample.name] + reference.specimens,
         "x": umap_2d[:,0],
         "y": umap_2d[:,1],
     })
@@ -219,7 +207,7 @@ def pie_chart(umap_data):
         title=(
             f"Nearest UMAP neighbors for {umap_data.sample_name} <br><sup>"
             f"Reference: {reference.name} "
-            f"({len(reference.annotated_specimens)}"
+            f"({len(reference.specimens)}"
             f"cases), {len(sample.cpg_overlap)} CpGs</sup>"
         ),
         template="simple_white",
@@ -229,7 +217,7 @@ def pie_chart(umap_data):
 def get_bin_edges(n_bins, genome):
     """Returns sequence of {n_bin} equal sized bins on chromosomes. Every bin is
     limited to one chromosome."""
-    edges = np.linspace(0, genome.length, num=n_bins + 1).astype(int)
+    edges = np.linspace(0, len(genome), num=n_bins + 1).astype(int)
     # limit bins to only one chromosome
     for chrom_edge in genome.chrom.offset:
         i_nearest = np.abs(edges - chrom_edge).argmin()
@@ -245,11 +233,11 @@ def get_cnv(read_positions, genome):
     copy_numbers, bin_edges = np.histogram(
         read_start_positions,
         bins=get_bin_edges(n_bins, genome),
-        range=[0, genome.length],
+        range=[0, len(genome)],
     )
 
     bin_midpoints = (bin_edges[1:] + bin_edges[:-1])/2
-    expected_reads = np.diff(bin_edges) * len(read_positions) / genome.length
+    expected_reads = np.diff(bin_edges) * len(read_positions) / len(genome)
     cnv = [(x - e)/e for x, e in zip(copy_numbers, expected_reads)]
     return bin_midpoints, copy_numbers
 
@@ -271,7 +259,7 @@ def cnv_grid(genome):
             linecolor="black",
             linewidth=1,
             mirror=True,
-            range=[0, genome.length],
+            range=[0, len(genome)],
             showgrid=False,
             ticklen=10,
             tickmode="array",
@@ -294,7 +282,7 @@ def cnv_grid(genome):
         grid.add_vline(x=i, line_color="black",
                            line_dash="dot", line_width=1)
     # Vertical line: shromosomes.
-    for i in genome.chrom.offset.tolist() + [genome.length]:
+    for i in genome.chrom.offset.tolist() + [len(genome)]:
         grid.add_vline(x=i, line_color="black", line_width=1)
     # Save to disk
     grid.write_json(grid_path)
@@ -319,7 +307,7 @@ def cnv_plot_from_data(data_x, data_y, E_y, sample_name, read_num, genome):
         y=data_y,
         labels={
             "x":f"Number of mapped reads: {read_num}",
-            "y":f"Copy numbers per {round(genome.length/(len(data_x) * 1e6), 2)} MB"
+            "y":f"Copy numbers per {round(len(genome)/(len(data_x) * 1e6), 2)} MB"
         },
         title=f"Sample ID: {sample_name}",
         color=data_y,
@@ -370,8 +358,8 @@ class UMAPData:
     def __init__(self, sample_name, reference_name):
         self.sample_name = sample_name
         self.reference_name = reference_name
-        self.sample = SampleData(self.sample_name)
-        self.reference = ReferenceData(self.reference_name)
+        self.sample = Sample(self.sample_name)
+        self.reference = Reference(self.reference_name)
 
     def make_umap_plot(self):
         """Invoke umap plot algorithm and save to disk."""
@@ -483,7 +471,7 @@ class UMAPData:
         self.umap_df = pd.read_csv(self.path("umap_csv"))
 
     def read_precalculated_umap_matrix(self, umap_matrix):
-        self.reference = ReferenceData(self.reference_name)
+        self.reference = Reference(self.reference_name)
         path_xlsx = composite_path(
             NANODIP_REPORTS,
             self.sample_name,
@@ -499,7 +487,7 @@ class UMAPData:
 
         reference_df = pd.DataFrame(
             zip(
-                self.reference.specimen_ids,
+                self.reference.specimens,
                 self.reference.methylation_class,
                 self.reference.description,
             ),
@@ -523,7 +511,7 @@ class UMAPData:
 
 class CNVData:
     """CNV data container and methods for invoking cnv plot algorithm."""
-    genome = ReferenceGenome()
+    genome = Genome()
     def __init__(self, sample_name):
         self.sample_name = sample_name
         self.base_path = composite_path(NANODIP_REPORTS, sample_name, "")
@@ -545,7 +533,7 @@ class CNVData:
         )
 
     def make_cnv_plot(self):
-        self.sample = SampleData(self.sample_name)
+        self.sample = Sample(self.sample_name)
         self.sample.set_reads() # time consumption 2.5s
         self.bin_midpoints, self.cnv = get_cnv(
             self.sample.reads,
@@ -561,7 +549,7 @@ class CNVData:
         )
         self.plot_json = self.plot.to_json()
         self.genes = self.gene_cnv(
-            CNVData.genome.length // len(self.bin_midpoints)
+            len(CNVData.genome) // len(self.bin_midpoints)
         )
         self.relevant_genes = self.genes.loc[self.genes.relevant]
         self.save_to_disk()
@@ -601,7 +589,7 @@ class CNVData:
             axis=1,
         )
         genes["cn_exp"] = genes.apply(
-            lambda z: len(self.sample.reads)*z["len"]/CNVData.genome.length,
+            lambda z: len(self.sample.reads)*z["len"]/len(CNVData.genome),
             axis=1,
         )
         genes["cn_obs_exp_ratio"] = genes.apply(

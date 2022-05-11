@@ -41,7 +41,7 @@ ANNOTATIONS = os.path.join(REFERENCE_DATA, "reference_annotations")
 ANNOTATIONS_ABBREVIATIONS_BASEL = os.path.join(ANNOTATIONS, "mc_anno_ifp_basel.csv")
 # https://gdc.cancer.gov/resources-tcga-users/tcga-code-tables/tcga-study-abbreviations
 ANNOTATIONS_ABBREVIATIONS_TCGA = os.path.join(ANNOTATIONS, "tcga_study_abbreviations.tsv")
-ILUMINA_CG_MAP = os.path.join(REFERENCE_DATA, "minimap_data/hg19_HumanMethylation450_15017482_v1-2_cgmap.tsv")
+ILLUMINA_CG_MAP = os.path.join(REFERENCE_DATA, "minimap_data/hg19_HumanMethylation450_15017482_v1-2_cgmap.tsv")
 REFERENCE_METHYLATION_DATA = os.path.join(REFERENCE_DATA, "EPIC450K")
 REFERENCE_METHYLATION = os.path.join(REFERENCE_METHYLATION_DATA, "methylation.bin")
 REFERENCE_CPG_SITES = os.path.join(REFERENCE_METHYLATION_DATA, "cpg_sites.csv")
@@ -52,8 +52,8 @@ REFERENCE_METHYLATION_SHAPE = os.path.join(REFERENCE_METHYLATION_DATA, "shape.cs
 CHROMOSOMES = os.path.join(REFERENCE_DATA, "hg19_cnv", "hg19_chromosomes.tsv")
 
 # Human reference genome in fa/minimap2 mmi format.
-REFERENCE_GENOME_FA = "/applications/reference_data/minimap_data/hg19.fa"
-REFERENCE_GENOME_MMI = "/applications/reference_data/minimap_data/hg19_20201203.mmi"
+REFERENCE_GENOME_FA = os.path.join(REFERENCE_DATA, "minimap_data/hg19.fa")
+REFERENCE_GENOME_MMI = os.path.join(REFERENCE_DATA, "minimap_data/hg19_20201203.mmi")
 
 # HG19 Gene data
 # https://hgdownload.soe.ucsc.edu/goldenPath/hg19/bigZips/genes/hg19.refGene.gtf.gz
@@ -93,7 +93,7 @@ UMAP_PLOT_TOP_MATCHES = 100
 PLOTLY_RENDER_MODE = "webgl"
 
 ANALYSIS_EXCLUSION_PATTERNS = ["_TestRun_"]
-# List of files and folders in DATA to be exluded from analysis.
+# List of files and folders in DATA to be excluded from analysis.
 EXCLUDED_FROM_ANALYSIS = [
     ".Trash-1000",
     "core-dump-db",
@@ -135,6 +135,7 @@ ENDING = {
     "pie": "pie.png",
     "reads_csv": "reads.csv",
     "relevant_genes": "relevant_genes.csv",
+    "sel_ref": "selected_reference.txt",
     "umap_all_html": "UMAP_all.html",
     "umap_all_json": "UMAP_all.json",
     "umap_all_png": "UMAP_all.png",
@@ -154,14 +155,14 @@ THIS_HOST = "localhost"
 CHERRYPY_PORT = 8080
 
 # The web browser favicon file for this application.
-BROWSER_FAVICON = "/applications/nanodip/nanodip/static/img/favicon.ico"
+BROWSER_FAVICON = "/applications/nanodip/nanodip/static/img/logo.png"
 
 # Paths to binaries for methylation calling.
 F5C = "/applications/f5c/f5c"
 MINIMAP2 = "/applications/nanopolish/minimap2/minimap2"
 SAMTOOLS = "/applications/samtools/samtools"
 
-EPIDIP_SERVER = "http://s1665.rootserver.io/umap_links/"
+UMAP_LINK = "http://s1665.rootserver.io/umap_links/%s"
 EPIDIP_UMAP_COORDINATE_FILES = [
     "UMAP_all_bVals_top_25000.xlsx",
     "UMAP_all_bVals_top_50000.xlsx",
