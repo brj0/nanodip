@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <title>{{device_id}}: {{flow_cell_id}}</title>
+  <link rel="stylesheet" href="static/style.css">
+  <script src="static/js/jquery-1.11.1.min.js"></script>
+</head>
+
+<body>
+
+  {% if previous_activity %}
+  <b>{{device_id}}: {{flow_cell_id}}</b>
+  <br>
+  <div class="mono">
+    {% for key, val in status.items() %}
+    {{key}}: {{val}}
+    <br>
+    {% endfor %}
+  {% else %}
+    <br> No previous device activity, information will appear as soon as the device
+    has been running once in this session.
+    <br>
+  {% endif %}
+
+    Sample ID: {{sample_id}}
+    <br>
+    {{state}}
+    <br>
+    {{yield_}}
+  </div>
+
+  {% if is_active %}
+  <br>
+  <div class="radio_device" id="{{device_id}}_live_status">
+    Launch automatic run terminator after {{needed_mega_bases}} MB:
+
+    <input type="radio" id="terminator_manually" name="terminator" value="button_manually">
+    <label for="terminator_manually">Off</label>
+
+    <input type="radio" id="terminator_on" name="terminator" value="button_auto">
+    <label for="terminator_on">On</label>
+
+    &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;
+
+    <input type="radio" id="terminator_now" name="terminator" value="button_terminated">
+    <label for="terminator_now">Terminate now</label>
+
+  </div>
+  {% endif %}
+
+  <script>
+    // Auto-terminator
+    function setAutoTerminate(deviceId, value) {
+      $.ajax({
+        url: "{{url_auto_terminator}}",
+        type: "GET",
+        contentType: "application/json;charset=UTF-8",
+        data: {
+          "device_id": deviceId,
+          "termination_type": value,
+        },
+        dataType: "html",
+        success: function (data) {
+          console.log("Auto terminator of " + deviceId + " set to " + value)
+        }
+      });
+    }
+    $(document).ready(function() {
+      $("#{{device_id}}_live_status input:radio").change(function(){
+        if ($(this).val() == "button_auto") {
+          setAutoTerminate("{{device_id}}", "auto");
+        }
+        else if ($(this).val() == "button_manually") {
+          setAutoTerminate("{{device_id}}", "manually");
+        }
+        else if ($(this).val() == "button_terminated") {
+          $("#{{device_id}}_live_status").hide();
+          setAutoTerminate("{{device_id}}", "terminated");
+        }
+      });
+      {% if termination_type == "auto" %}
+      $("#terminator_on").prop("checked", true);
+      {% elif termination_type == "manually" %}
+      $("#terminator_manually").prop("checked", true);
+      {% elif termination_type == "terminated" %}
+      $("#{{device_id}}_live_status").hide();
+      {% endif %}
+    })
+  </script>
+
+</body>
+</html>

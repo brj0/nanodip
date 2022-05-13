@@ -6,14 +6,15 @@ Contains general utility functions.
 
 
 # start_external_modules
+import os
+import warnings
+
 import colorsys
 import datetime
-import hashlib    
+import hashlib
 import inspect
 import jinja2
-import os
 import pandas as pd
-import warnings
 import xhtml2pdf.pisa
 # end_external_modules
 
@@ -38,6 +39,7 @@ from config import (
     REFERENCE_GENOME_FA,
     REFERENCE_GENOME_MMI,
     RELEVANT_GENES,
+    RESULT_ENDING,
     SAMTOOLS,
 )
 # end_internal_modules
@@ -128,9 +130,9 @@ def url_for(url_func, **args):
     sig = inspect.signature(url_func)
     for param in sig.parameters.values():
         if param.default is param.empty:
-           non_default.append(param.name)
+            non_default.append(param.name)
         else:
-           default.append(param.name)
+            default.append(param.name)
     # Check if variable names are correct.
     for param in args:
         if param not in default + non_default:
@@ -153,7 +155,7 @@ def url_for(url_func, **args):
 def convert_html_to_pdf(source_html, output_file):
     """Create PDF from HTML-string."""
     with open(output_file, "w+b") as f:
-        pisa_status = xhtml2pdf.pisa.CreatePDF(source_html, dest=f)
+        xhtml2pdf.pisa.CreatePDF(source_html, dest=f)
 
 def date_time_string_now():
     """Return current date and time as a string to create time stamps."""
@@ -176,11 +178,26 @@ def get_runs():
     # Remove date after sorting
     return [x[0] for x in runs]
 
-def files_by_ending(directory, sample_id, ending):
+def get_all_results():
+    """Return list of all analysis result files in report directory sorted
+    by modification time.
+    """
+    files = []
+    for f in os.listdir(NANODIP_REPORTS):
+        for e in RESULT_ENDING.values():
+            if f.endswith(e):
+                mod_time = os.path.getmtime(
+                    os.path.join(NANODIP_REPORTS, f)
+                )
+                files.append([f, mod_time])
+    files.sort(key=lambda x: (x[1], x[0]), reverse=True)
+    return [f[0] for f in files]
+
+def files_by_ending(directory, sample_name, ending):
     """Returns a list containing all sample output files with a given
     ending.
     """
-    sample_path = os.path.join(directory, sample_id)
+    sample_path = os.path.join(directory, sample_name)
     output_files = []
     for root, _, files in os.walk(sample_path):
         output_files.extend(
@@ -188,9 +205,9 @@ def files_by_ending(directory, sample_id, ending):
         )
     return output_files
 
-def predominant_barcode(sample_id):
+def predominant_barcode(sample_name):
     """Returns the predominant barcode within all fast5 files."""
-    fast5_files = files_by_ending(DATA, sample_id, ending=".fast5")
+    fast5_files = files_by_ending(DATA, sample_name, ending=".fast5")
     pass_fast5_files = [f for f in fast5_files if "_pass_" in f]
     barcode_hits = []
     for barcode in BARCODE_NAMES:
@@ -199,12 +216,12 @@ def predominant_barcode(sample_id):
         )
     max_barcode_cnt = max(barcode_hits)
     if max_barcode_cnt > 1:
-        predominant_barcode = BARCODE_NAMES[
+        predominant = BARCODE_NAMES[
             barcode_hits.index(max_barcode_cnt)
         ]
     else:
-        predominant_barcode = "undetermined"
-    return predominant_barcode
+        predominant = "undetermined"
+    return predominant
 
 def reference_annotations():
     """Return list of all reference annotation files (MS Excel XLSX format)."""
@@ -224,19 +241,19 @@ def composite_path(directory, *args):
         file_name,
     )
 
-def write_reference_name(sample_id, reference_id):
+def write_reference_name(sample_name, reference_name):
     """Write the filename of the UMAP reference for the current run into
     a text file. Used to find png plot preview of sample under analysis.
     """
-    file_path = composite_path(NANODIP_REPORTS, sample_id, ENDING["sel_ref"])
+    file_path = composite_path(NANODIP_REPORTS, sample_name, ENDING["sel_ref"])
     with open(file_path, "w") as f:
-        f.write(reference_id)
+        f.write(reference_name)
 
-def read_reference(sample_id):
+def read_reference(sample_name):
     """Read the filename of the UMAP reference for the current sample.
     Used to find png plot preview of sample under analysis.
     """
-    file_path = composite_path(NANODIP_REPORTS, sample_id, ENDING["sel_ref"])
+    file_path = composite_path(NANODIP_REPORTS, sample_name, ENDING["sel_ref"])
     try:
         with open(file_path, "r") as f:
             reference = f.read()

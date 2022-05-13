@@ -78,7 +78,7 @@ from webui import (
     download_epidip_data,
     device_status,
     active_run,
-    called_bases,
+    number_of_called_bases,
     run_sample_id,
     start_run,
 )
@@ -119,6 +119,7 @@ umapp.sample.set_cpg_overlap(reference)
 sentrix_id = "9968646165_R01C02"
 reference_umap = "UMAP_all_bVals_top_25000.xlsx"
 reference_id = "GSE90496_IfP01"
+device_id = "MN26636"
 
 
 # download_epidip_data(sentrix_id, reference_umap)

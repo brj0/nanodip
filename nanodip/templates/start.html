@@ -10,69 +10,74 @@
 
   {% if run_id %}
 
-    Sequencing run started for {{sample_id}} on {{device_id}} as {{run_id}} with reference {{reference_id}}
+  Sequencing run started for {{sample_id}} on {{device_id}} as {{run_id}} with reference {{reference_id}}
+  <hr>
+    {{run_info}}
+  <hr>
+  <br>
+  <br>
+  Navigate to <b>MK1b Status</b> to launch the run terminator. It may take several minutes until the link for the
+  run terminator appears. This is due to the nonexistent run state while the flow cell is being heated up to operation temperature.
+  In addition, you may want to navigate to <b>Analysis</b> and launch <b>get CpGs</b>.
+  <br>
+  <br>
+  If you do not start the run terminator, you will have to terminate the run manually, or it will stop after the predefined time.
 
-    <hr>
-      {{run_info}}
-    <hr>
+  {% else %}
 
-    Navigate to <b>MK1b Status</b> to launch the run terminator. It may take several minutes until the link for the
-    run terminator appears. This is due to the nonexistent run state while the flow cell is being heated up to operation temperature.
-    In addition, you may want to navigate to <b>Analyze</b> and launch <b>get CpGs</b>.
-    <br>
-    <br>
+  Error occurred. Nothing was started.
 
-    <!--a href="launchAutoTerminator?sampleName={{sample_id}}&deviceString={{device_id}}">
-      Click this link to launch automatic run terminator after {{mega_bases}} MB.
-    </a-->
-
-    If you do not start the run terminator, you will have to terminate the run manually, or it will stop after the predefined time.
-    {% else %}
-      Error occurred. Nothing was started.
-    {% endif %}
+  {% endif %}
 
 {% else %}
 
   {% if test %}
-    <form action="start_test" method="GET">
+
+  <form action="start_test" method="GET">
+
   {% else %}
-    <form action="start" method="GET">
+
+  <form action="start" method="GET">
+
   {% endif %}
+
     Select an idle Mk1b:&nbsp;
 
     <select name="device_id" id="device_id">
-      {% for pos in idle %}
-        <option value="{{pos}}">
-          {{pos}}: {{flow_cell[pos]}}
-        </option>
-      {% endfor %}
+    {% for pos in idle %}
+      <option value="{{pos}}">
+        {{pos}}: {{flow_cell[pos]}}
+      </option>
+    {% endfor %}
     </select>
     &nbsp;
 
   {% if test %}
-      <input type="submit" value="start test run now (0.1h)"/>
+    <input type="submit" value="start test run now (0.1h)"/>
   {% else %}
-      and enter the sample ID:&nbsp;
-      <input type="text" name="sample_id" />
-      &nbsp;with start voltage&nbsp;
-      <select name="start_voltage" id="start_voltage">
-      {% for voltage in range(-180,-260,-5) %}
-        <option value="{{voltage}}">{{voltage}} mV</option>
-      {% endfor %}
-      </select>
-      &nbsp;for&nbsp;
-      <input type="text" name="run_duration" value="72" />
-        &nbsp;hours.
-        &nbsp;Reference set&nbsp;
-        <select name="reference_id" id="reference_id">
-          {% for ref in references %}
-            <option value="{{ref}}">{{ref}}</option>
-          {% endfor %}
-        </select>
-        &nbsp;
-      <input type="submit" value="start sequencing now"/>
+    and enter the sample ID:&nbsp;
+    <input type="text" name="sample_id"/>
+    &nbsp;with start voltage&nbsp;
+    <select name="start_voltage" id="start_voltage">
+    {% for voltage in range(-180,-260,-5) %}
+      <option value="{{voltage}}">{{voltage}} mV</option>
+    {% endfor %}
+    </select>
+    &nbsp;for&nbsp;
+    <input type="text" name="run_duration" value="72" />
+    &nbsp;hours.
+    &nbsp;Reference set&nbsp;
+    <select name="reference_id" id="reference_id">
+    {% for ref in references %}
+      <option value="{{ref}}">{{ref}}</option>
+    {% endfor %}
+    </select>
+    &nbsp;
+    <input type="submit" value="start sequencing now"/>
+
   {% endif %}
-    </form>
+
+  </form>
 
 {% endif %}
 

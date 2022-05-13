@@ -81,7 +81,7 @@ READS_PER_FILE = "400"
 NEEDED_NUMBER_OF_BASES = 150_000_000
 
 # URL to load PDF with CNV plot for a given Sentrix ID (substituted for '%s')
-CNV_LINK = "http://s1665.rootserver.io/umapplot01/%s_CNV_IFPBasel_annotations.pdf" 
+CNV_LINK = "http://s1665.rootserver.io/umapplot01/%s_CNV_IFPBasel_annotations.pdf"
 
 CNV_GRID = "/applications/reference_data/hg19_cnv/grid.json"
 
@@ -167,7 +167,7 @@ EPIDIP_UMAP_COORDINATE_FILES = [
     "UMAP_all_bVals_top_25000.xlsx",
     "UMAP_all_bVals_top_50000.xlsx",
     "UMAP_all_bVals_top_75000.xlsx",
-    "gpumap_25000.xlsx",        
+    "gpumap_25000.xlsx",
     "gpumap_50000.xlsx",
     "gpumap_75000.xlsx",
 ]

@@ -6,7 +6,6 @@
 
 {% block body %}
 
-
 Running and buffered experiments:<br>
 
 <b>Host: {{host}}</b><br>
@@ -20,13 +19,12 @@ Running and buffered experiments:<br>
         ---{{current_status[d]}}<br>
         {% for i in run_ids[d] %}
         --run ID: {{i}}<br>
-        ---with flow cell ID: {{flow_cell_id[(d, i)]}}<br>
+        ---with flow cell ID: {{flow_cell[(d, i)]}}<br>
         {% endfor %}
       </div>
     </td>
     {% endfor %}
   </tr>
 </table>
-
 
 {% endblock %}

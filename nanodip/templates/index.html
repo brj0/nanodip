@@ -18,5 +18,5 @@
     CNVP active runs: {{ sys_stat.cnvp }} <a href="{{url_cnvp}}">reset queue</a><br>
     UMAP active runs: {{ sys_stat.umap}} <a href="{{url_umap}}">reset queue</a><br>
     <br><br>
-    <a href="restart" class="show">Restart NanoDiP</a> <font color="#FF0000"><b>Use with caution!</b></font>
+    <a href="{{ url_restart }}" class="show" title="Use with caution">Restart NanoDiP</a>
 {% endblock %}

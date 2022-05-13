@@ -164,6 +164,10 @@ div.device_box {
   padding: 5px;
 }
 
+div.device_box_active {
+  background-color: #32cd32;
+}
+
 .preview_element {
   height: 270px;
   flex: 1;

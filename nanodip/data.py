@@ -8,12 +8,13 @@ data.
 
 # start_external_modules
 import logging
+import os
+import re
+
 from tqdm import tqdm
 import numpy as np
-import os
 import pandas as pd
 import pysam
-import re
 # end_external_modules
 
 # start_internal_modules
@@ -198,9 +199,9 @@ class Reference:
                 return abbr[mc]
             # Else choose longest substring from Basel-Annotations/TCGA
             basel_substring = [a for a in non_trivial_abbr if a in mc]
-            basel_substring.sort(key=lambda x: len(x))
+            basel_substring.sort(key=len)
             tcga_substring = [a for a in tcga if a in mc]
-            tcga_substring.sort(key=lambda x: len(x))
+            tcga_substring.sort(key=len)
             # Prefer Basel Annotation
             if (
                 basel_substring and (
@@ -214,24 +215,24 @@ class Reference:
             # No proper annotation for "PITUI"
             if mc == "PITUI":
                 return "Pituicytoma"
-            else:
-                return ""
+            return ""
         mc_description = [
             description(mc).capitalize() for mc in methylation_classes
         ]
         return mc_description
 
     def __str__(self):
-        lines = [ 
-            f"Reference '{self.name}':",
-            f"Annotation:\n{self.annotation}",
-            f"CpG CpG/Sites:\n{pd.DataFrame(self.cpg_site_to_index.items())}",
-            f"CpG Sites:\n{pd.DataFrame(self.cpg_sites)}",
-            f"All specimens:\n{pd.DataFrame(self.all_specimens)}",
-            f"Specimens :\n{pd.DataFrame(self.specimens)}",
-            f"Specimens index:\n{pd.DataFrame(self.specimens_index)}",
-            f"Methylation class:\n{pd.DataFrame(self.methylation_class)}",
-            f"Description:\n{pd.DataFrame(self.description)}",
+        lines = [
+            f"Reference object:",
+            f"name: '{self.name}'",
+            f"annotation:\n{self.annotation}",
+            f"cpg_site_to_index:\n{pd.DataFrame(self.cpg_site_to_index.items())}",
+            f"cpg_sites:\n{pd.DataFrame(self.cpg_sites)}",
+            f"all_specimens:\n{pd.DataFrame(self.all_specimens)}",
+            f"specimens :\n{pd.DataFrame(self.specimens)}",
+            f"specimens_index\n{pd.DataFrame(self.specimens_index)}",
+            f"methylation_class: {pd.DataFrame(self.methylation_class)}",
+            f"description: {pd.DataFrame(self.description)}",
         ]
         return "\n".join(lines)
 
@@ -314,11 +315,11 @@ class Genome:
         ]].to_csv(GENES, index=False, sep="\t")
 
     def __str__(self):
-        lines = [ 
-            f"Genome:",
-            f"Chromsome length: {self.length}",
-            f"Chromosomes:\n{self.chrom}",
-            f"Genes:\n{self.genes}",
+        lines = [
+            "Genome object:",
+            f"length: {self.length}",
+            f"chrom:\n{self.chrom}",
+            f"genes:\n{self.genes}",
         ]
         return "\n".join(lines)
 
@@ -389,12 +390,13 @@ class Sample:
         self.cpg_overlap_index.sort()
 
     def __str__(self):
-        lines = [ 
-            f"Sample '{self.name}':",
+        lines = [
+            f"Sample object:",
+            f"name: '{self.name}':",
             f"methyl_df: {self.methyl_df}",
-            f"CpG overlap: {pd.DataFrame(self.cpg_overlap)}",
-            f"CpG overlap index: {pd.DataFrame(self.cpg_overlap_index)}",
-            f"Reads: {pd.DataFrame(self.reads)}",
+            f"cpg_overlap: {pd.DataFrame(self.cpg_overlap)}",
+            f"cpg_overlap_index: {pd.DataFrame(self.cpg_overlap_index)}",
+            f"reads: {pd.DataFrame(self.reads)}",
         ]
         return "\n".join(lines)
 

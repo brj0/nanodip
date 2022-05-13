@@ -6,21 +6,19 @@
 
 {% block body %}
 <table class="analysis">
-<thead>
-  <tr>
-    <th><b>Sample ID </b></th>
-    <th><b>CpGs</b></th>
-    <th><b>CNV</b></th>
-    {% for a in annotations %}
-    <th>
-      <b>UMAP against<br>{{a}}</b>
-    </th>
-    {% endfor %}
-  </tr>
-</thead>
+  <thead>
+    <tr>
+      <th><b>Sample ID </b></th>
+      <th><b>CpGs</b></th>
+      <th><b>CNV</b></th>
+      {% for a in annotations %}
+      <th><b>UMAP against<br>{{a}}</b></th>
+      {% endfor %}
+    </tr>
+  </thead>
 
-<tbody>
-  {% for run in analysis_runs %}
+  <tbody>
+    {% for run in analysis_runs %}
     <tr>
       <td>{{run}}</td>
       <td>
@@ -56,8 +54,8 @@
       </td>
       {% endfor %}
     </tr>
-  {% endfor %}
-</tbody>
+    {% endfor %}
+  </tbody>
 </table>
 
 {% endblock %}

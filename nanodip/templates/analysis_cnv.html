@@ -14,14 +14,6 @@
     {% endfor %}
   </datalist>
 
-  <label for="genome_genes">Choose Gene:</label>
-  <input list="genome_genes" id="gene_list2" name="gene_list" />
-  <datalist id="genome_genes">
-    {% for gene in genes %}
-      <option value="{{gene}}">
-    {% endfor %}
-  </datalist>
-
   <div class="loader" id="loader"></div>
   <div id="cnv"></div>
 
@@ -35,42 +27,40 @@
   }
 </script>
 <script>
-  /*Load CNV Plot with bins method on startup.*/
-  var cnvPlotBins;
+  /*Load CNV Plot on startup.*/
   $(document).ready(function(){
-      $.ajax({
-          url: "{{url_cnv}}",
-          type: "GET",
-          contentType: "application/json;charset=UTF-8",
-          data: {
-            "samp": "{{sample_name}}",
-            "genes": "",
-            "new": "{{new}}",
-          },
-          dataType:"json",
-          success: function (data) {
-              cnvPlotBins = data;
-              document.getElementById("loader").style.display = "none";
-              renderPlot(data, "cnv");
-          }
-      });
+    $.ajax({
+      url: "{{url_cnv}}",
+      type: "GET",
+      contentType: "application/json;charset=UTF-8",
+      data: {
+        "sample_name": "{{sample_name}}",
+        "genes": "",
+        "new": "{{new}}",
+      },
+      dataType:"json",
+      success: function (data) {
+        document.getElementById("loader").style.display = "none";
+        renderPlot(data, "cnv");
+      }
+    });
   })
   /*Reload CNV Plot when genes are chosen.*/
   $("#gene_list").on("change",function(){
-      $.ajax({
-          url: "{{url_cnv}}",
-          type: "GET",
-          contentType: "application/json;charset=UTF-8",
-          data: {
-            "samp": "{{sample_name}}",
-            "genes": document.getElementById("gene_list").value,
-            "new": "False",
-          },
-          dataType:"json",
-          success: function (data) {
-              renderPlot(data, "cnv");
-          }
-      });
+    $.ajax({
+      url: "{{url_cnv}}",
+      type: "GET",
+      contentType: "application/json;charset=UTF-8",
+      data: {
+        "sample_name": "{{sample_name}}",
+        "genes": document.getElementById("gene_list").value,
+        "new": "False",
+      },
+      dataType:"json",
+      success: function (data) {
+        renderPlot(data, "cnv");
+      }
+    });
   })
 </script>
 

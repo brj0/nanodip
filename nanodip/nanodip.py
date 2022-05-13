@@ -93,7 +93,6 @@ environment-specific parameters. One way to do so is through the *os* module.
 # Execution-wide multithreading options, set according to your hardware. Jetson
 # AGX: suggest "2" needs to be set before importing other modules that query
 # these parameters.
-import os
 os.environ["NUMBA_NUM_THREADS"] = "2"
 os.environ["OPENBLAS_NUM_THREADS"] = "2"
 os.environ["MKL_NUM_THREADS"] = "2"

@@ -7,17 +7,16 @@ from https://github.com/neuropathbasel/minknow_api.
 """
 
 # start_external_modules
-from minknow_api.acquisition_pb2 import READY
-from minknow_api.manager import Manager
-from minknow_api.tools import protocols
 import argparse
-import grpc
 import logging
-import minknow_api.device_pb2
-import minknow_api.statistics_pb2
 import os
 import subprocess
 import sys
+
+from minknow_api.acquisition_pb2 import READY, STARTING, PROCESSING, FINISHING
+from minknow_api.manager import Manager
+from minknow_api.tools import protocols
+import grpc
 # end_external_modules
 
 # start_internal_modules
@@ -26,13 +25,10 @@ from config import (
     F5C,
     MINIMAP2,
     NANODIP_OUTPUT,
-    NANODIP_REPORTS,
     NEEDED_NUMBER_OF_BASES,
     READS_PER_FILE,
     REFERENCE_GENOME_FA,
-    REFERENCE_GENOME_FA,
     REFERENCE_GENOME_MMI,
-    RESULT_ENDING,
     SAMTOOLS,
     THIS_HOST,
 )
@@ -81,13 +77,13 @@ def flow_cell_id(device_id):
     """Return flow cell ID (if any). Note that some CTCs have an
     empty ID string.
     """
-    flow_cell_id = "no_flow_cell"
+    cell_id = "no_flow_cell"
     positions = minion_positions()
     for p in positions:
         if device_id in p.name:
             connection = p.connect()
-            flow_cell_id = connection.device.get_flow_cell_info().flow_cell_id
-    return flow_cell_id
+            cell_id = connection.device.get_flow_cell_info().flow_cell_id
+    return cell_id
 
 def parse_args(args_list):
     """Build and execute a command line argument for starting a protocol.
@@ -291,7 +287,7 @@ def parse_args(args_list):
     )
     args = parser.parse_args(args_list)
     # Further argument checks
-    # Read until must have a reference and a filter type, if enabled:
+    # 'Read until' must have a reference and a filter type, if enabled:
     if (
         args.read_until_filter is not None
         or args.read_until_reference is not None
@@ -318,30 +314,11 @@ def parse_args(args_list):
         sys.exit(1)
     if args.alignment_reference and not (args.basecalling or args.basecall_config):
         print("Unable to specify '--alignment-reference' without '--basecalling'.")
-
         sys.exit(1)
     if not (args.fast5 or args.fastq):
         print("No output (fast5 or fastq) specified")
 
     return args
-
-def is_position_selected(position, args):
-    """Find if the {position} is selected by command line arguments {args}."""
-
-    # First check for name match:
-    if args.position == position.name:
-        return True
-
-    # Then verify if the flow cell matches:
-    connected_position = position.connect()
-    if args.flow_cell_id is not None:
-        flow_cell_info = connected_position.device.get_flow_cell_info()
-        if (
-            flow_cell_info.user_specified_flow_cell_id == args.flow_cell_id
-            or flow_cell_info.flow_cell_id == args.flow_cell_id
-        ):
-            return True
-    return False
 
 def start_run(
     device_id="",
@@ -361,8 +338,7 @@ def start_run(
     and product code.
     """
     args_list = [
-        "--host",
-        "localhost",
+        "--host", "localhost",
         "--position", device_id,
         "--sample-id", sample_id,
         "--experiment-group", sample_id,
@@ -554,8 +530,8 @@ def stop_run(device_id):
     protocol ID.
     """
     connection = connection_from_device_id(device_id)
-    protocols = connection.protocol.list_protocol_runs()
-    protocol_id = protocols.run_ids[-1]
+    protocol = connection.protocol.list_protocol_runs()
+    protocol_id = protocol.run_ids[-1]
     # TODO @HEJU in stopRun wird über bufferedRunIds geloopt. Notwendig?
     try:
         connection.protocol.stop_protocol()
@@ -568,21 +544,74 @@ def is_position_selected(position, args):
     {args}.
     Function from minknow_api demos, start_seq.py
     """
-    if args.position == position.name: # First check for name match:
+    # First check for name match:
+    if args.position == position.name:
         return True
-    connected_position = position.connect()  # Then verify if the flow cell matches:
+
+    # Then verify if the flow cell matches:
+    connected_position = position.connect()
     if args.flow_cell_id is not None:
         flow_cell_info = connected_position.device.get_flow_cell_info()
-        if (flow_cell_info.user_specified_flow_cell_id == args.flow_cell_id
-            or flow_cell_info.flow_cell_id == args.flow_cell_id):
+        if (
+            flow_cell_info.user_specified_flow_cell_id == args.flow_cell_id
+            or flow_cell_info.flow_cell_id == args.flow_cell_id
+        ):
             return True
     return False
 
+def active_run(device_id):
+    """Returns active run id."""
+    connection = connection_from_device_id(device_id)
+    try:
+        # Error if no acquisition is running, same as with
+        # acquisitio.current_status(), no acquisition until
+        # temperature reached
+        active_run = connection.acquisition.get_current_acquisition_run().run_id
+    except grpc._channel._InactiveRpcError:
+        active_run = "none"
+    return active_run
+
+def device_activity(device_id):
+    """Returns device activity. Virtual test runs will be recognized as
+    active.
+    """
+    connection = connection_from_device_id(device_id)
+    status = connection.acquisition.current_status().status
+    device_activity = {
+        STARTING: "sequencing",
+        PROCESSING: "sequencing",
+        FINISHING: "sequencing",
+        READY: "idle",
+    }
+    return device_activity.get(status, "")
+
+def real_device_activity(device_id):
+    """Returns device activity by checking the target temperature."""
+    connection = connection_from_device_id(device_id)
+    target_temp =str(
+        connection.minion_device.get_settings().temperature_target.min
+    )
+    device_activity = {
+        "34.0": "sequencing",
+        "35.0": "idle",
+        "37.0": "checking flow cell",
+    }
+    return device_activity.get(target_temp, "")
+
+def number_of_called_bases(device_id):
+    """Returns number of called bases."""
+    connection = connection_from_device_id(device_id)
+    # Check if device is working.
+    if connection.acquisition.current_status().status == READY:
+        return 0
+    acquisition = connection.acquisition.get_acquisition_info()
+    num_bases = acquisition.yield_summary.estimated_selected_bases
+    return num_bases
 
 def device_status(device_id):
-    """MinKNOW status for device."""
+    """MinKNOW status for device {device_id}."""
     connection = connection_from_device_id(device_id)
-    current_bases = called_bases(device_id)
+    current_bases = number_of_called_bases(device_id)
     needed_mb = round(NEEDED_NUMBER_OF_BASES // 1e6, 2)
     current_mb = round(current_bases / 1e6, 2)
     progress = round(100*current_mb/needed_mb, 1)
@@ -604,35 +633,10 @@ def device_status(device_id):
         ),
         "device.get_bias_voltage()": str(connection.device.get_bias_voltage()),
     }
-    # Progress is only correct if device is sequencing.
+    # Progress is only needed if device is sequencing.
     if active_run(device_id) == "none":
         status.pop("Progress")
     return status
-
-def active_run(device_id):
-    """Returns active run id."""
-    connection = connection_from_device_id(device_id)
-    try:
-        # Error if no acquisition is running, same as with
-        # acquisitio.current_status(), no acquisition until
-        # temperature reached
-        active_run = connection.acquisition.get_current_acquisition_run().run_id
-    except grpc._channel._InactiveRpcError:
-        active_run = "none"
-    return active_run
-
-def real_device_activity(device_id):
-    """Returns device activity by checking the target temperature."""
-    connection = connection_from_device_id(device_id)
-    target_temp =str(
-        connection.minion_device.get_settings().temperature_target.min
-    )
-    device_activity = {
-        "34.0": "sequencing",
-        "35.0": "idle",
-        "37.0": "checking flow cell",
-    }
-    return device_activity.get(target_temp, "")
 
 def run_state(device_id):
     """Obtain further information about a particular device / run."""
@@ -647,8 +651,8 @@ def run_state(device_id):
     return state
 
 def run_sample_id(device_id):
-    """Get SampleID from MinKNOW by device, only available after data
-    acquisition as been initiated by MinKNOW.
+    """Get sample ID from MinKNOW by device, only available after data
+    acquisition has been initiated by MinKNOW.
     """
     connection = connection_from_device_id(device_id)
     try:
@@ -676,18 +680,6 @@ def run_yield(device_id):
         yield_ = f"No yield information in MinKNOW buffer for {device_id}"
     return yield_
 
-def called_bases(device_id):
-    """Returns number of called bases."""
-    connection = connection_from_device_id(device_id)
-    # Check if device is working.
-    if connection.acquisition.current_status().status == READY:
-        return 0
-    else:
-        acquisition = connection.acquisition.get_acquisition_info()
-        num_bases = acquisition.yield_summary.estimated_selected_bases
-        return num_bases
-
-
 def run_information(device_id):
     """Get current run information. Only available after data acquisition
     has started.
@@ -708,29 +700,18 @@ def set_bias_voltage(device_id, voltage):
     previous_voltage = connection.device.get_bias_voltage().bias_voltage
     connection.device.set_bias_voltage(bias_voltage=float(voltage))
 
-def get_all_results():
-    """Return list of all analysis result files in report directory sorted
-    by modification time.
-    """
-    files = []
-    for f in os.listdir(NANODIP_REPORTS):
-        for e in RESULT_ENDING.values():
-            if f.endswith(e):
-                mod_time = os.path.getmtime(
-                    os.path.join(NANODIP_REPORTS, f)
-                )
-                files.append([f, mod_time])
-    files.sort(key=lambda x: (x[1], x[0]), reverse=True)
-    return [f[0] for f in files]
-
-def single_file_methylation_caller(analysis_dir, file_name):
+def single_file_methylation_caller(analysis_dir):
     """Invokes f5c methylation caller on a single fast5/fastq file and
     calculates methylation frequencies and CpG overlaps.
 
     Args:
-        analysis_dir: directory containing fast5 and fastq files.
-        file_name: run id.
+        analysis_dir: Directory containing fast5 and fastq files to be
+            analyzed. The basename of these files (corresponding to the
+            run id) must be equal to the name of analysis_dir.
+            The resulting files of the methylation calling process will
+            be saved in analysis_dir.
     """
+    file_name = os.path.basename(analysis_dir)
     base_path = os.path.join(analysis_dir, file_name)
     # Create index file for f5c.
     f5c_index = [
@@ -842,6 +823,7 @@ def methylation_caller(sample_name, analyze_one=True):
             ".fast5", ".fastq"
         ).replace("fast5_pass", "fastq_pass")
 
+    # Collect all passed fast5/fastq pairs
     fast5q_file_pairs = [
         [f, from_5_to_q(f)] for f in fast5_files
         if os.path.exists(from_5_to_q(f))
@@ -874,7 +856,7 @@ def methylation_caller(sample_name, analyze_one=True):
                 [analysis_dir, file_name]
             )
     for directory, file_name in not_called:
-        single_file_methylation_caller(directory, file_name)
+        single_file_methylation_caller(directory)
         curr_called.append(file_name)
         if analyze_one:
             break

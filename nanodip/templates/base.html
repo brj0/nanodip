@@ -3,7 +3,6 @@
 
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="refresh" content="{{autorefresh}}">
   <title>{% block title %}{% endblock %}</title>
   <link rel="stylesheet" href="static/style.css">
   {% block head %}{% endblock %}
@@ -12,7 +11,6 @@
 </head>
 
 <body>
-
   <nav id="navbar">
     <div class="logo">
       <img src="static/img/logo.svg" width="40px" height="40px">
@@ -22,16 +20,16 @@
         <a href="/" title="General system information">Overview</a>
       </li>
       <li>
-        <a href="status" title="Live status of all connected Mk1b devices">Status</a>
+        <a href="/status" title="Live status of all connected Mk1b devices">Status</a>
       </li>
       <li>
-        <a href="start" title="Start a sequencing run on an idle Mk1b device">Start Run</a>
+        <a href="/start" title="Start a sequencing run on an idle Mk1b device">Start Run</a>
       </li>
       <li>
-        <a href="start_test" title="Start a test seq. run on an idle Mk1b device to verify that the previous flow cell wash was successful.">Start Test</a>
+        <a href="/start_test" title="Start a test seq. run on an idle Mk1b device to verify that the previous flow cell wash was successful.">Start Test</a>
       </li>
       <li>
-        <a href="list_runs" title="List all buffered runs. Will be purged upon MinKNOW backend restart.">List Runs</a>
+        <a href="/list_runs" title="List all buffered runs. Will be purged upon MinKNOW backend restart.">List Runs</a>
       </li>
       <li>
         <a href="/results" title="List all completed analysis results">Results</a>
@@ -48,7 +46,12 @@
     </ul>
   </nav>
 
+  <div class="content">
+    {% block body %}{% endblock %}
+  </div>
+
   <script>
+    // Mark the currently opened page with the CSS tag "current".
     navBar = document.getElementById("navbar")
     var current;
     for (var i = 0; i < document.links.length; i++) {
@@ -59,11 +62,6 @@
     }
     current.className = "current";
   </script>
-
-  <div class="content">
-    {% block body %}{% endblock %}
-  </div>
-
 </body>
 
 </html>

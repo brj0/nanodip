@@ -6,31 +6,18 @@
 
 {% block body %}
 
-{% for pos in positions %}
+{% for device in device_ids %}
 
-  <div class="device_box">
-    <div id="{{pos}}" class="preview_element"></div>
-    <iframe class="preview_element" src="{{url_analysis[pos]}}" title="{{pos}}"></iframe>
+  <div id="{{device}}_status" class="device_box">
+    <div id="{{device}}_device" class="preview_element"></div>
+    <div id="{{device}}_plots" class="preview_element"></div>
   </div>
+{% endfor %}
 
   <script>
-    $(document).ready(function() {
-      var refreshPage = function() {
-        for (pos of {{positions}}) {
-          refreshDeviceStatus(pos);
-        }
-        setTimeout(refreshPage, 3000);
-      };
-      refreshPage();
-    })
-  </script>
-
-
-  <script>
-    /*Refresh the device status every 2 seconds.*/
     function refreshDeviceStatus(deviceId) {
       $.ajax({
-        url: "{{url_device["none"]}}",
+        url: "{{url_live_device_status}}",
         type: "GET",
         contentType: "application/json;charset=UTF-8",
         data: {
@@ -38,11 +25,46 @@
         },
         dataType:"html",
         success: function (data) {
-          $("#" + deviceId).html(data);
+          $("#" + deviceId + "_device").html(data);
+          setDeviceBoxColor(deviceId, data);
         }
       });
     }
+    function refreshPreviewPlots(deviceId) {
+      $.ajax({
+        url: "{{url_live_plots}}",
+        type: "GET",
+        contentType: "application/json;charset=UTF-8",
+        data: {
+          "device_id": deviceId,
+        },
+        dataType:"html",
+        success: function (data) {
+          $("#" + deviceId + "_plots").html(data);
+        }
+      });
+    }
+    function setDeviceBoxColor(deviceId, htmlString) {
+      // Check if string "PROCESSING" is contained in HTML and set
+      // background color accordingly.
+      if (htmlString.indexOf("PROCESSING") !== -1) {
+        $("#" + deviceId + "_status").addClass("device_box_active");
+      }
+      else {
+        $("#" + deviceId + "_status").removeClass("device_box_active");
+      }
+    }
+    /*Refresh the device status and preview plots every 3 seconds.*/
+    $(document).ready(function() {
+      var refreshPage = function() {
+        for (deviceId of {{device_ids}}) {
+          refreshDeviceStatus(deviceId);
+          refreshPreviewPlots(deviceId);
+        }
+        setTimeout(refreshPage, 3000);
+      };
+      refreshPage();
+    })
   </script>
-{% endfor %}
 
 {% endblock %}
