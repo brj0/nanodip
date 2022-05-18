@@ -241,26 +241,6 @@ def composite_path(directory, *args):
         file_name,
     )
 
-def write_reference_name(sample_name, reference_name):
-    """Write the filename of the UMAP reference for the current run into
-    a text file. Used to find png plot preview of sample under analysis.
-    """
-    file_path = composite_path(NANODIP_REPORTS, sample_name, ENDING["sel_ref"])
-    with open(file_path, "w") as f:
-        f.write(reference_name)
-
-def read_reference(sample_name):
-    """Read the filename of the UMAP reference for the current sample.
-    Used to find png plot preview of sample under analysis.
-    """
-    file_path = composite_path(NANODIP_REPORTS, sample_name, ENDING["sel_ref"])
-    try:
-        with open(file_path, "r") as f:
-            reference = f.read()
-    except FileNotFoundError:
-        reference = ""
-    return reference
-
 def discrete_colors(names):
     """Pseudorandom color scheme based on hashed values. Colors
     of methylation classes will be fixed to their name.

@@ -154,7 +154,8 @@ def cnv_plot_from_data(data_x, data_y, expt_y, sample_name, read_num, genome):
 
 def number_of_reads(sorted_read_start_pos, interval):
     """Return the number of starting sequences within interval. Reads must
-    be sorted in ascending order."""
+    be sorted in ascending order.
+    """
     left, right = interval
     i_left = bisect.bisect_left(sorted_read_start_pos, left)
     i_right = bisect.bisect_left(sorted_read_start_pos, right)
@@ -262,8 +263,9 @@ class CNVData:
         genes["cn_obs"] = genes.interval.apply(
             lambda z: number_of_reads(read_start_pos, z)
         )
-        genes["cn_per_mega_base"] = genes.apply(
-            lambda z: z["cn_obs"]/z["len"] * 1e6, # TODO auto draw extreme values
+        bin_size = len(CNVData.genome)/(len(self.bin_midpoints))
+        genes["cn_per_bin"] = genes.apply(
+            lambda z: z["cn_obs"]/z["len"] * bin_size, # TODO auto draw extreme values
             axis=1,
         )
         genes["cn_exp"] = genes.apply(

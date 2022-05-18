@@ -5,13 +5,14 @@ Run this script to parses the whole nanodip code and merge into one single
 jupyter notebook file within this directory.
 """
 
-import nbformat as nbf
 import re
 import sys
 from distutils.dir_util import copy_tree
 from shutil import rmtree
 import argparse
 import os
+
+import nbformat as nbf
 
 START_EXTERNAL = "# start_external_modules\n"
 END_EXTERNAL = "# end_external_modules\n"

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block head %}
+  <style>
+    .content {
+      padding-right: 30vw;
+    }
+  </style>
+{% endblock %}
+
+{% block title %}
+  About
+{% endblock %}
+
+{% block body %}
+<b>NanoDiP</b> is a tool to obtain and analyze low-coverage whole genome nanopore sequencing information through bascalling, genomic alignment, copy number extrapolation, and unsupervised machine learning by UMAP-based dimensions reduction. It is the nanopore-centered implementation of <a href="http://www.epidip.org">EpiDiP</a> which stands for <i> Epigenomic Digital Pathology</i>. NanoDiP hence abbreviates <i> Nanopore Digital Pathology</i>.<br><br>
+
+Nanopore sequencing is developed and sold by <a href="https://nanoporetech.com/">ONT</a>. Then authors of this software are not affiliated with ONT.<br><br>
+
+This software is licensed under the <a href="https://www.gnu.org/licenses/gpl-3.0.html">GPLv3</a>. By using this program, you agree to the terms specified herein.<br><br>
+
+<b>This software is not a medical device.</b> Its use occurs in the sole responsibility of the treating physician. The authors shall not be held liable for any damage caused by this software.  <b>Basic understanding of how this system works and internal validation are strongly advised before implementation in a diagnostic setting.</b>
+{% endblock %}

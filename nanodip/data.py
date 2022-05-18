@@ -364,7 +364,7 @@ class Sample:
 
         cpg_files = files_by_ending(NANODIP_OUTPUT, sample_name,
                                     ending="methoverlap.tsv")
-        methylation_info = pd.DataFrame()
+        methylation_info = pd.DataFrame(columns=["cpg_site", "methylation"])
         for f in cpg_files:
             # Some fast5 files do not contain any CpGs.
             try:

@@ -13,8 +13,8 @@ the Web UI cell below.
 from urllib import request
 import json
 import logging
-import multiprocessing as mp
 import os
+import re
 import shutil
 import socket
 import threading
@@ -47,15 +47,12 @@ from utils import (
     get_all_results,
     get_runs,
     predominant_barcode,
-    read_reference,
     reference_annotations,
     render_template,
     url_for,
-    write_reference_name,
 )
 from api import (
     active_run,
-    device_activity,
     device_status,
     flow_cell_id,
     methylation_caller,
@@ -106,10 +103,9 @@ class Devices:
         device = self.get_device(device_id)
         if device:
             return device
-        else:
-            device = Device(device_id)
-            self.list.append(device)
-            return device
+        device = Device(device_id)
+        self.list.append(device)
+        return device
 
     def pop(self, device_id):
         """Removes and returns device."""
@@ -117,8 +113,7 @@ class Devices:
         if device:
             self.list.remove(device)
             return device
-        else:
-            return None
+        return None
 
     def get_device(self, device_id):
         """Returns device with given id. Returns false if id is not found."""
@@ -163,12 +158,8 @@ def download_epidip_data(sentrix_id, reference_umap):
 class UI:
     """User interface implemented as CherryPy webserver."""
     # global variables within the CherryPy Web UI
-    cnv_lock = mp.Lock()
-    # TODO use Semaphore instead
-    # cnv_sem = threading.Semaphore()
-    umap_lock = mp.Lock()
-    # TODO use Semaphore instead
-    # umap_sem = threading.Semaphore()
+    cnv_sem = threading.Semaphore()
+    umap_sem = threading.Semaphore()
     cpg_sem = threading.Semaphore()
     devices = Devices()
 
@@ -187,31 +178,15 @@ class UI:
             ),
             "cpu": round(psutil.cpu_percent()),
             "cpgs": 1 - UI.cpg_sem._value,
-            "cnvp": len([p for p in mp.active_children() if p.name == "cnv"]),
-            "umap": len([p for p in mp.active_children() if p.name == "umap"]),
+            "cnvp": 1 - UI.cnv_sem._value,
+            "umap": 1 - UI.umap_sem._value,
         }
         # Calculate URLs to avoid hard coding URLs in HTML templates.
         return render_template(
             "index.html",
             sys_stat=sys_stat,
-            url_cpgs=url_for(UI.reset_queue, queue_name=sys_stat["cpgs"]),
-            url_cnvp=url_for(UI.reset_queue, queue_name=sys_stat["cnvp"]),
-            url_umap=url_for(UI.reset_queue, queue_name=sys_stat["umap"]),
             url_restart=url_for(UI.restart),
         )
-
-    # TODO del
-    @cherrypy.expose
-    def reset_queue(self, queue_name=""):
-        if queue_name:
-            if queue_name == "cpg":
-                UI.cpgQueue = 0
-            if queue_name == "umap":
-                UI.umapQueue = 0
-            if queue_name == "cnvp":
-                UI.cnvpQueue = 0
-            html += queue_name + " queue reset"
-        return html
 
     @cherrypy.expose
     def restart(self):
@@ -271,9 +246,31 @@ class UI:
             raise cherrypy.HTTPError(404, "URL not found")
         # If there is a run that produces data, the run ID will exist.
         sample_id = run_sample_id(device_id)
-        reference = read_reference(sample_id)
+
+        # Chose reference with latest png-UMAP file.
+        umap_png_files = [
+            f for f in os.listdir(NANODIP_REPORTS)
+            if f.endswith(ENDING["umap_all_png"]) and sample_id in f
+        ]
+        if not umap_png_files:
+            # Dummy reference name if no UMAP files are found (happens if
+            # device is not sequencing and thus no sample_id can be found.
+            reference = "none"
+        else:
+            latest_umap_png = max(
+                [os.path.join(NANODIP_REPORTS, f) for f in umap_png_files],
+                key=os.path.getmtime,
+            )
+            reference = re.search(
+                sample_id +  "_(.*?)_" + ENDING["umap_all_png"],
+                latest_umap_png
+            ).group(1)
+
         cnv_plt_path_png = composite_path(
             "reports", sample_id, ENDING["cnv_png"],
+        )
+        cnv_plt_path_html = composite_path(
+            "reports", sample_id, ENDING["cnv_html"],
         )
         umap_plt_path_png = composite_path(
             "reports", sample_id, reference, ENDING["umap_all_png"],
@@ -286,6 +283,7 @@ class UI:
             sample_id=sample_id,
             reference=reference,
             cnv_plt_path_png=cnv_plt_path_png,
+            cnv_plt_path_html=cnv_plt_path_html,
             umap_plt_path_png=umap_plt_path_png,
             umap_plt_path_html=umap_plt_path_html,
         )
@@ -310,7 +308,6 @@ class UI:
                 run_duration=run_duration,
                 start_voltage=start_voltage,
             )
-            write_reference_name(sample_id, reference_id)
             return render_template(
                 "start.html",
                 start_now=start_now,
@@ -321,21 +318,20 @@ class UI:
                 run_id=" / ".join(run_ids),
                 run_info=run_information(device_id),
             )
-        else:
-            positions = [p.name for p in minion_positions()]
-            idle = [
-                p for p in positions if real_device_activity(p) == "idle"
-                and flow_cell_id(p) != ""
-            ]
-            flow_cell = {pos:flow_cell_id(pos) for pos in idle}
-            return render_template(
-                "start.html",
-                start_now=start_now,
-                test=False,
-                idle=idle,
-                flow_cell=flow_cell,
-                references=reference_annotations(),
-            )
+        positions = [p.name for p in minion_positions()]
+        idle = [
+            p for p in positions if real_device_activity(p) == "idle"
+            and flow_cell_id(p) != ""
+        ]
+        flow_cell = {pos:flow_cell_id(pos) for pos in idle}
+        return render_template(
+            "start.html",
+            start_now=start_now,
+            test=False,
+            idle=idle,
+            flow_cell=flow_cell,
+            references=reference_annotations(),
+        )
 
     @cherrypy.expose
     def start_test(self, device_id=""):
@@ -358,19 +354,18 @@ class UI:
                 run_id=" / ".join(run_ids),
                 run_info=run_information(device_id),
             )
-        else:
-            positions = [p.name for p in minion_positions()]
-            idle = [p for p in positions if real_device_activity(p) == "idle"
-                and flow_cell_id(p) != ""]
-            flow_cell = {pos:flow_cell_id(pos) for pos in idle}
-            return render_template(
-                "start.html",
-                start_now=False,
-                test=True,
-                idle=idle,
-                flow_cell=flow_cell,
-                references=reference_annotations(),
-            )
+        positions = [p.name for p in minion_positions()]
+        idle = [p for p in positions if real_device_activity(p) == "idle"
+            and flow_cell_id(p) != ""]
+        flow_cell = {pos:flow_cell_id(pos) for pos in idle}
+        return render_template(
+            "start.html",
+            start_now=False,
+            test=True,
+            idle=idle,
+            flow_cell=flow_cell,
+            references=reference_annotations(),
+        )
 
     @cherrypy.expose
     def stop_sequencing(self, device_id=""):
@@ -378,8 +373,7 @@ class UI:
         protocol_id = stop_run(device_id)
         if protocol_id is None:
             return "No protocol running, nothing was stopped."
-        else:
-            return f"Protocol {protocol_id} stopped on {device_id}."
+        return f"Protocol {protocol_id} stopped on {device_id}."
 
     @cherrypy.expose
     def list_runs(self):
@@ -395,7 +389,7 @@ class UI:
             connection = minion.connect()
             device_names.append(name)
             mounted_flow_cell_id[name] = connection.device.get_flow_cell_info(
-                ).flow_cell
+                ).flow_cell_id
             # READY, STARTING, sequencing/mux = PROCESSING, FINISHING;
             # Pause = PROCESSING
             current_status[name] = connection.acquisition.current_status()
@@ -403,7 +397,7 @@ class UI:
             run_ids[name] = protocols.run_ids
             for run_id in run_ids[name]:
                 run_info = connection.protocol.get_run_info(run_id=run_id)
-                flow_cell[(name, run_id)] = run_info.flow_cell.flow_cell
+                flow_cell[(name, run_id)] = run_info.flow_cell.flow_cell_id
 
         return render_template(
             "list_runs.html",
@@ -427,7 +421,13 @@ class UI:
         )
 
     @cherrypy.expose
-    def analysis(self, func="", sample_name="", reference_name="", new="False"):
+    def analysis(
+        self,
+        func="",
+        sample_name="",
+        reference_name="",
+        new="False",
+    ):
         """Creates an overview of all samples and provides the analysis
         tools (CpG methylation calling, CNV plot and UMAP plot).
         """
@@ -446,20 +446,33 @@ class UI:
             url_umap = {}
             url_umap_new = {}
             for run in analysis_runs:
-                url_cnv[run] = url_for(UI.analysis, func="cnv", sample_name=run)
+                url_cnv[run] = url_for(
+                    UI.analysis, func="cnv", sample_name=run,
+                )
                 url_cnv_new[run] = url_for(
                     UI.analysis, func="cnv", sample_name=run, new=True,
                 )
-                url_cpgs[run] = url_for(UI.analysis, func="cpgs", sample_name=run)
-                for a in annotations:
-                    url_umap_new[(run,a)] = url_for(
-                        UI.analysis, func="umap", sample_name=run, reference_name=a, new=True
+                url_cpgs[run] = url_for(
+                    UI.analysis, func="cpgs", sample_name=run,
+                )
+                for annotation in annotations:
+                    url_umap_new[(run,annotation)] = url_for(
+                        UI.analysis,
+                        func="umap",
+                        sample_name=run,
+                        reference_name=annotation,
+                        new=True,
                     )
-                    url_umap[(run,a)] = url_for(
-                        UI.analysis, func="umap", sample_name=run, reference_name=a
+                    url_umap[(run,annotation)] = url_for(
+                        UI.analysis,
+                        func="umap",
+                        sample_name=run,
+                        reference_name=annotation,
                     )
-                    url_pdf[(run,a)] = url_for(
-                        UI.make_pdf, sample_name=run, reference_name=a
+                    url_pdf[(run,annotation)] = url_for(
+                        UI.make_pdf,
+                        sample_name=run,
+                        reference_name=annotation,
                     )
             return render_template(
                 "analysis_start.html",
@@ -498,71 +511,55 @@ class UI:
                 start_time=date_time_string_now(),
                 sample_name=sample_name,
             )
-        else:
-            raise cherrypy.HTTPError(404, "URL not found")
+        raise cherrypy.HTTPError(404, "URL not found")
 
     @cherrypy.expose
     def cnv(self, sample_name, genes="", new="False"):
         """Creates CNV plot and returns it as JSON."""
+        UI.cnv_sem.acquire()
         try:
-            cnv_plt_data = CNVData(sample_name)
+            cnv_data = CNVData(sample_name)
         except FileNotFoundError:
             raise cherrypy.HTTPError(405, "URL not allowed")
 
-        def make_plot(cnv_data, lock):
-            """Plot function for multiprocessing."""
-            lock.acquire()
-            if not cnv_data.files_on_disk() or new == "True":
+        if not cnv_data.files_on_disk() or new == "True":
+            try:
                 cnv_data.make_cnv_plot()
-            lock.release()
-
-        proc = mp.Process(
-            target=make_plot,
-            args=(cnv_plt_data, UI.cnv_lock),
-            name="cnv",
-        )
-        proc.start()
-        proc.join()
-        cnv_plt_data.read_from_disk()
-
-        return cnv_plt_data.plot_cnv_and_genes([genes])
+            except ValueError:
+                UI.cnv_sem.release()
+                raise cherrypy.HTTPError(405, "No data to plot.")
+        else:
+            cnv_data.read_from_disk()
+        UI.cnv_sem.release()
+        return cnv_data.plot_cnv_and_genes([genes])
 
     @cherrypy.expose
     def umap(self, sample_name, reference_name, close_up="", new="False"):
         """Creates UMAP plot and returns it as JSON."""
+        UI.umap_sem.acquire()
         try:
             umap_data = UMAPData(sample_name, reference_name)
         except FileNotFoundError:
             raise cherrypy.HTTPError(405, "URL not allowed")
-
-        def make_plot(umap_plt_data, lock):
-            """Plot functirn for multiprocessing."""
-            lock.acquire()
-            if not umap_plt_data.files_on_disk() or new == "True":
-                try:
-                    umap_plt_data.make_umap_plot()
-                except ValueError:
-                    raise cherrypy.HTTPError(405, "No data to plot.")
-            lock.release()
-
-        proc = mp.Process(
-            target=make_plot,
-            args=(umap_data, UI.umap_lock),
-            name="umap",
-        )
-        proc.start()
-        proc.join()
-        umap_data.read_from_disk()
-
+        if not umap_data.files_on_disk() or new == "True":
+            try:
+                umap_data.make_umap_plot()
+            except ValueError:
+                UI.umap_sem.release()
+                raise cherrypy.HTTPError(405, "No data to plot.")
+        else:
+            umap_data.read_from_disk()
+        UI.umap_sem.release()
         if close_up == "True":
             return umap_data.cu_plot_json
-
         return umap_data.plot_json
 
     @cherrypy.expose
     def make_pdf(self, sample_name=None, reference_name=None):
         """Generates PDF report."""
-        path_cgp = composite_path(NANODIP_REPORTS, sample_name, ENDING["cpg_cnt"])
+        path_cgp = composite_path(
+            NANODIP_REPORTS, sample_name, reference_name, ENDING["cpg_cnt"]
+        )
         path_reads = composite_path(
             NANODIP_REPORTS, sample_name, ENDING["aligned_reads"]
         )
@@ -572,10 +569,8 @@ class UI:
             with open(path_reads, "r") as f:
                 read_numbers = f.read()
         except FileNotFoundError:
-            raise cherrypy.HTTPError(
-                405,
-                "CpG/Read count file not found. Probably UMAP not completed."
-            )
+            overlap_cnt = 0
+            read_numbers = 0
         cnv_path = composite_path(
             NANODIP_REPORTS, sample_name, ENDING["cnv_png"]
         )
@@ -647,6 +642,10 @@ class UI:
     def change_voltage(self, device_id="", voltage=""):
         """Change bias voltage."""
         set_bias_voltage(device_id, voltage)
+        return render_template(
+            "change_voltage.html",
+            voltage=voltage,
+        )
 
     @cherrypy.expose
     def epidip_report(
@@ -664,6 +663,7 @@ class UI:
             umap_data.read_precalculated_umap_matrix(reference_umap)
             umap_data.draw_pie_chart()
             umap_data.draw_scatter_plots()
+            umap_data.save_to_disk()
             UI.make_pdf(
                 self, sample_name=sentrix_id, reference_name=reference_id
             )
@@ -677,6 +677,7 @@ class UI:
 
     @cherrypy.expose
     def about(self):
+        """About Page."""
         return render_template("about.html")
 
 

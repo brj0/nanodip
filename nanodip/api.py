@@ -10,6 +10,7 @@ from https://github.com/neuropathbasel/minknow_api.
 import argparse
 import logging
 import os
+import shutil
 import subprocess
 import sys
 
@@ -63,7 +64,7 @@ def minion_positions():
     return positions
 
 def connection_from_device_id(device_id):
-    """Returns minion position """
+    """Returns minion position."""
     position = next(
         (pos for pos in minion_positions() if pos.name == device_id),
         False,
@@ -800,6 +801,20 @@ def single_file_methylation_caller(analysis_dir):
         pass
     print(f"Methylation calling on {file_name} done.")
 
+def remove_dirs_with_wrong_barcode(sample_name, barcode):
+    """Removes directories with wrong barcode due to change of
+    the predominant barcode after the first reads.
+    """
+    output_dirs = [
+        os.path.join(NANODIP_OUTPUT, sample_name, dir_nm) for dir_nm in
+        os.listdir(os.path.join(NANODIP_OUTPUT, sample_name))
+    ]
+    wrong_barcode_dirs = [
+        f for f in output_dirs if barcode not in f
+    ]
+    for dir_path in wrong_barcode_dirs:
+        shutil.rmtree(dir_path)
+
 def methylation_caller(sample_name, analyze_one=True):
     """Searches for callable fast5/fastq files that have not yet been
     called and invokes methylation calling. Results will be added to
@@ -812,6 +827,7 @@ def methylation_caller(sample_name, analyze_one=True):
     """
     # At least 2 "passed" files need to be present.
     barcode = predominant_barcode(sample_name)
+    remove_dirs_with_wrong_barcode(sample_name, barcode)
     fast5_files = [
         f for f in files_by_ending(DATA, sample_name, ending=".fast5")
         if barcode in f
