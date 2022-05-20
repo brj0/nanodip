@@ -400,7 +400,7 @@ class Sample:
         ]
         return "\n".join(lines)
 
-def _get_reference_methylation(reference_index, cpg_index):
+def reference_methylation_from_index(reference_index, cpg_index):
     """Extract and return (reference-specimen x CpG-site) methylation
     matrix from reference data.
 
@@ -434,7 +434,7 @@ def get_reference_methylation(sample, reference):
         raise ValueError("CpG overlap is empty")
     reference_index = reference.specimens_index
     cpg_index = sample.cpg_overlap_index
-    return _get_reference_methylation(reference_index, cpg_index)
+    return reference_methylation_from_index(reference_index, cpg_index)
 
 def get_sample_methylation(sample, reference):
     """Calculate sample methylation from reads.

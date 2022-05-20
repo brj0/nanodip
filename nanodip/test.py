@@ -46,6 +46,7 @@ from config import (
     READS_PER_FILE,
     REFERENCE_GENOME_FA,
     REFERENCE_GENOME_MMI,
+    REFERENCE_METHYLATION_SHAPE,
     RELEVANT_GENES,
     RESULT_ENDING,
     SAMTOOLS,
@@ -64,6 +65,7 @@ from data import (
     Reference,
     Genome,
     get_reference_methylation,
+    reference_methylation_from_index,
 )
 from plots import (
     CNVData,
@@ -98,8 +100,8 @@ logger = logging.getLogger(__name__)
 sample_name = "B2021_48459_20211112_BC10"
 sample_name = "B2021_48700_20211112_BC11"
 sample_name = "test28"
-reference_name = "GSE90496_IfP01"
 reference_name = "AllIDATv2_20210804"
+reference_name = "GSE90496_IfP01"
 
 sample = Sample(sample_name)
 reference = Reference(reference_name)
@@ -190,18 +192,7 @@ def binom_p_value(observed, gene_length, sample):
 
 cnv.read_from_disk()
 
-genes = cnv.genes
 
-# genes["extreme_cn"] = genes.apply(
-# lambda z: extreme_cn(z["cn_obs"], z["len"], sample),
-# axis=1,
-# )
-
-# genes["cn_p_value"] = genes.apply(
-# lambda z: binom_p_value(z["cn_obs"], z["len"], sample),
-# axis=1,
-# )
-# genes[genes.extreme_cn == True]
 
 binom.cdf(20, 70, 0.3083573487)
 binom.cdf(20, 70, 0.3083573487)
@@ -212,3 +203,132 @@ p = 0.7
 N = 100
 binom.ppf(0.025, N, p)
 N * p - 1.96 * math.sqrt(N * p * (1 - p))
+
+with open(REFERENCE_METHYLATION_SHAPE, "r") as f:
+    num_ref, num_cpgs = [int(s) for s in f.read().splitlines()]
+
+from sklearn.ensemble import RandomForestClassifier
+
+sample.set_cpg_overlap(reference)
+X = reference_methylation_from_index(reference.specimens_index, sample.cpg_overlap_index)
+x_sample = get_sample_methylation(sample, reference)
+y_raw = reference.methylation_class
+
+mc_to_int = {}
+int_to_mc = {}
+
+for i, mc in enumerate(set(y_raw)):
+    mc_to_int[mc] = i
+    int_to_mc[i] = mc
+y = [mc_to_int[i] for i in y_raw]
+
+seed = 5
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import confusion_matrix, accuracy_score
+from sklearn.svm import SVC
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y_raw, test_size=0.2, random_state = seed,
+)
+
+model = RandomForestClassifier(
+    n_estimators=150,
+    n_jobs=-1,
+    random_state=seed,
+)
+model.fit(X_train, y_train)
+model.score(X_test, y_test)
+
+
+y_predict = model.predict(X_test)
+# model.accuracy_score(y_test, y_predict)
+y_sample_predict = model.predict([x_sample])
+# y_predict =
+wrong=[]
+for i,j in zip(y_test,y_predict):
+    if i != j:
+        wrong.append((i,j))
+
+cm = confusion_matrix(y_test, y_predict)
+# fig = px.density_heatmap(cm)
+# fig.write_html("/data/nanodip_reports/cm.html")
+prob = model.predict_proba([x_sample])
+
+prob_per_class = []
+for p, mc in zip(prob[0], model.classes_):
+    prob_per_class.append((p, mc))
+prob_per_class.sort(reverse=True)
+
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import GridSearchCV
+
+prob_svm = model_svm.predict_proba([x_sample])
+
+prob_per_class_svm = []
+for p, mc in zip(prob_svm[0], model_svm.classes_):
+    prob_per_class_svm.append((p, mc))
+
+def evaluate_clf(clf, x_sample, X_text, y_test):
+    y_predict = clf.predict(X_test)
+    accuracy = accuracy_score(y_test, y_predict)
+    prob = clf.predict_proba([x_sample])[0]
+    prob_per_class = []
+    for p, mc in zip(prob, clf.classes_):
+        prob_per_class.append((p, mc))
+    prob_per_class.sort(reverse=True)
+    print("Evaluation of", clf)
+    print("Accuracy:", accuracy)
+    for i in range(10):
+        print(
+            prob_per_class[i][1],
+            "\t:\t",
+            round(100*prob_per_class[i][0], 2),
+            " %",
+        )
+
+evaluate_clf(model, x_sample, X_test, y_test)
+
+
+prob_per_class_svm.sort(reverse=True)
+
+# Finding the best hyperparameters
+# params = {
+    # 'C': [0.1, 1, 10, 100, 1000],
+    # 'gamma': [1, 0.1, 0.01, 0.001, 0.0001],
+    # 'kernel': ['rbf']
+# }
+
+# clf = GridSearchCV(
+    # estimator=SVC(),
+    # param_grid=params,
+    # cv=5,
+    # n_jobs=5,
+    # verbose=1
+# )
+
+# clf.fit(X_train, y_train)
+# print(clf.best_params_)
+
+from sklearn.neighbors import KNeighborsClassifier
+neigh = KNeighborsClassifier(n_neighbors=3)
+neigh.fit(X_train, y_train)
+print(neigh.predict([x_sample]))
+prob = neigh.predict_proba([x_sample])
+
+prob_per_class_n = []
+for p, mc in zip(prob[0], neigh.classes_):
+    prob_per_class_n.append((p, mc))
+
+prob_per_class_n.sort(reverse=True)
+
+
+from sklearn.neural_network import MLPClassifier
+clf = MLPClassifier(solver='lbfgs', alpha=1e-5,
+                    hidden_layer_sizes=(5, 2), random_state=1)
+
+clf.fit(X_train, y_train)
+
+print(clf.predict([x_sample]))
+prob = clf.predict_proba([x_sample])
+y_predict = model.predict(X_test)
+accuracy_score(y_test, y_predict)
