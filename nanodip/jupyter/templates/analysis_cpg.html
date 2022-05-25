@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}
+  MethCaller: {{sample_name}}
+{% endblock %}
+
+{% block body %}
+
+  Methylation calling process started at {{start_time}}
+  <hr>
+  shell output
+  <br><br>
+  <div id="methyl_out" class="mono"></div>
+
+
+<script>
+  function getCpGs() {
+    $.ajax({
+      url: "{{url_cpgs}}",
+      type: "GET",
+      contentType: "application/json;charset=UTF-8",
+      data: {
+        "sample_name": "{{sample_name}}",
+      },
+      dataType:"json",
+      success: function (data) {
+        var stats = data;
+        var methylationCalled;
+        if (stats["called"] != "") {
+          methylationCalled = `Methylation called for ${stats["called"]}.`;
+        }
+        else {
+          methylationCalled = "No more callable reads found.";
+        }
+
+        var text = `${stats["time"]} &emsp; ${methylationCalled} &emsp;`
+          + `${stats["num_completed"]}/${stats["num_fastq"]}<br>`;
+        $("#methyl_out").append(text);
+        /*Loop*/
+        var sleep = 0;
+        if (stats["no_callable_left"]) {
+          sleep = 3000;
+          console.log("Sleep for 3s");
+        }
+        setTimeout(function() {
+          getCpGs();
+        }, sleep);
+      },
+      error: function (data) {
+        /*Loop*/
+        var sleep = 10000;
+        console.log("Error occured. Sleep for 10s");
+        setTimeout(function() {
+          getCpGs();
+        }, sleep);
+      },
+    });
+  }
+  $(document).ready(function(){
+    getCpGs();
+  })
+</script>
+
+{% endblock %}

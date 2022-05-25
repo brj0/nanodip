@@ -6,6 +6,7 @@ import os
 import argparse
 import grpc
 import pandas as pd
+import math
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.io import write_json, from_json
@@ -91,31 +92,30 @@ from api import (
     predominant_barcode,
     methylation_caller,
 )
-import config, data, plots, nanodip, utils, api
+import config, data, plots, nanodip, utils, api, webui
 
 # Define logger
 logger = logging.getLogger(__name__)
 
 
-sample_name = "B2021_48459_20211112_BC10"
-sample_name = "B2021_48700_20211112_BC11"
+# sample_name = "B2021_48459_20211112_BC10"
+# sample_name = "B2021_48700_20211112_BC11"
 sample_name = "test28"
-reference_name = "AllIDATv2_20210804"
+# reference_name = "AllIDATv2_20210804"
 reference_name = "GSE90496_IfP01"
 
 sample = Sample(sample_name)
 reference = Reference(reference_name)
-# genome = Genome()
+genome = Genome()
 
-# data.make_binary_reference_data()
-cnv = CNVData(sample_name)
+# cnv = CNVData(sample_name)
+# cnv.read_from_disk()
 
-umapp = UMAPData(sample_name, reference_name)
-umapp.read_from_disk()
-
-umapp.sample = Sample(sample_name)
-umapp.reference = Reference(reference_name)
-umapp.sample.set_cpg_overlap(reference)
+# umapp = UMAPData(sample_name, reference_name)
+# umapp.read_from_disk()
+# umapp.sample = Sample(sample_name)
+# umapp.reference = Reference(reference_name)
+# umapp.sample.set_cpg_overlap(reference)
 
 # sentrix_id = "201869680197_R07C01"
 sentrix_id = "9968646165_R01C02"
@@ -124,21 +124,11 @@ reference_id = "GSE90496_IfP01"
 device_id = "MN26636"
 
 
-# download_epidip_data(sentrix_id, reference_umap)
-# umap_data = UMAPData(sentrix_id, reference_id)
-# umap_data.read_precalculated_umap_matrix(reference_umap)
-# umap_data.draw_pie_chart()
-# umap_data.draw_scatter_plots()
-
-import math
-
 obs = 17
 g_len = 189060
 G_len = CNVData.genome.length
-
 p_0 = g_len / G_len
 N = 11161
-
 
 def binomial_ci_wilson(hits, trials):
     """Return 0.99 conficence intervall of binomial distribution
@@ -190,9 +180,6 @@ def binom_p_value(observed, gene_length, sample):
     return cdf if cdf < 0.5 else (1 - cdf)
 
 
-cnv.read_from_disk()
-
-
 
 binom.cdf(20, 70, 0.3083573487)
 binom.cdf(20, 70, 0.3083573487)
@@ -204,69 +191,17 @@ N = 100
 binom.ppf(0.025, N, p)
 N * p - 1.96 * math.sqrt(N * p * (1 - p))
 
-with open(REFERENCE_METHYLATION_SHAPE, "r") as f:
-    num_ref, num_cpgs = [int(s) for s in f.read().splitlines()]
+
 
 from sklearn.ensemble import RandomForestClassifier
-
-sample.set_cpg_overlap(reference)
-X = reference_methylation_from_index(reference.specimens_index, sample.cpg_overlap_index)
-x_sample = get_sample_methylation(sample, reference)
-y_raw = reference.methylation_class
-
-mc_to_int = {}
-int_to_mc = {}
-
-for i, mc in enumerate(set(y_raw)):
-    mc_to_int[mc] = i
-    int_to_mc[i] = mc
-y = [mc_to_int[i] for i in y_raw]
-
-seed = 5
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix, accuracy_score
 from sklearn.svm import SVC
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y_raw, test_size=0.2, random_state = seed,
-)
-
-model = RandomForestClassifier(
-    n_estimators=150,
-    n_jobs=-1,
-    random_state=seed,
-)
-model.fit(X_train, y_train)
-model.score(X_test, y_test)
-
-
-y_predict = model.predict(X_test)
-# model.accuracy_score(y_test, y_predict)
-y_sample_predict = model.predict([x_sample])
-# y_predict =
-wrong=[]
-for i,j in zip(y_test,y_predict):
-    if i != j:
-        wrong.append((i,j))
-
-cm = confusion_matrix(y_test, y_predict)
-# fig = px.density_heatmap(cm)
-# fig.write_html("/data/nanodip_reports/cm.html")
-prob = model.predict_proba([x_sample])
-
-prob_per_class = []
-for p, mc in zip(prob[0], model.classes_):
-    prob_per_class.append((p, mc))
-prob_per_class.sort(reverse=True)
-
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import GridSearchCV
-
-prob_svm = model_svm.predict_proba([x_sample])
-
-prob_per_class_svm = []
-for p, mc in zip(prob_svm[0], model_svm.classes_):
-    prob_per_class_svm.append((p, mc))
+from sklearn.neural_network import MLPClassifier
+from sklearn.neighbors import KNeighborsClassifier
 
 def evaluate_clf(clf, x_sample, X_text, y_test):
     y_predict = clf.predict(X_test)
@@ -277,58 +212,90 @@ def evaluate_clf(clf, x_sample, X_text, y_test):
         prob_per_class.append((p, mc))
     prob_per_class.sort(reverse=True)
     print("Evaluation of", clf)
-    print("Accuracy:", accuracy)
+    print("Classifier accuracy:", round(100*accuracy, 2), "%")
+    print("Classifier probability per class:")
     for i in range(10):
         print(
-            prob_per_class[i][1],
-            "\t:\t",
-            round(100*prob_per_class[i][0], 2),
-            " %",
+            "%16s : %5s %%" % (
+                prob_per_class[i][1],
+                round(100*prob_per_class[i][0], 2),
+            )
         )
 
-evaluate_clf(model, x_sample, X_test, y_test)
+def train_test_data(sample, reference):
+    sample.set_cpg_overlap(reference)
+    X = reference_methylation_from_index(
+        reference.specimens_index, sample.cpg_overlap_index
+    )
+    y = reference.methylation_class
+    return train_test_split(
+        X, y, test_size=0.2, random_state = 1234,
+    )
+
+X_train, X_test, y_train, y_test = train_test_data(sample, reference)
+x_sample = get_sample_methylation(sample, reference)
+
+rf_clf = RandomForestClassifier(
+    n_estimators=150,
+    n_jobs=-1,
+    random_state=1234,
+)
+knn_clf = KNeighborsClassifier(
+    n_neighbors=5,
+    weights="distance",
+)
+nn_clf = MLPClassifier()
+svm_linear_clf = SVC(kernel="linear", probability=True)
+svm_rbf_clf = SVC(kernel="rbf", gamma="auto", probability=True)
 
 
-prob_per_class_svm.sort(reverse=True)
+from sklearn.naive_bayes import MultinomialNB, BernoulliNB, CategoricalNB
+from sklearn.ensemble import AdaBoostClassifier
+from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 
-# Finding the best hyperparameters
-# params = {
-    # 'C': [0.1, 1, 10, 100, 1000],
-    # 'gamma': [1, 0.1, 0.01, 0.001, 0.0001],
-    # 'kernel': ['rbf']
-# }
+# nb_clf = SVC(kernel="linear", probability=True)
+# print("Start training nb")
+# nb_clf.fit(X_train, y_train)
+# evaluate_clf(nb_clf, x_sample, X_test, y_test)
 
-# clf = GridSearchCV(
-    # estimator=SVC(),
-    # param_grid=params,
+def fit_and_evaluate():
+    print("Start training rf")
+    rf_clf.fit(X_train, y_train)
+    print("Start training knn")
+    knn_clf.fit(X_train, y_train)
+    print("Start training nn")
+    nn_clf.fit(X_train, y_train)
+    print("Start training svm linear")
+    svm_linear_clf.fit(X_train, y_train)
+    print("Start training svm rbf")
+    svm_rbf_clf.fit(X_train, y_train)
+
+    evaluate_clf(rf_clf, x_sample, X_test, y_test)
+    evaluate_clf(knn_clf, x_sample, X_test, y_test)
+    evaluate_clf(nn_clf, x_sample, X_test, y_test)
+    evaluate_clf(svm_linear_clf, x_sample, X_test, y_test)
+    evaluate_clf(svm_rbf_clf, x_sample, X_test, y_test)
+
+# cm = confusion_matrix(y_test, y_predict)
+# fig = px.density_heatmap(cm)
+# fig.write_html("/data/nanodip_reports/cm.html")
+
+
+params = {
+    # 'n_neighbors': [3, 5, 10, 20, 50, 100],
+    # 'weights': ['uniform', 'distance'],
+    # 'p': [1,2,5,10],
+    'alpha': 10.0 ** -np.arange(1, 7),
+}
+
+gs = GridSearchCV(
+    nn_clf,
+    # knn_clf,
+    param_grid=params,
+    # scoring='accuracy',
     # cv=5,
     # n_jobs=5,
-    # verbose=1
-# )
-
-# clf.fit(X_train, y_train)
-# print(clf.best_params_)
-
-from sklearn.neighbors import KNeighborsClassifier
-neigh = KNeighborsClassifier(n_neighbors=3)
-neigh.fit(X_train, y_train)
-print(neigh.predict([x_sample]))
-prob = neigh.predict_proba([x_sample])
-
-prob_per_class_n = []
-for p, mc in zip(prob[0], neigh.classes_):
-    prob_per_class_n.append((p, mc))
-
-prob_per_class_n.sort(reverse=True)
-
-
-from sklearn.neural_network import MLPClassifier
-clf = MLPClassifier(solver='lbfgs', alpha=1e-5,
-                    hidden_layer_sizes=(5, 2), random_state=1)
-
-clf.fit(X_train, y_train)
-
-print(clf.predict([x_sample]))
-prob = clf.predict_proba([x_sample])
-y_predict = model.predict(X_test)
-accuracy_score(y_test, y_predict)
+    # verbose=1,
+)
+# gs.fit(X_train, y_train)
+# gs.best_params_

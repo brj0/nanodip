@@ -55,15 +55,18 @@ def binary_reference_data_exists():
         os.path.exists(REFERENCE_METHYLATION_SHAPE)
     )
 
-def make_binary_reference_data(input_dir=BETA_VALUES,
-                               output_dir=REFERENCE_METHYLATION_DATA,
-                               cutoff=METHYLATION_CUTOFF):
+def make_binary_reference_data(
+    input_dir=BETA_VALUES,
+    output_dir=REFERENCE_METHYLATION_DATA,
+    cutoff=METHYLATION_CUTOFF,
+):
     """Create binary methylation files from raw reference data.
 
     Args:
-        input_dir: Directory of reference data as float arrays-
-            files.
-        output_dir: Output dir containing binary array-file.
+        input_dir: Directory of raw reference data (beta values)
+            as float array-files.
+        output_dir: Output directory where binary methylation file
+            and metadata will be written.
         cutoff: Empirical cutoff value for methylated
             (round to 1) and unmethylated (round to 0) CpGs.
     """
@@ -193,6 +196,7 @@ class Reference:
         tcga_df = pd.read_csv(ANNOTATIONS_ABBREVIATIONS_TCGA, delimiter="\t")
         tcga = {r[0]:r[1] for _, r in tcga_df.iterrows()}
         def description(mc):
+            """Returns description of methylation class {mc}."""
             mc = mc.upper()
             # Exact match
             if mc in abbr:
@@ -210,6 +214,7 @@ class Reference:
                 )
             ):
                 return abbr[basel_substring[-1]]
+            # Else use TCGA Annotation
             if tcga_substring:
                 return tcga[tcga_substring[-1]]
             # No proper annotation for "PITUI"
@@ -222,6 +227,7 @@ class Reference:
         return mc_description
 
     def __str__(self):
+        """Prints overview of object for debugging purposes."""
         lines = [
             f"Reference object:",
             f"name: '{self.name}'",
@@ -255,6 +261,7 @@ class Genome:
         self.genes = pd.read_csv(GENES, delimiter="\t")
 
     def __iter__(self):
+        """Enables looping over chromosomes."""
         return self.chrom.itertuples()
 
     def __len__(self):
@@ -315,6 +322,7 @@ class Genome:
         ]].to_csv(GENES, index=False, sep="\t")
 
     def __str__(self):
+        """Prints overview of object for debugging purposes."""
         lines = [
             "Genome object:",
             f"length: {self.length}",
@@ -323,17 +331,44 @@ class Genome:
         ]
         return "\n".join(lines)
 
+def cpg_methyl_from_reads(sample_name):
+    """Returns all Illumina methylation CpG-sites with methylation
+    status extracted so far.
+
+    Args:
+        sample_name: sample name to be analysed
+
+    Returns:
+        Pandas Data Frame containing the reads Illumina cpg_sites and
+        methylation status.
+    """
+
+    cpg_files = files_by_ending(NANODIP_OUTPUT, sample_name,
+                                ending="methoverlap.tsv")
+    methylation_info = pd.DataFrame(columns=["cpg_site", "methylation"])
+    for f in cpg_files:
+        # Some fast5 files do not contain any CpGs.
+        try:
+            cpgs = pd.read_csv(f, delimiter="\t", header=None,
+                                names=["cpg_site", "methylation"])
+            methylation_info = methylation_info.append(cpgs)
+        except FileNotFoundError:
+            logger.exception("Empty file encountered, skipping")
+    return methylation_info
+
 class Sample:
     """Container of sample data."""
     def __init__(self, name):
         self.name = name
-        self.methyl_df = Sample.cpg_methyl_from_reads(name)
+        self.methyl_df = cpg_methyl_from_reads(name)
         self.cpg_overlap = set()
         self.cpg_overlap_index = None
         self.reads = None
 
     def set_reads(self):
-        """Calculate all read start and end positions."""
+        """Calculate all read start and end positions and save data
+        as list to self.reads.
+        """
         genome = Genome()
         bam_files = files_by_ending(NANODIP_OUTPUT, self.name, ending=".bam")
         read_positions = []
@@ -350,33 +385,8 @@ class Sample:
                     assert (read.reference_length != 0), "Empty read"
         self.reads = read_positions
 
-    def cpg_methyl_from_reads(sample_name):
-        """Returns all Illumina methylation CpG-sites with methylation
-        status extracted so far.
-
-        Args:
-            sample_name: sample name to be analysed
-
-        Returns:
-            Pandas Data Frame containing the reads Illumina cpg_sites and
-            methylation status.
-        """
-
-        cpg_files = files_by_ending(NANODIP_OUTPUT, sample_name,
-                                    ending="methoverlap.tsv")
-        methylation_info = pd.DataFrame(columns=["cpg_site", "methylation"])
-        for f in cpg_files:
-            # Some fast5 files do not contain any CpGs.
-            try:
-                cpgs = pd.read_csv(f, delimiter="\t", header=None,
-                                   names=["cpg_site", "methylation"])
-                methylation_info = methylation_info.append(cpgs)
-            except FileNotFoundError:
-                logger.exception("Empty file encountered, skipping")
-        return methylation_info
-
     def set_cpg_overlap(self, reference):
-        """Calculate CpG overlap and cpg-site-index between sample
+        """Sets CpG overlap and cpg-site-index between sample
         and reference.
 
         This is necessary since some probes have been skipped from the
@@ -390,6 +400,7 @@ class Sample:
         self.cpg_overlap_index.sort()
 
     def __str__(self):
+        """Prints overview of object for debugging purposes."""
         lines = [
             f"Sample object:",
             f"name: '{self.name}':",
@@ -402,12 +413,12 @@ class Sample:
 
 def reference_methylation_from_index(reference_index, cpg_index):
     """Extract and return (reference-specimen x CpG-site) methylation
-    matrix from reference data.
+    submatrix from reference data.
 
     Args:
-        reference_index: Index of references to extract from reference
+        reference_index: Indices of references to extract from reference
             data.
-        cpg_index: Index of CpG's to extract from CpG data.
+        cpg_index: Indices of Illumina CpG's to extract data.
 
     Returns:
         Numpy array matrix containing submatrix of reference methylation
@@ -437,7 +448,7 @@ def get_reference_methylation(sample, reference):
     return reference_methylation_from_index(reference_index, cpg_index)
 
 def get_sample_methylation(sample, reference):
-    """Calculate sample methylation from reads.
+    """Calculate and return sample methylation from reads.
 
     Args:
         sample: Sample to be analysed.

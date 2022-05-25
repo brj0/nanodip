@@ -139,14 +139,15 @@ def url_for(url_func, **args):
             raise ValueError(
                 f"'{param}' is not a valid Parameter of {url_func.__name__}."
             )
-    # Check if all mandatory variables are supplied.
-    for param in non_default:
-        if param not in args and param != "self":
-            raise ValueError(
-                f"Parameter '{param}' must be supplied."
-            )
     url = url_func.__name__
     if args:
+        # If args are supplied, enforce that all mandatory variables are
+        # contained in args.
+        for param in non_default:
+            if param not in args and param != "self":
+                raise ValueError(
+                    f"Parameter '{param}' must be supplied."
+                )
         url += "?" + "&".join(
             [f"{key}={value}" for key, value in args.items()]
         )

@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}
+  Analysis
+{% endblock %}
+
+{% block body %}
+  <div id="genes" class="hidden">
+    <label for="genome_genes">Choose Gene:</label>
+    <input list="genome_genes" id="gene_list" name="gene_list" />
+    <datalist id="genome_genes">
+      {% for gene in genes %}
+        <option value="{{gene}}">
+      {% endfor %}
+    </datalist>
+  </div>
+
+  <div class="loader" id="loader"></div>
+  <div id="cnv"></div>
+
+<script>
+  function renderPlot(plotJSON, plotId){
+    var config = {"scrollZoom": true};
+    Plotly.setPlotConfig(config);
+    Plotly.plot(plotId, plotJSON,{});
+    Plotly.relayout(plotId, {height: "800", width: "1580"})
+    /*Plotly.newPlot("cnv", plotJSON,{});*/
+  }
+  /*Load CNV Plot on startup.*/
+  $(document).ready(function(){
+    $.ajax({
+      url: "{{url_cnv}}",
+      type: "GET",
+      contentType: "application/json;charset=UTF-8",
+      data: {
+        "sample_name": "{{sample_name}}",
+        "genes": "",
+        "new": "{{new}}",
+      },
+      dataType:"json",
+      success: function (data) {
+        document.getElementById("loader").style.display = "none";
+        renderPlot(data, "cnv");
+        $("#genes").show();
+      },
+      error: function() {
+        document.getElementById("loader").style.display = "none";
+        $("#cnv").html("No Data to plot.");
+        $("#genes").hide();
+      },
+    });
+  })
+  /*Reload CNV Plot when genes are chosen.*/
+  $("#gene_list").on("change",function(){
+    $.ajax({
+      url: "{{url_cnv}}",
+      type: "GET",
+      contentType: "application/json;charset=UTF-8",
+      data: {
+        "sample_name": "{{sample_name}}",
+        "genes": document.getElementById("gene_list").value,
+        "new": "False",
+      },
+      dataType:"json",
+      success: function (data) {
+        renderPlot(data, "cnv");
+      }
+    });
+  })
+</script>
+
+{% endblock %}

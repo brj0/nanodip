@@ -694,9 +694,7 @@ def run_information(device_id):
     return info
 
 def set_bias_voltage(device_id, voltage):
-    """Change MinKnow bias voltage. Returns previous and new current voltage
-    as dictionary.
-    """
+    """Change MinKnow bias voltage."""
     connection = connection_from_device_id(device_id)
     previous_voltage = connection.device.get_bias_voltage().bias_voltage
     connection.device.set_bias_voltage(bias_voltage=float(voltage))

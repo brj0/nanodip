@@ -204,8 +204,8 @@ class UI:
         return render_template(
             "status.html",
             device_ids=device_ids,
-            url_live_device_status=UI.status_device.__name__,
-            url_live_plots=UI.status_plots.__name__,
+            url_live_device_status=url_for(UI.status_device),
+            url_live_plots=url_for(UI.status_plots),
         )
 
     @cherrypy.expose
@@ -232,7 +232,7 @@ class UI:
             state=run_state(device_id),
             previous_activity=previous_activity,
             needed_mega_bases=NEEDED_NUMBER_OF_BASES // 1e6,
-            url_auto_terminator = UI.set_auto_terminate.__name__,
+            url_auto_terminator = url_for(UI.set_auto_terminate),
             termination_type=device.termination_type,
             is_active=is_active,
         )
@@ -490,7 +490,7 @@ class UI:
             genes = genome.genes.name.to_list()
             return render_template(
                 "analysis_cnv.html",
-                url_cnv=UI.cnv.__name__,
+                url_cnv=url_for(UI.cnv),
                 sample_name=sample_name,
                 genes=genes,
                 new=new,
@@ -498,7 +498,7 @@ class UI:
         if func == "umap":
             return render_template(
                 "analysis_umap.html",
-                url_umap=UI.umap.__name__,
+                url_umap=url_for(UI.umap),
                 sample_name=sample_name,
                 reference_name=reference_name,
                 new=new,
@@ -507,7 +507,7 @@ class UI:
         if func == "cpgs":
             return render_template(
                 "analysis_cpg.html",
-                url_cpgs=UI.cpgs.__name__,
+                url_cpgs=url_for(UI.cpgs),
                 start_time=date_time_string_now(),
                 sample_name=sample_name,
             )
