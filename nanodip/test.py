@@ -299,3 +299,7 @@ gs = GridSearchCV(
 )
 # gs.fit(X_train, y_train)
 # gs.best_params_
+
+N=81196
+p=71/len(Genome())
+obs = 1
