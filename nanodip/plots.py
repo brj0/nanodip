@@ -35,6 +35,7 @@ from data import (
     get_sample_methylation,
 )
 from utils import (
+    bonferroni_corrected_ci,
     convert_html_to_pdf,
     discrete_colors,
     render_template,
@@ -62,8 +63,8 @@ def get_cnv(read_positions, genome):
         read_positions: List of reads in the form [start, end].
         genome: Reference genome.
     Returns:
-        bin_midpoints: x-values
-        copy_numbers: y-values
+        bin_midpoints: numpy array of x-values
+        copy_numbers: numpy array of y-values
     """
     expected_reads_per_bin = 30
     n_bins = len(read_positions)//expected_reads_per_bin
@@ -202,6 +203,8 @@ class CNVData:
     def files_on_disk(self):
         """Checks if files are on disk."""
         return (
+            os.path.exists(self.path("bin_midpoints")) and
+            os.path.exists(self.path("cnv")) and
             os.path.exists(self.path("cnv_json")) and
             os.path.exists(self.path("genes"))
         )
@@ -212,10 +215,16 @@ class CNVData:
             self.plot_json = f.read()
         self.plot = from_json(self.plot_json)
         self.genes = pd.read_csv(self.path("genes"))
+        self.bin_midpoints = np.load(
+            self.path("bin_midpoints"), allow_pickle=True,
+        )
+        self.cnv = np.load(
+            self.path("cnv"), allow_pickle=True,
+        )
 
     def make_cnv_plot(self):
         """Generates CNV plot and saves to disk."""
-        self.sample.set_reads() # time consumption 2.5s
+        self.sample.set_reads() # time consumption 9s
         self.bin_midpoints, self.cnv = get_cnv(
             self.sample.reads,
             CNVData.genome,
@@ -234,13 +243,15 @@ class CNVData:
         self.save_to_disk()
 
     def save_to_disk(self):
-        """Saves attributes to disk."""
+        """Saves relevant data to disk."""
+        np.save(self.path("bin_midpoints"), self.bin_midpoints)
+        np.save(self.path("cnv"), self.cnv)
         self.plot.write_html(
             self.path("cnv_html"),
             config=dict({"scrollZoom": True}),
         )
         write_json(self.plot, self.path("cnv_json"))
-        # time consuming operation (1.96s)
+        # time consuming operation (11s)
         self.plot.write_image(
             self.path("cnv_png"), width=1280, height=720, scale=3,
         )
@@ -263,10 +274,17 @@ class CNVData:
         genes["cn_obs"] = genes.interval.apply(
             lambda z: number_of_reads(read_start_pos, z)
         )
+        genes.drop("interval", axis=1, inplace=True)
         bin_size = len(CNVData.genome)/(len(self.bin_midpoints))
         genes["cn_per_bin"] = genes.apply(
             lambda z: z["cn_obs"]/z["len"] * bin_size, # TODO auto draw extreme values
             axis=1,
+        )
+        genes["ci_left"], genes["ci_right"] = bonferroni_corrected_ci(
+            hits=genes["cn_obs"],
+            lengths=genes["len"],
+            trials=len(read_start_pos),
+            target_length=bin_size,
         )
         genes["cn_exp"] = genes.apply(
             lambda z: len(self.sample.reads)*z["len"]/len(CNVData.genome),
@@ -280,7 +298,7 @@ class CNVData:
         return genes
 
     def get_gene_positions(self, genes):
-        """Returns sub-DataFrame containing the genes of the list {genes}.
+        """Returns sub-DataFrame for the genes of the list {genes}.
         """
         gene_pos = self.genes.loc[self.genes.name.isin(genes)]
         return gene_pos
@@ -290,6 +308,7 @@ class CNVData:
         genes in the list {gene_names}.
         """
         genes = self.get_gene_positions(gene_names)
+        bin_size = len(CNVData.genome)/(len(self.bin_midpoints))
         plot = go.Figure(self.plot)
         plot.add_trace(
             go.Scatter(
@@ -298,13 +317,19 @@ class CNVData:
                     "loc",           # 1
                     "transcript",    # 2
                     "len",           # 3
+                    "cn_obs",        # 4
+                    "cn_exp",        # 5
                 ]],
                 hovertemplate=(
-                    "Copy numbers = %{y} <br>"
-                    "<b> %{customdata[0]} </b> <br>"
+                    "<b> %{customdata[0]} </b> "
                     "%{customdata[1]} "
                     "(hg19 %{customdata[2]}) <br>"
-                    "%{customdata[3]} bases <br>"
+                    "Copy numbers per "
+                    f"{round(bin_size/1e6, 2)}"
+                    " MB: %{y} <br>"
+                    "Gene length: %{customdata[3]} base pairs <br>"
+                    "Observed hits: %{customdata[4]}<br>"
+                    "Expected hits: %{customdata[5]:.3f}<br>"
                 ),
                 name="",
                 marker_color="rgba(0,0,0,1)",
@@ -315,7 +340,13 @@ class CNVData:
                 text=genes.name,
                 textposition="top center",
                 x=genes.midpoint,
-                y=genes.cn_obs,
+                y=genes.cn_per_bin,
+                error_y=dict(
+                    type="data",
+                    symmetric=False,
+                    array=genes.ci_right - genes.cn_per_bin,
+                    arrayminus=genes.cn_per_bin - genes.ci_left,
+                ),
             ))
         return plot.to_json()
 
@@ -548,7 +579,7 @@ class UMAPData:
         self.cu_plot_json = self.cu_plot.to_json()
 
     def save_to_disk(self):
-        """Saves attributes to disk."""
+        """Saves relevant data to disk."""
         # Save methylation matrix.
         np.save(self.path("methyl"), self.methyl_overlap)
 

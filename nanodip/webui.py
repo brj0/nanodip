@@ -155,6 +155,34 @@ def download_epidip_data(sentrix_id, reference_umap):
     image = convert_from_path(cnv_local)[0]
     image.save(cnv_local.replace("pdf", "png"), "png")
 
+class ActivePlots:
+    """Container to keep the most recent plots in memory to speed up
+    computation for CNV gene plot.
+    """
+    def __init__(self):
+        self.plot = {}
+    def _delete_old_plots(self):
+        """Limits plot dictionary to 5 elements and deletes oldest plots
+        first.
+        """
+        while len(self.plot) > 5:
+            # Since dict is insertion ordered this is the oldest entry.
+            old_id = list(self.plot.keys())[0]
+            self.plot.pop(old_id)
+    def set(self, id_, active_plot):
+        """Saves plot data with given identifier."""
+        self.plot[id_] = active_plot
+        self._delete_old_plots()
+    def get(self, webpage_id):
+        """Returns CNVData with given id."""
+        active_plot =self.plot.get(webpage_id, False)
+        if active_plot:
+            return active_plot
+        return None
+    def __repr__(self):
+        """Enables print and str for debugging purposes."""
+        return str(self.plot)
+
 class UI:
     """User interface implemented as CherryPy webserver."""
     # global variables within the CherryPy Web UI
@@ -162,6 +190,7 @@ class UI:
     umap_sem = threading.Semaphore()
     cpg_sem = threading.Semaphore()
     devices = Devices()
+    active_plots = ActivePlots()
 
     @cherrypy.expose
     def index(self):
@@ -514,8 +543,19 @@ class UI:
         raise cherrypy.HTTPError(404, "URL not found")
 
     @cherrypy.expose
-    def cnv(self, sample_name, genes="", new="False"):
-        """Creates CNV plot and returns it as JSON."""
+    def cnv(self, sample_name, genes="", new="False", browser_tab_id=""):
+        """Creates CNV plot and returns it as JSON.
+            Args:
+                sample_name: Name of sample to analyze.
+                genes: List of genes that should be plotted as well.
+                new: If true CNV is constructed de novo, otherwise data is
+                    read from disk if possible.
+                browser_tab_id: Unique identifier for each browser tab, used
+                    to send data still in memory to correct front-end.
+        """
+        if genes and browser_tab_id:
+            cnv_data = UI.active_plots.get(browser_tab_id)
+            return cnv_data.plot_cnv_and_genes([genes])
         UI.cnv_sem.acquire()
         try:
             cnv_data = CNVData(sample_name)
@@ -531,6 +571,7 @@ class UI:
         else:
             cnv_data.read_from_disk()
         UI.cnv_sem.release()
+        UI.active_plots.set(browser_tab_id, cnv_data)
         return cnv_data.plot_cnv_and_genes([genes])
 
     @cherrypy.expose

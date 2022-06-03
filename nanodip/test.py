@@ -15,6 +15,7 @@ import random
 import re
 import sys
 import time
+from scipy.stats import binomtest
 
 from config import (
     ANALYSIS_EXCLUSION_PATTERNS,
@@ -59,6 +60,7 @@ from utils import (
     files_by_ending,
     discrete_colors,
     composite_path,
+    bonferroni_corrected_ci,
 )
 from data import (
     get_sample_methylation,
@@ -108,8 +110,8 @@ sample = Sample(sample_name)
 reference = Reference(reference_name)
 genome = Genome()
 
-# cnv = CNVData(sample_name)
-# cnv.read_from_disk()
+cnv = CNVData(sample_name)
+cnv.read_from_disk()
 
 # umapp = UMAPData(sample_name, reference_name)
 # umapp.read_from_disk()
@@ -299,7 +301,3 @@ gs = GridSearchCV(
 )
 # gs.fit(X_train, y_train)
 # gs.best_params_
-
-N=81196
-p=71/len(Genome())
-obs = 1

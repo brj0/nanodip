@@ -21,13 +21,17 @@
 <script>
   function renderPlot(plotJSON, plotId){
     var config = {"scrollZoom": true};
+var time = Date.now();
     Plotly.setPlotConfig(config);
-    Plotly.plot(plotId, plotJSON,{});
+    //Plotly.plot(plotId, plotJSON,{});
+    Plotly.react(plotId, plotJSON,{});
+    // Plotly.newPlot("cnv", plotJSON,{});
     Plotly.relayout(plotId, {height: "800", width: "1580"})
-    /*Plotly.newPlot("cnv", plotJSON,{});*/
   }
   /*Load CNV Plot on startup.*/
   $(document).ready(function(){
+    // Random identifier for this page. Helps back-end to send correct data.
+    browserTabId = Date.now() + "{{sample_name}}" + Math.random().toString(36).substr(2,11);
     $.ajax({
       url: "{{url_cnv}}",
       type: "GET",
@@ -36,6 +40,7 @@
         "sample_name": "{{sample_name}}",
         "genes": "",
         "new": "{{new}}",
+        "browser_tab_id": browserTabId,
       },
       dataType:"json",
       success: function (data) {
@@ -60,6 +65,7 @@
         "sample_name": "{{sample_name}}",
         "genes": document.getElementById("gene_list").value,
         "new": "False",
+        "browser_tab_id": browserTabId,
       },
       dataType:"json",
       success: function (data) {

@@ -9,6 +9,7 @@ Contains general utility functions.
 import os
 import warnings
 
+from statsmodels.stats.proportion import proportion_confint
 import colorsys
 import datetime
 import hashlib
@@ -265,3 +266,33 @@ def discrete_colors(names):
         rgb = tuple(int(255 * x) for x in rgb_frac)
         color[var] = f"rgb{rgb}"
     return color
+
+def bonferroni_corrected_ci(hits, lengths, trials, target_length, alpha=0.05):
+    """
+    Calculates confidence intervals for the hits of binomially distributed
+    random variables adjusted to a common interval length. The significance
+    lever is adjusted using Bonferroni correction.
+
+    Args:
+        hits: List with numbers of observed hits.
+        lengths: List of interval lengths.
+        trials: Number of trials.
+        target_length: Fixed interval length to which the number of hits for
+            the confidence interval is proportionally adjusted.
+        alpha: Significance level.
+
+    Returns:
+        List of left and the right ends for the confidence intervals of the
+        number of hits per target_length.
+    """
+    comparisons = len(hits)
+    bonferroni_corrected_alpha = alpha / comparisons
+    p_low, p_high = proportion_confint(
+        count=hits,
+        nobs=trials,
+        alpha=bonferroni_corrected_alpha,
+        method="beta",
+    )
+    low = trials*p_low/lengths*target_length
+    high = trials*p_high/lengths*target_length
+    return low, high
