@@ -13,25 +13,33 @@
         <option value="{{gene}}">
       {% endfor %}
     </datalist>
+  <button id="reset_button" type="reset">Reset</button>
   </div>
+
 
   <div class="loader" id="loader"></div>
   <div id="cnv"></div>
 
 <script>
   function renderPlot(plotJSON, plotId){
-    var config = {"scrollZoom": true};
-var time = Date.now();
-    Plotly.setPlotConfig(config);
-    //Plotly.plot(plotId, plotJSON,{});
-    Plotly.react(plotId, plotJSON,{});
-    // Plotly.newPlot("cnv", plotJSON,{});
-    Plotly.relayout(plotId, {height: "800", width: "1580"})
+    Plotly.setPlotConfig({"scrollZoom": true});
+    Plotly.plot(plotId, plotJSON,{});
+    Plotly.relayout(plotId, {height: "800", width: "1580"});
   }
-  /*Load CNV Plot on startup.*/
+
+  function renderNewPlot(plotJSON, plotId){
+    Plotly.setPlotConfig({"scrollZoom": true});
+    Plotly.newPlot(plotId, plotJSON,{});
+    Plotly.relayout(plotId, {height: "800", width: "1580"});
+  }
+
+  var plotData;
+
   $(document).ready(function(){
     // Random identifier for this page. Helps back-end to send correct data.
     browserTabId = Date.now() + "{{sample_name}}" + Math.random().toString(36).substr(2,11);
+
+    /*Load CNV Plot on startup.*/
     $.ajax({
       url: "{{url_cnv}}",
       type: "GET",
@@ -44,6 +52,8 @@ var time = Date.now();
       },
       dataType:"json",
       success: function (data) {
+        // Deep copy of data.
+        plotData = JSON.parse(JSON.stringify(data));
         document.getElementById("loader").style.display = "none";
         renderPlot(data, "cnv");
         $("#genes").show();
@@ -54,25 +64,33 @@ var time = Date.now();
         $("#genes").hide();
       },
     });
-  })
-  /*Reload CNV Plot when genes are chosen.*/
-  $("#gene_list").on("change",function(){
-    $.ajax({
-      url: "{{url_cnv}}",
-      type: "GET",
-      contentType: "application/json;charset=UTF-8",
-      data: {
-        "sample_name": "{{sample_name}}",
-        "genes": document.getElementById("gene_list").value,
-        "new": "False",
-        "browser_tab_id": browserTabId,
-      },
-      dataType:"json",
-      success: function (data) {
-        renderPlot(data, "cnv");
-      }
+
+    /*Reload CNV Plot when genes are chosen.*/
+    $("#gene_list").on("change",function(){
+      $.ajax({
+        url: "{{url_cnv}}",
+        type: "GET",
+        contentType: "application/json;charset=UTF-8",
+        data: {
+          "sample_name": "{{sample_name}}",
+          "genes": document.getElementById("gene_list").value,
+          "new": "False",
+          "browser_tab_id": browserTabId,
+        },
+        dataType:"json",
+        success: function (data) {
+          document.getElementById("gene_list").value = "";
+          renderPlot(data, "cnv");
+        }
+      });
     });
-  })
+
+    /*Remove genes from plot.*/
+    $("#reset_button").click(function(){
+      renderNewPlot(plotData, "cnv");
+    });
+
+  });
 </script>
 
 {% endblock %}

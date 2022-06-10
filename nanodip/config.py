@@ -174,6 +174,7 @@ ENDING = {
     **RESULT_ENDING,
     "aligned_reads": "alignedreads.txt",
     "bin_midpoints": "binmidpoints.npy",
+    "clf": "classifiers.txt",
     "cnv": "cnv.npy",
     "cnv_bins_json": "CNV_binsplot.json",
     "cnv_html": "CNVplot.html",

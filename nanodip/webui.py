@@ -75,6 +75,9 @@ from plots import (
     CNVData,
     UMAPData,
 )
+from classifiers import (
+    fit_and_evaluate_classifiers,
+)
 # end_internal_modules
 
 # Define logger
@@ -474,6 +477,7 @@ class UI:
             url_pdf = {}
             url_umap = {}
             url_umap_new = {}
+            url_clf = {}
             for run in analysis_runs:
                 url_cnv[run] = url_for(
                     UI.analysis, func="cnv", sample_name=run,
@@ -485,23 +489,29 @@ class UI:
                     UI.analysis, func="cpgs", sample_name=run,
                 )
                 for annotation in annotations:
-                    url_umap_new[(run,annotation)] = url_for(
+                    url_umap_new[(run, annotation)] = url_for(
                         UI.analysis,
                         func="umap",
                         sample_name=run,
                         reference_name=annotation,
                         new=True,
                     )
-                    url_umap[(run,annotation)] = url_for(
+                    url_umap[(run, annotation)] = url_for(
                         UI.analysis,
                         func="umap",
                         sample_name=run,
                         reference_name=annotation,
                     )
-                    url_pdf[(run,annotation)] = url_for(
+                    url_pdf[(run, annotation)] = url_for(
                         UI.make_pdf,
                         sample_name=run,
                         reference_name=annotation,
+                    )
+                    url_clf[(run, annotation)] = url_for(
+                        UI.classifiers,
+                        sample_name=run,
+                        reference_name=annotation,
+                        start="True",
                     )
             return render_template(
                 "analysis_start.html",
@@ -513,6 +523,7 @@ class UI:
                 url_pdf=url_pdf,
                 url_umap=url_umap,
                 url_umap_new=url_umap_new,
+                url_clf=url_clf,
             )
         if func == "cnv":
             genome = Genome()
@@ -572,7 +583,7 @@ class UI:
             cnv_data.read_from_disk()
         UI.cnv_sem.release()
         UI.active_plots.set(browser_tab_id, cnv_data)
-        return cnv_data.plot_cnv_and_genes([genes])
+        return cnv_data.plot_cnv_and_genes()
 
     @cherrypy.expose
     def umap(self, sample_name, reference_name, close_up="", new="False"):
@@ -594,6 +605,44 @@ class UI:
         if close_up == "True":
             return umap_data.cu_plot_json
         return umap_data.plot_json
+
+    @cherrypy.expose
+    def classifiers(
+        self,
+        sample_name,
+        reference_name,
+        start="False",
+    ):
+        """Invokes non supervised classifiers."""
+        return render_template(
+            "classifiers.html",
+            url=url_for(UI.classifiers_start_and_refresh),
+            sample_name=sample_name,
+            reference_name=reference_name,
+            start=start,
+        )
+
+    @cherrypy.expose
+    def classifiers_start_and_refresh(
+        self,
+        sample_name,
+        reference_name,
+        start="False",
+    ):
+        """Used to start and refresh classifier training/evaluation."""
+        file_path = composite_path(
+            NANODIP_REPORTS, sample_name, reference_name, ENDING["clf"],
+        )
+        if start == "True":
+            with open(file_path, "w") as f:
+                f.write("Classification started. Results will appear here.")
+            fit_and_evaluate_classifiers(sample_name, reference_name)
+        try:
+            with open(file_path, "r") as f:
+                clf_results = f.read()
+            return clf_results
+        except FileNotFoundError:
+            return "No Data to plot."
 
     @cherrypy.expose
     def make_pdf(self, sample_name=None, reference_name=None):

@@ -156,6 +156,10 @@ a.results {
   /*font-family: "Lucida Console", "Courier New", monospace;*/
 }
 
+.show_whitespace {
+  white-space: pre;
+}
+
 div.device_box {
   display: flex;
   /*height: 220px;*/

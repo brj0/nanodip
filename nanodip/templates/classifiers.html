@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}
+  Classifiers
+{% endblock %}
+
+{% block body %}
+
+  Non supervised classifiers for {{sample_name}} against {{reference_name}}
+  <br>
+  <br>
+  <div id="clf_content" class ="mono show_whitespace"></div>
+
+<script>
+  function getClfContent(startNewRun) {
+    $.ajax({
+      url: "{{url}}",
+      type: "GET",
+      contentType: "application/json;charset=UTF-8",
+      data: {
+        "sample_name": "{{sample_name}}",
+        "reference_name": "{{reference_name}}",
+        "start": startNewRun,
+      },
+      dataType: "html",
+      success: function (data) {
+        $("#clf_content").html(data);
+      }
+    });
+  }
+  /*Refresh page every 3 seconds.*/
+  var refreshPage = function() {
+    getClfContent("False");
+    setTimeout(refreshPage, 3000);
+  };
+  $(document).ready(function() {
+    getClfContent("{{start}}");
+    refreshPage();
+  })
+</script>
+
+{% endblock %}

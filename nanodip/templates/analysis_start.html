@@ -40,13 +40,14 @@
 
       {% for a in annotations %}
       <td>
-        <a href="{{url_umap_new[(run, a)]}}" class="show" target="_blank" rel="noopener
-        noreferrer" title="make UMAP plot">
+        <a href="{{url_umap_new[(run, a)]}}" class="show" target="_blank" rel="noopener noreferrer" title="make UMAP plot">
           new plot
         </a>&nbsp;
-        <a href="{{url_umap[(run, a)]}}" class="show" target="_blank"
-        rel="noopener noreferrer" title="make UMAP plot (read from disk if available)">
+        <a href="{{url_umap[(run, a)]}}" class="show" target="_blank" rel="noopener noreferrer" title="make UMAP plot (read from disk if available)">
           plot
+        </a>&nbsp;
+        <a href="{{url_clf[(run, a)]}}" class="show" target="_blank" rel="noopener noreferrer" title="Start methylation classification using non-supervised classifiers.">
+          classify
         </a>&nbsp;
         <a href="{{url_pdf[(run, a)]}}" class="show" target="_blank" rel="noopener noreferrer" title="Generate and View PDF">
           report

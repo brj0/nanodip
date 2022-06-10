@@ -303,7 +303,7 @@ class CNVData:
         gene_pos = self.genes.loc[self.genes.name.isin(genes)]
         return gene_pos
 
-    def plot_cnv_and_genes(self, gene_names):
+    def plot_cnv_and_genes(self, gene_names=[]):
         """Returns json plot of the CNV plot including the CN of all
         genes in the list {gene_names}.
         """
