@@ -1,7 +1,7 @@
 """
 ## Classifiers
 
-Non supervised classifiers (Random forest, k-nearest neighbors, neural
+Non supervised classifiers (random forest, k-nearest neighbors, neural
 networks, support vector machines) for predicting the methylation class.
 """
 
@@ -28,9 +28,19 @@ from utils import (
     composite_path,
 )
 
+
 def evaluate_clf(clf, x_sample, X_test, y_test):
     """Calculates classifier accuracy and predicts sample value by
     returning the most probable values as formatted string.
+
+    Args:
+        x_sample: Feature list of sample.
+        X_test: Features of test data.
+        y_test: Classes of test data.
+
+    Returns:
+        Formatted string containing most probable classes of x_sample
+        and classifier accuracy.
     """
     y_predict = clf.predict(X_test)
     # Fraction of correctly classified test samples.
@@ -43,18 +53,21 @@ def evaluate_clf(clf, x_sample, X_test, y_test):
         "Classifier accuracy: %.2f %%\n"
         "Classifier probability per class:\n"
     ) % (clf, 100*accuracy)
-    for i in range(10):
-        result += (
-            "%-16s : %5.2f %%\n" % (
-                prob_per_class[i][1],
-                100*prob_per_class[i][0],
-            )
-        )
+    for p, c in prob_per_class[:10]:
+        result += "%-16s : %5.2f %%\n" % (c, 100*p)
     return result
 
 def training_test_data(sample, reference):
     """Takes the reference data that overlaps with the sample CpGs and
-    splits it into training data and validation data.
+    splits it into training data and test data.
+
+    Args:
+        sample: Sample to determine CpG overlap.
+        reference: Comparison reference.
+
+    Returns:
+        X_train, X_test, y_train, y_test: Split training and test
+            data pairs.
     """
     sample.set_cpg_overlap(reference)
     X = reference_methylation_from_index(
@@ -64,15 +77,14 @@ def training_test_data(sample, reference):
     return train_test_split(X, y, test_size=0.2)
 
 def fit_and_evaluate_classifiers(sample_name, reference_name):
-    """Uses non supervised machine learning classifiers (Random forest,
+    """Uses non supervised machine learning classifiers (random forest,
     k-nearest neighbors, neural networks, support vector machines)
-    to evaluate methylation class of sample.
+    to predict the methylation class of the sample. Output will be written
+    to disk.
 
     Args:
         sample_name: Name of sample to analyze.
-        reference: Name of reference that is used to train classifiers.
-    Returns:
-        TODO
+        reference_name: Name of reference that is used to train classifiers.
     """
     sample = Sample(sample_name)
     reference = Reference(reference_name)
@@ -83,7 +95,6 @@ def fit_and_evaluate_classifiers(sample_name, reference_name):
     rf_clf = RandomForestClassifier(
         n_estimators=150,
         n_jobs=-1,
-        random_state=1234,
     )
     knn_clf = KNeighborsClassifier(
         n_neighbors=5,
@@ -95,13 +106,18 @@ def fit_and_evaluate_classifiers(sample_name, reference_name):
         probability=True,
     )
     clfs = [rf_clf, knn_clf, nn_clf, svm_linear_clf]
-    # clfs = [rf_clf, knn_clf, nn_clf]
     output_file = composite_path(
             NANODIP_REPORTS, sample_name, reference_name, ENDING["clf"],
     )
+    # Clean file.
     with open(output_file, "w") as f:
         f.write("")
-    # Train classifiers and evaluate.
+    # Stop if there is no data to fit.
+    if len(x_sample) == 0:
+        with open(output_file, "a") as f:
+            f.write(f"No data to fit.\n")
+        return
+    # Otherwise train classifiers and evaluate.
     for clf in clfs:
         with open(output_file, "a") as f:
             f.write(f"Start training {clf}.\n")
@@ -110,5 +126,5 @@ def fit_and_evaluate_classifiers(sample_name, reference_name):
         evaluation = evaluate_clf(clf, x_sample, X_test, y_test)
         passed_time = time.time() - start
         with open(output_file, "a") as f:
-            f.write(f"Time used for classification: %.2f s\n" % passed_time)
+            f.write("Time used for classification: %.2f s\n" % passed_time)
             f.write(evaluation + "\n")

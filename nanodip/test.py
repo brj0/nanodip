@@ -94,7 +94,7 @@ from api import (
     predominant_barcode,
     methylation_caller,
 )
-import config, data, plots, nanodip, utils, api, webui
+import config, data, plots, nanodip, utils, api, webui, classifiers
 
 # Define logger
 logger = logging.getLogger(__name__)
@@ -118,6 +118,7 @@ cnv.read_from_disk()
 # umapp.sample = Sample(sample_name)
 # umapp.reference = Reference(reference_name)
 # umapp.sample.set_cpg_overlap(reference)
+
 from sklearn.naive_bayes import MultinomialNB, BernoulliNB, CategoricalNB
 from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.metrics import confusion_matrix, accuracy_score

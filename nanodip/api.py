@@ -803,10 +803,13 @@ def remove_dirs_with_wrong_barcode(sample_name, barcode):
     """Removes directories with wrong barcode due to change of
     the predominant barcode after the first reads.
     """
-    output_dirs = [
-        os.path.join(NANODIP_OUTPUT, sample_name, dir_nm) for dir_nm in
-        os.listdir(os.path.join(NANODIP_OUTPUT, sample_name))
-    ]
+    try:
+        output_dirs = [
+            os.path.join(NANODIP_OUTPUT, sample_name, dir_nm) for dir_nm in
+            os.listdir(os.path.join(NANODIP_OUTPUT, sample_name))
+        ]
+    except FileNotFoundError:
+        return
     wrong_barcode_dirs = [
         f for f in output_dirs if barcode not in f
     ]

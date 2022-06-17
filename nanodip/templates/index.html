@@ -1,22 +1,54 @@
-{% extends "base.html" %}
+{% if refresh == "True"%}
 
-{% block title %}
-  Overview
-{% endblock %}
+  <b>Computer: </b>{{ sys_stat.hostname }}<br><br>
+  <b>Disk usage</b><br>
+  Total: {{ sys_stat.disk_total }} GB<br>
+  Used : {{ sys_stat.disk_used }} GB<br>
+  Free : {{ sys_stat.disk_free }} GB<br>
+  <br><b>Memory</b><br>
+  Free : {{ sys_stat.memory_free }}&percnt;<br>
+  <br><b>CPU: </b><br>
+  Usage: {{ sys_stat.cpu }}&percnt;<br>
+  CpG active runs: {{ sys_stat.cpgs }}<br>
+  CNVP active runs: {{ sys_stat.cnvp }}<br>
+  UMAP active runs: {{ sys_stat.umap}}<br>
+  Classifiers active runs: {{ sys_stat.clf}}<br>
+  <br><br>
+  <a href="{{ url_restart }}" class="show" title="Use with caution">Restart NanoDiP</a>
 
-{% block body %}
-    <b>Computer: </b>{{ sys_stat.hostname }}<br><br>
-    <b>Disk usage</b><br>
-    Total: {{ sys_stat.disk_total }} GB<br>
-    Used : {{ sys_stat.disk_used }} GB<br>
-    Free : {{ sys_stat.disk_free }} GB<br>
-    <br><b>Memory</b><br>
-    Free : {{ sys_stat.memory_free }}&percnt;<br>
-    <br><b>CPU: </b><br>
-    Usage: {{ sys_stat.cpu }}&percnt;<br>
-    CpG active runs: {{ sys_stat.cpgs }}<br>
-    CNVP active runs: {{ sys_stat.cnvp }}<br>
-    UMAP active runs: {{ sys_stat.umap}}<br>
-    <br><br>
-    <a href="{{ url_restart }}" class="show" title="Use with caution">Restart NanoDiP</a>
-{% endblock %}
+{% else %}
+
+  {% extends "base.html" %}
+
+  {% block title %}
+    Overview
+  {% endblock %}
+
+  {% block body %}
+    <div id="content"></div>
+
+    <script>
+      function getContent() {
+        $.ajax({
+          url: "{{url_refresh}}",
+          type: "GET",
+          contentType: "application/json;charset=UTF-8",
+          dataType: "html",
+          success: function (data) {
+            $("#content").html(data);
+          }
+        });
+      }
+      /*Refresh page every 3 seconds.*/
+      var refreshPage = function() {
+        getContent();
+        setTimeout(refreshPage, 3000);
+      };
+      $(document).ready(function() {
+        getContent();
+        refreshPage();
+      })
+    </script>
+  {% endblock %}
+
+{% endif %}

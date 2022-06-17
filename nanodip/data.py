@@ -453,12 +453,12 @@ def get_sample_methylation(sample, reference):
     Args:
         sample: Sample to be analysed.
         reference: Reference used to determine CpG overlap with sample.
+
     Returns:
         Numpy array containing sample methylation on CpG overlap
-            sites.
+            sites. A site is considered methylated if the mean methylation
+            over all reads is greater than METHYLATION_CUTOFF.
     """
-    if not sample.cpg_overlap:
-        raise ValueError("CpG overlap is empty")
     sample_methylation = np.full(
         len(reference.cpg_sites), 0, dtype=bool
     )

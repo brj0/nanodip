@@ -6,7 +6,7 @@
 
 {% block body %}
   <div id="genes" class="hidden">
-    <label for="genome_genes">Choose Gene:</label>
+    <label for="genome_genes">Add gene (use "Autoscale" to zoom out):</label>
     <input list="genome_genes" id="gene_list" name="gene_list" />
     <datalist id="genome_genes">
       {% for gene in genes %}
@@ -87,7 +87,10 @@
 
     /*Remove genes from plot.*/
     $("#reset_button").click(function(){
-      renderNewPlot(plotData, "cnv");
+      console.log("Button pressed");
+      // Deep copy of data.
+      data = JSON.parse(JSON.stringify(plotData));
+      renderNewPlot(data, "cnv");
     });
 
   });
