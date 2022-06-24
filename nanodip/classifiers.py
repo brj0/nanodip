@@ -2,7 +2,7 @@
 ## Classifiers
 
 Non supervised classifiers (random forest, k-nearest neighbors, neural
-networks, support vector machines) for predicting the methylation class.
+networks) for predicting the methylation class.
 """
 
 import time
@@ -78,9 +78,8 @@ def training_test_data(sample, reference):
 
 def fit_and_evaluate_classifiers(sample_name, reference_name):
     """Uses non supervised machine learning classifiers (random forest,
-    k-nearest neighbors, neural networks, support vector machines)
-    to predict the methylation class of the sample. Output will be written
-    to disk.
+    k-nearest neighbors, neural networks) to predict the methylation
+    class of the sample. Output will be written to disk.
 
     Args:
         sample_name: Name of sample to analyze.
@@ -100,12 +99,16 @@ def fit_and_evaluate_classifiers(sample_name, reference_name):
         n_neighbors=5,
         weights="distance",
     )
-    nn_clf = MLPClassifier()
-    svm_linear_clf = SVC(
-        kernel="linear",
-        probability=True,
+    nn_clf = MLPClassifier(
+        verbose=True,
     )
-    clfs = [rf_clf, knn_clf, nn_clf, svm_linear_clf]
+    # SVM are very time consuming.
+    # svm_clf = SVC(
+        # kernel="linear",
+        # probability=True,
+        # verbose=True,
+    # )
+    clfs = [rf_clf, knn_clf, nn_clf]
     output_file = composite_path(
             NANODIP_REPORTS, sample_name, reference_name, ENDING["clf"],
     )

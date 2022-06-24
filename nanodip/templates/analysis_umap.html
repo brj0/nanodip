@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block title %}
-  Analysis
+  UMAP
 {% endblock %}
 
 {% block body %}
@@ -26,7 +26,6 @@
     Plotly.newPlot(plotId, plotJSON, {});
     Plotly.relayout(plotId, {height: "800", width: "1580"})
   }
-
   /*Load umap-plot and umap-close-up-plot on startup.*/
   $(document).ready(function(){
     {% if first_use %}
@@ -39,7 +38,6 @@
       data: {
         "sample_name": "{{sample_name}}",
         "reference_name": "{{reference_name}}",
-        "close_up": "",
         "new": "{{new}}",
       },
       dataType:"json",
@@ -50,22 +48,8 @@
       success: function (data) {
         document.getElementById("loader").style.display = "none";
         $("#umap_radio").show();
-        renderPlot(data, "umap_all");
-        $.ajax({
-          url: "{{url_umap}}",
-          type: "GET",
-          contentType: "application/json;charset=UTF-8",
-          data: {
-            "sample_name": "{{sample_name}}",
-            "reference_name": "{{reference_name}}",
-            "close_up": "True",
-            "new": "False",
-          },
-          dataType:"json",
-          success: function (data) {
-            renderPlot(data, "umap_cu");
-          }
-        });
+        renderPlot(JSON.parse(data["all"]), "umap_all");
+        renderPlot(JSON.parse(data["close_up"]), "umap_cu");
       }
     });
   })

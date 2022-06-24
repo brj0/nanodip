@@ -16,6 +16,12 @@ import re
 import sys
 import time
 from scipy.stats import binomtest
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score
+from sklearn.model_selection import train_test_split
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neural_network import MLPClassifier
+from sklearn.svm import SVC
 
 from config import (
     ANALYSIS_EXCLUSION_PATTERNS,
@@ -94,6 +100,12 @@ from api import (
     predominant_barcode,
     methylation_caller,
 )
+from classifiers import (
+    fit_and_evaluate_classifiers,
+    training_test_data,
+    evaluate_clf,
+)
+
 import config, data, plots, nanodip, utils, api, webui, classifiers
 
 # Define logger
@@ -158,3 +170,30 @@ str_buffer = StringIO()
 # )
 # gs.fit(X_train, y_train)
 # gs.best_params_
+
+sample_name = "17_6"
+reference_name = "AllIDATv2_20210804"
+
+from sklearn import preprocessing
+
+sample = Sample(sample_name)
+reference = Reference(reference_name)
+# Define training/test/sample data.
+X_train, X_test, y_train, y_test = training_test_data(sample, reference)
+x_sample = get_sample_methylation(sample, reference)
+
+clf = MLPClassifier(
+    verbose=True,
+)
+svm_linear_clf = SVC(
+    kernel="linear",
+    probability=True,
+    verbose=True,
+)
+from sklearn.svm import LinearSVC
+
+start = time.time()
+clf.fit(X_train, y_train)
+evaluation = evaluate_clf(clf, x_sample, X_test, y_test)
+passed_time = time.time() - start
+

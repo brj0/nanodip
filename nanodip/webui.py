@@ -595,7 +595,7 @@ class UI:
         return cnv_data.plot_cnv_and_genes()
 
     @cherrypy.expose
-    def umap(self, sample_name, reference_name, close_up="", new="False"):
+    def umap(self, sample_name, reference_name, new="False"):
         """Creates UMAP plot and returns it as JSON."""
         UI.all_sem.acquire()
         UI.umap_sem.acquire()
@@ -614,9 +614,10 @@ class UI:
             umap_data.read_from_disk()
         UI.umap_sem.release()
         UI.all_sem.release()
-        if close_up == "True":
-            return umap_data.cu_plot_json
-        return umap_data.plot_json
+        return json.dumps({
+            "all": umap_data.plot_json,
+            "close_up": umap_data.cu_plot_json
+        })
 
     @cherrypy.expose
     def classifiers(
