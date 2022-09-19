@@ -271,7 +271,7 @@ def bonferroni_corrected_ci(hits, lengths, trials, target_length, alpha=0.05):
     """
     Calculates confidence intervals for the hits of binomially distributed
     random variables adjusted to a common interval length. The significance
-    lever is adjusted using Bonferroni correction.
+    level is adjusted using Bonferroni correction.
 
     Args:
         hits: List with numbers of observed hits.

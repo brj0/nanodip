@@ -103,7 +103,7 @@ def make_binary_reference_data(
 
     # write reference specimens
     specimens_file = os.path.join(output_dir, "specimens.csv")
-    specimen_names = [s[:-len("_betas_filtered.bin")] for s in specimens]
+    specimen_names = [s[:-(len(ENDING["betas"]) + 1)] for s in specimens]
     with open(specimens_file, "w") as f:
         f.write("\n".join(specimen_names))
 
