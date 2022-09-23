@@ -122,10 +122,10 @@ logging.basicConfig(
 )
 
 # start_internal_modules
-from webui import (
+from nanodip.webui import (
     start_webserver,
 )
-from utils import (
+from nanodip.utils import (
     sanity_check,
 )
 # end_internal_modules

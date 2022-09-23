@@ -19,7 +19,7 @@ import plotly.graph_objects as go
 # end_external_modules
 
 # start_internal_modules
-from config import (
+from nanodip.config import (
     CNV_GRID,
     CNV_LINK,
     ENDING,
@@ -27,14 +27,14 @@ from config import (
     PLOTLY_RENDER_MODE,
     UMAP_PLOT_TOP_MATCHES,
 )
-from data import (
+from nanodip.data import (
     Reference,
     Genome,
     Sample,
     get_reference_methylation,
     get_sample_methylation,
 )
-from utils import (
+from nanodip.utils import (
     bonferroni_corrected_ci,
     convert_html_to_pdf,
     discrete_colors,

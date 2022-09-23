@@ -18,7 +18,7 @@ import pysam
 # end_external_modules
 
 # start_internal_modules
-from config import (
+from nanodip.config import (
     ANNOTATIONS,
     ANNOTATIONS_ABBREVIATIONS_BASEL,
     ANNOTATIONS_ABBREVIATIONS_TCGA,
@@ -35,7 +35,7 @@ from config import (
     REFERENCE_SPECIMENS,
     RELEVANT_GENES,
 )
-from utils import (
+from nanodip.utils import (
     files_by_ending,
 )
 # end_internal_modules

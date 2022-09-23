@@ -20,13 +20,12 @@ import xhtml2pdf.pisa
 # end_external_modules
 
 # start_internal_modules
-from config import (
+from nanodip.config import (
     ANNOTATIONS,
     ANNOTATIONS_ABBREVIATIONS_BASEL,
     ANNOTATIONS_ABBREVIATIONS_TCGA,
     BARCODE_NAMES,
     BETA_VALUES,
-    BROWSER_FAVICON,
     CHROMOSOMES,
     DATA,
     ENDING,
@@ -60,7 +59,6 @@ def sanity_check():
         GENES_RAW,
         GENES,
         RELEVANT_GENES,
-        BROWSER_FAVICON,
         F5C,
         MINIMAP2,
         SAMTOOLS,
@@ -112,9 +110,10 @@ def extract_referenced_cpgs(sample_methylation,
 
 def render_template(template_name, **context):
     """Renders jinja2 templates to HTML."""
-    loader = jinja2.FileSystemLoader("templates")
-    template = jinja2.Environment(
-        loader=loader).get_template(template_name)
+    templates_path = os.path.join(os.path.dirname(__file__), "templates")
+    loader = jinja2.FileSystemLoader(templates_path)
+    environment = jinja2.Environment(loader=loader)
+    template = environment.get_template(template_name)
     return template.render(context)
 
 def url_for(url_func, **args):

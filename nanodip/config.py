@@ -285,6 +285,3 @@ CherryPy
 CHERRYPY_HOST = "localhost"
 THIS_HOST = "localhost"
 CHERRYPY_PORT = 8080
-
-# The web browser favicon file for this application.
-BROWSER_FAVICON = "/applications/nanodip/nanodip/static/img/logo.png"

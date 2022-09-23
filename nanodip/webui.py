@@ -26,9 +26,8 @@ import psutil
 # end_external_modules
 
 # start_internal_modules
-from config import (
+from nanodip.config import (
     ANALYSIS_EXCLUSION_PATTERNS,
-    BROWSER_FAVICON,
     CHERRYPY_HOST,
     CHERRYPY_PORT,
     CNV_LINK,
@@ -40,7 +39,7 @@ from config import (
     NANODIP_REPORTS,
     NEEDED_NUMBER_OF_BASES,
 )
-from utils import (
+from nanodip.utils import (
     composite_path,
     convert_html_to_pdf,
     date_time_string_now,
@@ -51,7 +50,7 @@ from utils import (
     render_template,
     url_for,
 )
-from api import (
+from nanodip.api import (
     active_run,
     device_status,
     flow_cell_id,
@@ -67,15 +66,15 @@ from api import (
     start_run,
     stop_run,
 )
-from data import (
+from nanodip.data import (
     Genome,
     binary_reference_data_exists,
 )
-from plots import (
+from nanodip.plots import (
     CNVData,
     UMAPData,
 )
-from classifiers import (
+from nanodip.classifiers import (
     fit_and_evaluate_classifiers,
 )
 # end_internal_modules
@@ -808,10 +807,13 @@ def start_webserver():
 
     print(f"NanoDiP server running at http://{CHERRYPY_HOST}:{CHERRYPY_PORT}")
 
+    app_dir = os.path.dirname(__file__)
     cherrypy_config = {
         '/favicon.ico': {
             'tools.staticfile.on': True,
-            'tools.staticfile.filename': BROWSER_FAVICON,
+            'tools.staticfile.filename': (
+                os.path.join(app_dir, "static/img/logo.png")
+            ),
         },
         '/reports': {
             'tools.staticdir.on': True,
@@ -819,7 +821,7 @@ def start_webserver():
         },
         '/static': {
             'tools.staticdir.on': True,
-            'tools.staticdir.dir': os.path.join(os.getcwd(), "static"),
+            'tools.staticdir.dir': os.path.join(app_dir, "static"),
         },
     }
     cherrypy.quickstart(UI(), "/", cherrypy_config)

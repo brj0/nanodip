@@ -21,7 +21,7 @@ import grpc
 # end_external_modules
 
 # start_internal_modules
-from config import (
+from nanodip.config import (
     DATA,
     F5C,
     MINIMAP2,
@@ -33,7 +33,7 @@ from config import (
     SAMTOOLS,
     THIS_HOST,
 )
-from utils import (
+from nanodip.utils import (
     date_time_string_now,
     extract_referenced_cpgs,
     predominant_barcode,

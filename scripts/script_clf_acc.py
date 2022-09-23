@@ -1,7 +1,16 @@
 import pandas as pd
 import re
 
-supervised_clfs = pd.read_csv("~/Documents/clf_all/all_clf.csv")
+import sys
+sys.path.insert(0, "/applications/nanodip")
+
+from nanodip.data import Reference
+
+reference_name = "MNG_IfP_v1"
+reference_name = "AllIDATv2_20210804"
+reference_name = "GSE90496_IfP01"
+
+supervised_clfs = pd.read_csv(f"~/Documents/clf_data/{reference_name}/all_clf.csv")
 
 url = "https://docs.google.com/spreadsheets/d/%s/gviz/tq?tqx=out:csv&sheet=%s"
 annotation_id = "1qmis4MSoE0eAMMwG6xZbDCrs-F1jXECZvc4wKWLR0KY"
@@ -59,10 +68,24 @@ def common_translation(name):
         print(name)
         return name
 
+reference = Reference(reference_name)
+reference.translated_meth_grp = [
+    common_translation(x) for x in reference.methylation_class
+]
 
 supervised_clfs["meth_grp"] = supervised_clfs.apply(
     lambda x: get_meth_class(x["case"]), axis=1
 )
+
+#count occurences of methylation groups in reference
+meth_grp_cnt = {m:0 for m in reference.methylation_class}
+for x in reference.methylation_class:
+    meth_grp_cnt[x] += 1
+
+# Methylation class must be relevant in reference
+supervised_clfs["relevant"] = [
+    (meth_grp_cnt.get(x, 0) > 0) for x in supervised_clfs.meth_grp
+]
 
 meth_sup_list = [f"meth_grp{d}" for d in range(1, 11)]
 meth_all_list = meth_sup_list + ["meth_grp"]
@@ -73,7 +96,7 @@ supervised_clfs[meth_all_list] = supervised_clfs[meth_all_list].applymap(
 )
 
 rotated_columns = (
-    ["case", "clf", "acc", "time", "meth_grp"] + meth_sup_list + prob_list
+    ["case", "clf", "acc", "time", "relevant", "meth_grp"] + meth_sup_list + prob_list
 )
 
 # Rotate columns
@@ -92,10 +115,15 @@ supervised_clfs = supervised_clfs.loc[
 # Sort
 supervised_clfs = supervised_clfs.sort_values(by=["case", "clf"])
 
-supervised_clfs.to_csv("~/Documents/clf_all/all_clf_vs_annotation.csv")
+supervised_clfs.to_csv(f"~/Documents/clf_data/{reference_name}/all_clf_vs_annotation.csv")
+
+
+# Extract cases relevant for reference data
+supervised_clfs = supervised_clfs.loc[supervised_clfs.relevant]
+
 
 clfs = ["RandomForestClassifier", "KNeighborsClassifier", "MLPClassifier"]
-print("Correctly classified cases (exact match)")
+print("\nCorrectly classified cases (exact match)")
 print("----------------------------------------")
 for clf in clfs:
     df_clf = supervised_clfs.loc[supervised_clfs.clf == clf]
@@ -104,12 +132,12 @@ for clf in clfs:
     print(
         clf,
         f"{nr_rf_correct}/{nr_rf}",
-        round(nr_rf_correct / nr_rf * 100, 3),
+        round(nr_rf_correct / nr_rf * 100, 2),
         "%",
     )
 
-print("Correctly classified cases (top match)")
-print("--------------------------------------")
+print("\nCorrectly classified cases (within top 10)")
+print("------------------------------------------")
 for clf in clfs:
     df_clf = supervised_clfs.loc[supervised_clfs.clf == clf]
     nr_rf = len(df_clf)
@@ -130,7 +158,7 @@ for clf in clfs:
     print(
         clf,
         f"{nr_rf_correct}/{nr_rf}",
-        round(nr_rf_correct / nr_rf * 100, 3),
+        round(nr_rf_correct / nr_rf * 100, 2),
         "%",
     )
 
@@ -143,8 +171,8 @@ df_comb = pd.pivot(
 df_comb = df_comb[df_comb.columns[[0, 3, 4, 5]]]
 df_comb.columns = ["meth_grp", "knn", "mlp", "rf"]
 
-print("Correctly classified cases (all clfs)")
-print("-------------------------------------")
+print("\nCorrectly classified cases (exact match for at least 1 classifier)")
+print("------------------------------------------------------------------")
 nr_all = len(df_comb)
 nr_all_correct = len(
     df_comb.loc[
@@ -156,6 +184,6 @@ nr_all_correct = len(
 print(
     "Combined clf",
     f"{nr_all_correct}/{nr_all}",
-    round(nr_all_correct / nr_all * 100, 3),
+    round(nr_all_correct / nr_all * 100, 2),
     "%",
 )

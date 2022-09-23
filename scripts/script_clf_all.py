@@ -2,10 +2,13 @@ import os
 from tqdm import tqdm
 import time
 
-from config import (
+import sys
+sys.path.insert(0, "/applications/nanodip")
+
+from nanodip.config import (
     NANODIP_OUTPUT,
 )
-from classifiers import (
+from nanodip.classifiers import (
     fit_and_evaluate_classifiers,
 )
 

@@ -1,75 +1,67 @@
-from minknow_api.tools import protocols
-from plotly.io import write_json, from_json
-from scipy.stats import binomtest
-from sklearn import preprocessing
-from sklearn.ensemble import randomforestclassifier
-from sklearn.metrics import accuracy_score
-from sklearn.metrics import confusion_matrix, accuracy_score
-from sklearn.model_selection import gridsearchcv, train_test_split
-from sklearn.model_selection import train_test_split
-from sklearn.naive_bayes import multinomialnb, bernoullinb, categoricalnb
-from sklearn.neighbors import kneighborsclassifier
-from sklearn.neural_network import mlpclassifier
-from sklearn.svm import linearsvc
-from sklearn.svm import svc
-import argparse
 import bisect
+from minknow_api.tools import protocols
+import numpy as np
+import logging
+import os
+import argparse
 import grpc
+import pandas as pd
 import math
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.io import write_json, from_json
 import pysam
 import random
 import re
-from io import stringio
-from tqdm import tqdm
-import logging
-import numpy as np
-import openpyxl
-import os
-import pandas as pd
 import sys
 import time
+from scipy.stats import binomtest
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score
+from sklearn.model_selection import train_test_split
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neural_network import MLPClassifier
+from sklearn.svm import SVC
 
-from config import (
-    analysis_exclusion_patterns,
-    annotations,
-    annotations_abbreviations_basel,
-    annotations_abbreviations_tcga,
-    barcode_names,
-    beta_values,
-    browser_favicon,
-    cherrypy_host,
-    cherrypy_port,
-    chromosomes,
-    cnv_grid,
-    cnv_link,
-    data,
-    debug_mode,
-    ending,
-    umap_link,
-    epidip_umap_coordinate_files,
-    excluded_from_analysis,
-    f5c,
-    genes,
-    genes_raw,
-    illumina_cg_map,
-    minimap2,
-    nanodip_output,
-    nanodip_reports,
-    needed_number_of_bases,
-    plotly_render_mode,
-    reads_per_file,
-    reference_genome_fa,
-    reference_genome_mmi,
-    reference_methylation_shape,
-    relevant_genes,
-    result_ending,
-    samtools,
-    this_host,
-    umap_plot_top_matches,
+# sys.path.append("/applications/nanodip/")
+
+from nanodip.config import (
+    ANALYSIS_EXCLUSION_PATTERNS,
+    ANNOTATIONS,
+    ANNOTATIONS_ABBREVIATIONS_BASEL,
+    ANNOTATIONS_ABBREVIATIONS_TCGA,
+    BARCODE_NAMES,
+    BETA_VALUES,
+    CHERRYPY_HOST,
+    CHERRYPY_PORT,
+    CHROMOSOMES,
+    CNV_GRID,
+    CNV_LINK,
+    DATA,
+    DEBUG_MODE,
+    ENDING,
+    UMAP_LINK,
+    EPIDIP_UMAP_COORDINATE_FILES,
+    EXCLUDED_FROM_ANALYSIS,
+    F5C,
+    GENES,
+    GENES_RAW,
+    ILLUMINA_CG_MAP,
+    MINIMAP2,
+    NANODIP_OUTPUT,
+    NANODIP_REPORTS,
+    NEEDED_NUMBER_OF_BASES,
+    PLOTLY_RENDER_MODE,
+    READS_PER_FILE,
+    REFERENCE_GENOME_FA,
+    REFERENCE_GENOME_MMI,
+    REFERENCE_METHYLATION_SHAPE,
+    RELEVANT_GENES,
+    RESULT_ENDING,
+    SAMTOOLS,
+    THIS_HOST,
+    UMAP_PLOT_TOP_MATCHES,
 )
-
 from utils import (
     date_time_string_now,
     files_by_ending,
@@ -77,25 +69,22 @@ from utils import (
     composite_path,
     bonferroni_corrected_ci,
 )
-
 from data import (
     get_sample_methylation,
-    sample,
-    reference,
-    genome,
+    Sample,
+    Reference,
+    Genome,
     get_reference_methylation,
     reference_methylation_from_index,
 )
-
 from plots import (
-    cnvdata,
-    umapdata,
+    CNVData,
+    UMAPData,
     pie_chart,
 )
-
 from webui import (
-    device,
-    devices,
+    Device,
+    Devices,
     minion_positions,
     run_information,
     download_epidip_data,
@@ -105,7 +94,6 @@ from webui import (
     run_sample_id,
     start_run,
 )
-
 from api import (
     connection_from_device_id,
     parse_args,
@@ -113,20 +101,144 @@ from api import (
     predominant_barcode,
     methylation_caller,
 )
-
 from classifiers import (
     fit_and_evaluate_classifiers,
     training_test_data,
     evaluate_clf,
 )
 
-
 import config, data, plots, nanodip, utils, api, webui, classifiers
+
+
+# from minknow_api.tools import protocols
+# from plotly.io import write_json, from_json
+# from scipy.stats import binomtest
+# from sklearn import preprocessing
+# from sklearn.ensemble import randomforestclassifier
+# from sklearn.metrics import accuracy_score
+# from sklearn.metrics import confusion_matrix, accuracy_score
+# from sklearn.model_selection import gridsearchcv, train_test_split
+# from sklearn.model_selection import train_test_split
+# from sklearn.naive_bayes import multinomialnb, bernoullinb, categoricalnb
+# from sklearn.neighbors import kneighborsclassifier
+# from sklearn.neural_network import mlpclassifier
+# from sklearn.svm import linearsvc
+# from sklearn.svm import svc
+# import argparse
+# import bisect
+# import grpc
+# import math
+# import plotly.express as px
+# import plotly.graph_objects as go
+# import pysam
+# import random
+# import re
+# from io import stringio
+# from tqdm import tqdm
+# import logging
+# import numpy as np
+# import openpyxl
+# import os
+# import pandas as pd
+# import sys
+# import time
+
+# from config import (
+    # analysis_exclusion_patterns,
+    # annotations,
+    # annotations_abbreviations_basel,
+    # annotations_abbreviations_tcga,
+    # barcode_names,
+    # beta_values,
+    # browser_favicon,
+    # cherrypy_host,
+    # cherrypy_port,
+    # chromosomes,
+    # cnv_grid,
+    # cnv_link,
+    # data,
+    # debug_mode,
+    # ending,
+    # umap_link,
+    # epidip_umap_coordinate_files,
+    # excluded_from_analysis,
+    # f5c,
+    # genes,
+    # genes_raw,
+    # illumina_cg_map,
+    # minimap2,
+    # nanodip_output,
+    # nanodip_reports,
+    # needed_number_of_bases,
+    # plotly_render_mode,
+    # reads_per_file,
+    # reference_genome_fa,
+    # reference_genome_mmi,
+    # reference_methylation_shape,
+    # relevant_genes,
+    # result_ending,
+    # samtools,
+    # this_host,
+    # umap_plot_top_matches,
+# )
+
+# from utils import (
+    # date_time_string_now,
+    # files_by_ending,
+    # discrete_colors,
+    # composite_path,
+    # bonferroni_corrected_ci,
+# )
+
+# from data import (
+    # get_sample_methylation,
+    # sample,
+    # reference,
+    # genome,
+    # get_reference_methylation,
+    # reference_methylation_from_index,
+# )
+
+# from plots import (
+    # cnvdata,
+    # umapdata,
+    # pie_chart,
+# )
+
+# from webui import (
+    # device,
+    # devices,
+    # minion_positions,
+    # run_information,
+    # download_epidip_data,
+    # device_status,
+    # active_run,
+    # number_of_called_bases,
+    # run_sample_id,
+    # start_run,
+# )
+
+# from api import (
+    # connection_from_device_id,
+    # parse_args,
+    # is_position_selected,
+    # predominant_barcode,
+    # methylation_caller,
+# )
+
+# from classifiers import (
+    # fit_and_evaluate_classifiers,
+    # training_test_data,
+    # evaluate_clf,
+# )
+
+
+# import config, data, plots, nanodip, utils, api, webui, classifiers
 
 print("import done")
 
 # define logger
-logger = logging.getlogger(__name__)
+logger = logging.getLogger(__name__)
 
 # sample_name = "b2021_48459_20211112_bc10"
 # sample_name = "b2021_48700_20211112_bc11"
@@ -176,11 +288,11 @@ logger = logging.getlogger(__name__)
 # gs.fit(x_train, y_train)
 # gs.best_params_
 
-reference_name ="gse90496_ifp01"
-sample_name = "b1992_24268_20211126_bc12"
+reference_name ="GSE90496_IfP01"
+sample_name = "B1992_24268_20211126_BC12"
 
-sample = sample(sample_name)
-reference = reference(reference_name)
+sample = Sample(sample_name)
+reference = Reference(reference_name)
 
 # define training/test/sample data.
 X_train, X_test, y_train, y_test = training_test_data(sample, reference)
@@ -211,8 +323,7 @@ prob_per_class.sort(reverse=True)
 
 
 
-clf_knn = kneighborsclassifier(
-verbose=True,
+clf_knn = KNeighborsClassifier(
 )
 
 start = time.time()

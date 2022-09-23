@@ -5,28 +5,35 @@ Non supervised classifiers (random forest, k-nearest neighbors, neural
 networks) for predicting the methylation class.
 """
 
+# start_external_modules
+import logging
 import time
-
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.svm import SVC
+# end_external_modules
 
-from config import (
+# start_internal_modules
+from nanodip.config import (
     ENDING,
     NANODIP_REPORTS,
 )
-from data import (
+from nanodip.data import (
     Reference,
     Sample,
     get_sample_methylation,
     reference_methylation_from_index,
 )
-from utils import (
+from nanodip.utils import (
     composite_path,
 )
+# end_internal_modules
+
+# Define logger
+logger = logging.getLogger(__name__)
 
 
 def evaluate_clf(clf, x_sample, X_test, y_test):
