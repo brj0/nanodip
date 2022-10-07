@@ -22,8 +22,8 @@ import xhtml2pdf.pisa
 # start_internal_modules
 from nanodip.config import (
     ANNOTATIONS,
-    ANNOTATIONS_ABBREVIATIONS_BASEL,
-    ANNOTATIONS_ABBREVIATIONS_TCGA,
+    ANNOTATION_ACRONYMS_BASEL,
+    ANNOTATION_ACRONYMS_TCGA,
     BARCODE_NAMES,
     BETA_VALUES,
     CHROMOSOMES,
@@ -50,8 +50,8 @@ def sanity_check():
     """
     requested_files = [
         BETA_VALUES,
-        ANNOTATIONS_ABBREVIATIONS_BASEL,
-        ANNOTATIONS_ABBREVIATIONS_TCGA,
+        ANNOTATION_ACRONYMS_BASEL,
+        ANNOTATION_ACRONYMS_TCGA,
         ILLUMINA_CG_MAP,
         CHROMOSOMES,
         REFERENCE_GENOME_FA,
@@ -195,8 +195,8 @@ def get_all_results():
     return [f[0] for f in files]
 
 def files_by_ending(directory, sample_name, ending):
-    """Returns a list containing all sample output files with a given
-    ending.
+    """Searches recursively in {directory}/{sample_name} for all files with
+    given {ending} and returns result as list.
     """
     sample_path = os.path.join(directory, sample_name)
     output_files = []

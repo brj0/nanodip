@@ -12,16 +12,14 @@ reference_name = "GSE90496_IfP01"
 
 supervised_clfs = pd.read_csv(f"~/Documents/clf_data/{reference_name}/all_clf.csv")
 
-url = "https://docs.google.com/spreadsheets/d/%s/gviz/tq?tqx=out:csv&sheet=%s"
-annotation_id = "1qmis4MSoE0eAMMwG6xZbDCrs-F1jXECZvc4wKWLR0KY"
-sheet_name = "Sample%20list"
+URL = "https://docs.google.com/spreadsheets/d/%s/gviz/tq?tqx=out:csv&sheet=%s"
+ANNOTATION_ID = "1qmis4MSoE0eAMMwG6xZbDCrs-F1jXECZvc4wKWLR0KY"
+SHEET_NAME = "Sample%20list"
+TRANSLATION_ID = "1hUnyA8axrJf0ppZ5oHl0nAWZJFN9obMoiPNsL3_F8_c"
+TRANSLATION_NAME = "landing_zone"
 
-
-translation_id = "1hUnyA8axrJf0ppZ5oHl0nAWZJFN9obMoiPNsL3_F8_c"
-translation_name = "landing_zone"
-
-annotation_raw = pd.read_csv(url % (annotation_id, sheet_name))
-translation = pd.read_csv(url % (translation_id, translation_name))
+annotation_raw = pd.read_csv(URL % (ANNOTATION_ID, SHEET_NAME))
+translation = pd.read_csv(URL % (TRANSLATION_ID, TRANSLATION_NAME))
 name_to_translation = {
     u: t for u, t in zip(translation.unique_ms_01, translation.translation)
 }
@@ -49,7 +47,7 @@ supervised_clfs.case = supervised_clfs.apply(
 )
 
 annotation.case = annotation.apply(lambda x: parse_case_nr(x["case"]), axis=1)
-annotation = annotation.loc[annotation.case != "nan"]
+annotation = annotation.loc[~annotation.meth_grp.isnull()]
 case_to_meth = {c: m for c, m in zip(annotation.case, annotation.meth_grp)}
 
 
@@ -123,7 +121,9 @@ supervised_clfs = supervised_clfs.loc[supervised_clfs.relevant]
 
 
 clfs = ["RandomForestClassifier", "KNeighborsClassifier", "MLPClassifier"]
-print("\nCorrectly classified cases (exact match)")
+print()
+print(reference_name)
+print("Correctly classified cases (exact match)")
 print("----------------------------------------")
 for clf in clfs:
     df_clf = supervised_clfs.loc[supervised_clfs.clf == clf]
@@ -136,7 +136,8 @@ for clf in clfs:
         "%",
     )
 
-print("\nCorrectly classified cases (within top 10)")
+print()
+print("Correctly classified cases (within top 10)")
 print("------------------------------------------")
 for clf in clfs:
     df_clf = supervised_clfs.loc[supervised_clfs.clf == clf]
@@ -171,7 +172,8 @@ df_comb = pd.pivot(
 df_comb = df_comb[df_comb.columns[[0, 3, 4, 5]]]
 df_comb.columns = ["meth_grp", "knn", "mlp", "rf"]
 
-print("\nCorrectly classified cases (exact match for at least 1 classifier)")
+print()
+print("Correctly classified cases (exact match for at least 1 classifier)")
 print("------------------------------------------------------------------")
 nr_all = len(df_comb)
 nr_all_correct = len(
@@ -187,3 +189,4 @@ print(
     round(nr_all_correct / nr_all * 100, 2),
     "%",
 )
+print()

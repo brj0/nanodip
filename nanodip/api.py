@@ -23,6 +23,7 @@ import grpc
 # start_internal_modules
 from nanodip.config import (
     DATA,
+    ENDING,
     F5C,
     MINIMAP2,
     NANODIP_OUTPUT,
@@ -790,13 +791,10 @@ def single_file_methylation_caller(analysis_dir):
             logger.error("Error occured on subprocess '%s'", cmd[0])
     # Calculate CpG overlap.
     extract_referenced_cpgs(
-        base_path + "-freq.tsv",
-        base_path + "-methoverlap.tsv",
-        base_path + "-methoverlapcount.txt",
+        base_path + ENDING["freq_tsv"],
+        base_path + ENDING["methoverl_tsv"],
+        base_path + ENDING["methoverlcnt_tsv"],
     )
-    # Write empty textfile to signal successful completion.
-    with open(os.path.join(analysis_dir, "done.txt"), "w"):
-        pass
     print(f"Methylation calling on {file_name} done.")
 
 def remove_dirs_with_wrong_barcode(sample_name, barcode):
@@ -815,6 +813,14 @@ def remove_dirs_with_wrong_barcode(sample_name, barcode):
     ]
     for dir_path in wrong_barcode_dirs:
         shutil.rmtree(dir_path)
+
+def methylation_calling_done(analysis_dir):
+    """Checks if methylation calling is done."""
+    return any(
+        file_
+        for file_ in os.listdir(analysis_dir)
+        if file_.endswith(ENDING["methoverlcnt_tsv"])
+    )
 
 def methylation_caller(sample_name, analyze_one=True):
     """Searches for callable fast5/fastq files that have not yet been
@@ -865,8 +871,7 @@ def methylation_caller(sample_name, analyze_one=True):
             os.symlink(f5, symlink5)
         if not os.path.exists(symlinkq):
             os.symlink(fq, symlinkq)
-        done = os.path.join(analysis_dir, "done.txt")
-        if os.path.exists(done):
+        if methylation_calling_done(analysis_dir):
             prev_called.append(file_name)
         else:
             not_called.append(

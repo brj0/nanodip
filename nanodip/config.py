@@ -59,6 +59,9 @@ NANODIP_OUTPUT = os.path.join(DATA, "nanodip_output")
 # Location to write reports and figures.
 NANODIP_REPORTS = os.path.join(DATA, "nanodip_reports")
 
+# Where to write temporary files
+TMP = os.path.join(DATA, "tmp")
+
 
 """
 Reference data
@@ -74,15 +77,18 @@ BETA_VALUES = os.path.join(REFERENCE_DATA, "betaEPIC450Kmix_bin")
 # Location of annotation spreadsheets.
 ANNOTATIONS = os.path.join(REFERENCE_DATA, "reference_annotations")
 
+# Location of annotation acronyms.
+ANNOTATION_ACRONYMS = os.path.join(ANNOTATIONS, "acronyms")
+
 # Spreadsheet containing description of annotation codes (Basel internal).
-ANNOTATIONS_ABBREVIATIONS_BASEL = os.path.join(
-    ANNOTATIONS, "mc_anno_ifp_basel.csv"
+ANNOTATION_ACRONYMS_BASEL = os.path.join(
+    ANNOTATION_ACRONYMS, "mc_anno_ifp_basel.csv"
 )
 
 # Spreadsheet containing description of annotation codes (TCGA). From:
 # https://gdc.cancer.gov/resources-tcga-users/tcga-code-tables/tcga-study-abbreviations
-ANNOTATIONS_ABBREVIATIONS_TCGA = os.path.join(
-    ANNOTATIONS, "tcga_study_abbreviations.tsv"
+ANNOTATION_ACRONYMS_TCGA = os.path.join(
+    ANNOTATION_ACRONYMS, "tcga_study_abbreviations.tsv"
 )
 
 # Illumina probe names of the 450K array.
@@ -165,7 +171,7 @@ RESULT_ENDING = {
     "cnv_png": "CNVplot.png",
     "ranking": "NanoDiP_ranking.pdf",
     "report": "NanoDiP_report.pdf",
-    "umap_all": "UMAP_all.html",
+    "umap_all_html": "UMAP_all.html",
     "umap_top": "UMAP_top.html",
     "clf": "classifiers.txt",
 }
@@ -177,21 +183,20 @@ ENDING = {
     "bin_midpoints": "binmidpoints.npy",
     "betas": "betas_filtered.bin",
     "cnv": "cnv.npy",
-    "cnv_bins_json": "CNV_binsplot.json",
     "cnv_html": "CNVplot.html",
     "cnv_json": "CNVplot.json",
     "cnv_pdf": "CNVplot.pdf",
-    "cnv_png": "CNVplot.png",
     "cpg_cnt": "cpgcount.txt",
+    "freq_tsv": "-freq.tsv",
     "genes": "genes.csv",
-    "methyl": "methyl_overlap.npy",
+    "methoverl_npy": "methyl_overlap.npy",
+    "methoverl_tsv": "-methoverlap.tsv",
+    "methoverlcnt_tsv": "-methoverlapcount.txt",
     "pie": "pie.png",
     "reads_csv": "reads.csv",
     "relevant_genes": "relevant_genes.csv",
-    "sel_ref": "selected_reference.txt",
     "stdarr": "stdarr.bin",
     "stdsort": "stdsortarr.bin",
-    "umap_all_html": "UMAP_all.html",
     "umap_all_json": "UMAP_all.json",
     "umap_all_png": "UMAP_all.png",
     "umap_csv": "UMAP.csv",
@@ -199,6 +204,7 @@ ENDING = {
     "umap_top_png": "UMAP_top.png",
     "umap_xlsx": "UMAP.xlsx",
 }
+
 
 
 """
@@ -252,16 +258,6 @@ CNV_LINK = (
 # URL to load precalculated UMAP coordinates.
 UMAP_LINK = "http://s1665.rootserver.io/umap_links/%s"
 
-# List of UMAP coordinate files hosted on EpiDiP.
-EPIDIP_UMAP_COORDINATE_FILES = [
-    "UMAP_all_bVals_top_25000.xlsx",
-    "UMAP_all_bVals_top_50000.xlsx",
-    "UMAP_all_bVals_top_75000.xlsx",
-    "gpumap_25000.xlsx",
-    "gpumap_50000.xlsx",
-    "gpumap_75000.xlsx",
-]
-
 # Path to precalculated CNV plotly grid.
 CNV_GRID = "/applications/reference_data/hg19_cnv/grid.json"
 
@@ -274,6 +270,27 @@ UMAP_PLOT_TOP_MATCHES = 100
 # "svg" without proper webgl support (e.g. for Firefox, use "svg"; slower,
 # but does not require GPU).
 PLOTLY_RENDER_MODE = "webgl"
+
+# List of UMAP coordinate files hosted on EpiDiP.
+EPIDIP_UMAP_COORDINATE_FILES = [
+    "UMAP_all_bVals_top_25000.xlsx",
+    "UMAP_all_bVals_top_50000.xlsx",
+    "UMAP_all_bVals_top_75000.xlsx",
+    "gpumap_25000.xlsx",
+    "gpumap_50000.xlsx",
+    "gpumap_75000.xlsx",
+]
+
+# EpiDiP temporary file directory
+EPIDIP_TMP = os.path.join(TMP, "epidip")
+
+# Desired RAM usage. 4 works best on Jetson AGX 32GB; adapt to GPU / RAM
+# layout, see
+# https://forums.developer.nvidia.com/t/nvmapreserveop-0x80000000-failed-22-when-running-cufft-plans/168781/14
+GPU_RAM_USAGE = 4 * 1024**3
+
+# Size per float in GPU RAM (tested on AGX Xavier)
+GPU_FLOAT_SIZE = 8
 
 
 """

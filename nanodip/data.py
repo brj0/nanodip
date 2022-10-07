@@ -20,8 +20,8 @@ import pysam
 # start_internal_modules
 from nanodip.config import (
     ANNOTATIONS,
-    ANNOTATIONS_ABBREVIATIONS_BASEL,
-    ANNOTATIONS_ABBREVIATIONS_TCGA,
+    ANNOTATION_ACRONYMS_BASEL,
+    ANNOTATION_ACRONYMS_TCGA,
     BETA_VALUES,
     CHROMOSOMES,
     GENES,
@@ -186,14 +186,14 @@ class Reference:
         """Returns a description of the methylation class using
         a heuristic approach.
         """
-        abbr_df = pd.read_csv(ANNOTATIONS_ABBREVIATIONS_BASEL)
+        abbr_df = pd.read_csv(ANNOTATION_ACRONYMS_BASEL)
         abbr = {
             mc:desc for mc, desc in
             zip(abbr_df.MethylClassStr, abbr_df.MethylClassShortDescr)
         }
         non_trivial_abbr = abbr.copy()
         non_trivial_abbr.pop("-")
-        tcga_df = pd.read_csv(ANNOTATIONS_ABBREVIATIONS_TCGA, delimiter="\t")
+        tcga_df = pd.read_csv(ANNOTATION_ACRONYMS_TCGA, delimiter="\t")
         tcga = {r[0]:r[1] for _, r in tcga_df.iterrows()}
         def description(mc):
             """Returns description of methylation class {mc}."""

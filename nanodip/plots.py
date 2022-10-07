@@ -581,13 +581,13 @@ class UMAPData:
     def save_to_disk(self):
         """Saves relevant data to disk."""
         # Save methylation matrix.
-        np.save(self.path("methyl"), self.methyl_overlap)
+        np.save(self.path("methoverl_npy"), self.methyl_overlap)
 
         # Save UMAP Matrix.
         self.umap_df.to_csv(self.path("umap_csv"), index=False)
 
         # Write UMAP plot to disk.
-        file_path = self.path("umap_all")
+        file_path = self.path("umap_all_html")
         self.plot.write_html(file_path, config=dict({"scrollZoom": True}))
         self.plot.write_json(file_path[:-4] + "json")
         self.plot.write_image(file_path[:-4] + "png") # Time consumption 1.8s
@@ -619,7 +619,7 @@ class UMAPData:
     def files_on_disk(self):
         """Check if files are on disk."""
         return (
-            os.path.exists(self.path("methyl")) and
+            os.path.exists(self.path("methoverl_npy")) and
             os.path.exists(self.path("umap_all_json")) and
             os.path.exists(self.path("umap_top_json")) and
             os.path.exists(self.path("umap_csv"))
@@ -636,7 +636,7 @@ class UMAPData:
             self.cu_plot_json = f.read()
 
         # Read Methylation Matrix.
-        self.methyl_overlap = np.load(self.path("methyl"), allow_pickle=True)
+        self.methyl_overlap = np.load(self.path("methoverl_npy"), allow_pickle=True)
 
         # Read UMAP Matrix.
         self.umap_df = pd.read_csv(self.path("umap_csv"))
