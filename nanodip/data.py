@@ -103,7 +103,7 @@ def make_binary_reference_data(
 
     # write reference specimens
     specimens_file = os.path.join(output_dir, "specimens.csv")
-    specimen_names = [s[:-(len(ENDING["betas"]) + 1)] for s in specimens]
+    specimen_names = [s[:-(len(ENDING["betas_bin"]) + 1)] for s in specimens]
     with open(specimens_file, "w") as f:
         f.write("\n".join(specimen_names))
 
@@ -377,9 +377,12 @@ class Sample:
             for chrom in genome:
                 for read in samfile.fetch(chrom.name):
                     read_positions.append([
+                        # Coordinates in pysam are always 0-based (following
+                        # the python convention). SAM text files use 1-based
+                        # coordinates.
                         read.reference_start + chrom.offset,
                         # reference_end equals first position after alignment
-                        # consistent with python notations.
+                        # (following the python convention).
                         read.reference_end + chrom.offset,
                     ])
                     assert (read.reference_length != 0), "Empty read"

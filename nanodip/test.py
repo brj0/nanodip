@@ -132,4 +132,3 @@ reference = Reference(reference_name)
 
 analysis_dir = "/data/nanodip_output/test_06_16/FAP37158_pass_barcode06_5fa5ea82_0/"
 
-

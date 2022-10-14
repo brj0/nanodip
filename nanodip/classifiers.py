@@ -117,7 +117,7 @@ def fit_and_evaluate_classifiers(sample_name, reference_name):
     # )
     clfs = [rf_clf, knn_clf, nn_clf]
     output_file = composite_path(
-            NANODIP_REPORTS, sample_name, reference_name, ENDING["clf"],
+            NANODIP_REPORTS, sample_name, reference_name, ENDING["clf_txt"],
     )
     # Clean file.
     with open(output_file, "w") as f:

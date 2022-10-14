@@ -203,10 +203,10 @@ class CNVData:
     def files_on_disk(self):
         """Checks if files are on disk."""
         return (
-            os.path.exists(self.path("bin_midpoints")) and
-            os.path.exists(self.path("cnv")) and
+            os.path.exists(self.path("binmdpnts_npy")) and
+            os.path.exists(self.path("cnv_npy")) and
             os.path.exists(self.path("cnv_json")) and
-            os.path.exists(self.path("genes"))
+            os.path.exists(self.path("genes_csv"))
         )
 
     def read_from_disk(self):
@@ -214,12 +214,12 @@ class CNVData:
         with open(self.path("cnv_json"), "r") as f:
             self.plot_json = f.read()
         self.plot = from_json(self.plot_json)
-        self.genes = pd.read_csv(self.path("genes"))
+        self.genes = pd.read_csv(self.path("genes_csv"))
         self.bin_midpoints = np.load(
-            self.path("bin_midpoints"), allow_pickle=True,
+            self.path("binmdpnts_npy"), allow_pickle=True,
         )
         self.cnv = np.load(
-            self.path("cnv"), allow_pickle=True,
+            self.path("cnv_npy"), allow_pickle=True,
         )
 
     def make_cnv_plot(self):
@@ -244,8 +244,8 @@ class CNVData:
 
     def save_to_disk(self):
         """Saves relevant data to disk."""
-        np.save(self.path("bin_midpoints"), self.bin_midpoints)
-        np.save(self.path("cnv"), self.cnv)
+        np.save(self.path("binmdpnts_npy"), self.bin_midpoints)
+        np.save(self.path("cnv_npy"), self.cnv)
         self.plot.write_html(
             self.path("cnv_html"),
             config=dict({"scrollZoom": True}),
@@ -255,13 +255,13 @@ class CNVData:
         self.plot.write_image(
             self.path("cnv_png"), width=1280, height=720, scale=3,
         )
-        with open(self.path("aligned_reads"), "w") as f:
+        with open(self.path("alignedreads_txt"), "w") as f:
             f.write(f"{len(self.sample.reads)}")
         with open(self.path("reads_csv"), "w") as f:
             write = csv.writer(f)
             write.writerows(self.sample.reads)
-        self.genes.to_csv(self.path("genes"), index=False)
-        self.relevant_genes.to_csv(self.path("relevant_genes"), index=False)
+        self.genes.to_csv(self.path("genes_csv"), index=False)
+        self.relevant_genes.to_csv(self.path("relgenes_csv"), index=False)
 
     def gene_cnv(self):
         """Returns pandas DataFrame containing copy number variation
@@ -587,7 +587,7 @@ class UMAPData:
         self.umap_df.to_csv(self.path("umap_csv"), index=False)
 
         # Write UMAP plot to disk.
-        file_path = self.path("umap_all_html")
+        file_path = self.path("umapall_html")
         self.plot.write_html(file_path, config=dict({"scrollZoom": True}))
         self.plot.write_json(file_path[:-4] + "json")
         self.plot.write_image(file_path[:-4] + "png") # Time consumption 1.8s
@@ -602,7 +602,7 @@ class UMAPData:
 
         # Write pie chart to disk.
         self.pie_chart.write_image(
-            self.path("pie"), width=450, height=400, scale=3
+            self.path("pie_png"), width=450, height=400, scale=3
         )
 
         # Save close up ranking report.
@@ -612,7 +612,7 @@ class UMAPData:
         """Save pdf containing the nearest neighbours from umap analyis."""
         rows = [row for _, row in self.cu_umap_df.iterrows()]
         html_report = render_template("umap_report.html", rows=rows)
-        convert_html_to_pdf(html_report, self.path("ranking"))
+        convert_html_to_pdf(html_report, self.path("ranking_pdf"))
         with open(self.path("cpg_cnt"), "w") as f:
             f.write(f"{len(self.sample.cpg_overlap)}")
 
@@ -620,19 +620,19 @@ class UMAPData:
         """Check if files are on disk."""
         return (
             os.path.exists(self.path("methoverl_npy")) and
-            os.path.exists(self.path("umap_all_json")) and
-            os.path.exists(self.path("umap_top_json")) and
+            os.path.exists(self.path("umapall_json")) and
+            os.path.exists(self.path("umaptop_json")) and
             os.path.exists(self.path("umap_csv"))
         )
 
     def read_from_disk(self):
         """Read plot data from disk."""
         # Read UMAP plot as json.
-        with open(self.path("umap_all_json"), "r") as f:
+        with open(self.path("umapall_json"), "r") as f:
             self.plot_json = f.read()
 
         # Read UMAP close-up plot as json.
-        with open(self.path("umap_top_json"), "r") as f:
+        with open(self.path("umaptop_json"), "r") as f:
             self.cu_plot_json = f.read()
 
         # Read Methylation Matrix.

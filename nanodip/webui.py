@@ -290,7 +290,7 @@ class UI:
         # Chose reference with latest png-UMAP file.
         umap_png_files = [
             f for f in os.listdir(NANODIP_REPORTS)
-            if f.endswith(ENDING["umap_all_png"]) and sample_id in f
+            if f.endswith(ENDING["umapall_png"]) and sample_id in f
         ]
         if not umap_png_files:
             # Dummy reference name if no UMAP files are found (happens if
@@ -302,7 +302,7 @@ class UI:
                 key=os.path.getmtime,
             )
             reference = re.search(
-                sample_id +  "_(.*?)_" + ENDING["umap_all_png"],
+                sample_id +  "_(.*?)_" + ENDING["umapall_png"],
                 latest_umap_png
             ).group(1)
 
@@ -313,10 +313,10 @@ class UI:
             "reports", sample_id, ENDING["cnv_html"],
         )
         umap_plt_path_png = composite_path(
-            "reports", sample_id, reference, ENDING["umap_all_png"],
+            "reports", sample_id, reference, ENDING["umapall_png"],
         )
         umap_plt_path_html = composite_path(
-            "reports", sample_id, reference, ENDING["umap_all_html"],
+            "reports", sample_id, reference, ENDING["umapall_html"],
         )
         return render_template(
             "status_plots.html",
@@ -669,7 +669,7 @@ class UI:
             NANODIP_REPORTS, sample_name, reference_name, ENDING["cpg_cnt"]
         )
         path_reads = composite_path(
-            NANODIP_REPORTS, sample_name, ENDING["aligned_reads"]
+            NANODIP_REPORTS, sample_name, ENDING["alignedreads_txt"]
         )
         try:
             with open(path_cgp, "r") as f:
@@ -683,10 +683,10 @@ class UI:
             NANODIP_REPORTS, sample_name, ENDING["cnv_png"]
         )
         umap_path = composite_path(
-            NANODIP_REPORTS, sample_name, reference_name, ENDING["umap_top_png"],
+            NANODIP_REPORTS, sample_name, reference_name, ENDING["umaptop_png"],
         )
         pie_chart_path = composite_path(
-            NANODIP_REPORTS, sample_name, reference_name, ENDING["pie"]
+            NANODIP_REPORTS, sample_name, reference_name, ENDING["pie_png"]
         )
 
         html_report = render_template(
@@ -703,10 +703,10 @@ class UI:
             pie_chart_path=pie_chart_path,
         )
         report_path = composite_path(
-            NANODIP_REPORTS, sample_name, reference_name, ENDING["report"],
+            NANODIP_REPORTS, sample_name, reference_name, ENDING["report_pdf"],
         )
         server_report_path = composite_path(
-            "reports", sample_name, reference_name, ENDING["report"],
+            "reports", sample_name, reference_name, ENDING["report_pdf"],
         )
         convert_html_to_pdf(html_report, report_path)
         raise cherrypy.HTTPRedirect(server_report_path)

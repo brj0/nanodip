@@ -733,31 +733,31 @@ def single_file_methylation_caller(analysis_dir):
         "|",
         SAMTOOLS, "sort",
         "-T", "tmp",
-        "-o", base_path + "-reads_sorted.bam",
+        "-o", base_path + ENDING["readsort_bam"],
     ]
     # Make bam index for samtools.
     bam_index = [
         SAMTOOLS, "index",
-        base_path + "-reads_sorted.bam",
+        base_path + ENDING["readsort_bam"],
     ]
     # Methylation caller.
     methyl_calling = [
         F5C, "call-methylation",
         #"--disable-cuda=yes",   # For debugging on CPU only.
         "-B2000000", "-K400",    # Set B to 2 megabases (GPU) and 0.4 kreads
-        "-b", base_path + "-reads_sorted.bam",
+        "-b", base_path + ENDING["readsort_bam"],
         "-g", REFERENCE_GENOME_FA,
         "-r", base_path + ".fastq",
-        ">", base_path + "-result.tsv",
+        ">", base_path + ENDING["result_tsv"],
     ]
     # Calculate methylation frequencies.
     methyl_frequency = [
         F5C, "meth-freq",
         "-c", "2.5",
         "-s",
-        "-i", base_path + "-result.tsv",
+        "-i", base_path + ENDING["result_tsv"],
         ">",
-        base_path + "-freq.tsv",
+        base_path + ENDING["freq_tsv"],
     ]
     commands = [
         f5c_index,

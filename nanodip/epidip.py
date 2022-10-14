@@ -67,7 +67,7 @@ def calculate_std(reference_name):
     reference = Reference(reference_name)
 
     specimen_bin_files = [
-        composite_path(BETA_VALUES, s, ENDING["betas"])
+        composite_path(BETA_VALUES, s, ENDING["betas_bin"])
         for s in reference.specimens
     ]
     specimens_cnt = len(reference.specimens)
@@ -102,7 +102,7 @@ def calculate_std(reference_name):
 
     # Standard deviations >1 are useless (typically INF values)
     beta_stds[beta_stds > 1] = 0
-    std_bin = composite_path(EPIDIP_TMP, reference_name, ENDING["stdarr"])
+    std_bin = composite_path(EPIDIP_TMP, reference_name, ENDING["stdarr_bin"])
     beta_stds.tofile(std_bin)
 
     # Create data frame containing cpg sites with stds
@@ -127,7 +127,7 @@ def calculate_std(reference_name):
         key=None,
     )
     std_sorted_csv = composite_path(
-        EPIDIP_TMP, reference_name, ENDING["stdsort"]
+        EPIDIP_TMP, reference_name, ENDING["stdsortarr_bin"]
     )
     beta_value_df.to_csv(path_or_buf=std_sorted_csv, index=False)
 
