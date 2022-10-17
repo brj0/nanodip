@@ -15,9 +15,9 @@ Installation
 The intended location for the installation is `/applications/nanodip`. For a installation within a virtual environment you can use:
 
 ```sh
-sudo mkdir -p /applications/nanodip_env
-sudo git clone https://github.com/brj0/nanodip /applications/nanodip
-sudo virtualenv --python 3.7 /applications/nanodip_env
+mkdir -p /applications/nanodip_env
+git clone https://github.com/brj0/nanodip /applications/nanodip
+virtualenv --python 3.7 /applications/nanodip_env
 source /applications/nanodip_env/bin/activate
 pip install -U setuptools
 pip install -e /applications/nanodip/setup.py
