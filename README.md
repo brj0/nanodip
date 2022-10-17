@@ -20,7 +20,8 @@ git clone https://github.com/brj0/nanodip /applications/nanodip
 virtualenv --python 3.7 /applications/nanodip_env
 source /applications/nanodip_env/bin/activate
 pip install -U setuptools
-pip install -e /applications/nanodip/setup.py
+cd /applications/nanodip
+pip install -e .
 ```
 
 
