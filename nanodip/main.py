@@ -130,9 +130,12 @@ from nanodip.utils import (
 )
 # end_internal_modules
 
-if __name__ == "__main__":
+def start_nanodip():
     sanity_check()
     start_webserver()
+
+if __name__ == "__main__":
+    start_nanodip()
 
 """
 ### ^^^ LIVE LOG ABOVE ^^^

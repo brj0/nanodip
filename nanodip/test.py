@@ -1,5 +1,5 @@
 import bisect
-import cupy
+# import cupy
 from minknow_api.tools import protocols
 import numpy as np
 import logging

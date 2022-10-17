@@ -7,8 +7,6 @@ import logging
 import os
 from tqdm import tqdm
 import pandas as pd
-
-import cupy
 # end_external_modules
 
 # start_internal_modules
@@ -35,6 +33,7 @@ logger = logging.getLogger(__name__)
 def gpu_enabled():
     """Tests if CUDA device is present."""
     try:
+        import cupy
         cupy.cuda.Device()
         return True
     except:
