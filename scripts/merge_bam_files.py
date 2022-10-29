@@ -426,7 +426,6 @@ for _, read in reads.iterrows():
 # ).reset_index()
 # Y.columns = ["read_name", "unmethlated", "cpgs"]
 
-
 # sample = Sample(sample_name)
 # reference_cpgs = pd.read_csv(
 # ILLUMINA_CG_MAP,
@@ -439,4 +438,3 @@ for _, read in reads.iterrows():
 # lambda x: cpg_offsets(x["sequence"], x["start"], x["methyl_status"]),
 # axis=1,
 # )
-
