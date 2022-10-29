@@ -24,6 +24,7 @@ from nanodip.config import (
     ANNOTATION_ACRONYMS_TCGA,
     BETA_VALUES,
     CHROMOSOMES,
+    ENDING,
     GENES,
     GENES_RAW,
     METHYLATION_CUTOFF,
@@ -344,7 +345,7 @@ def cpg_methyl_from_reads(sample_name):
     """
 
     cpg_files = files_by_ending(NANODIP_OUTPUT, sample_name,
-                                ending="methoverlap.tsv")
+                                ending=ENDING["methoverl_tsv"])
     methylation_info = pd.DataFrame(columns=["cpg_site", "methylation"])
     for f in cpg_files:
         # Some fast5 files do not contain any CpGs.

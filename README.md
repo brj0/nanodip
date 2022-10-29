@@ -1,3 +1,7 @@
+NanoDiP
+===============================================================================
+
+
 <h1 align="center">
 <img src="/nanodip/static/img/logo.svg" width="300">
 </h1><br>
@@ -16,11 +20,11 @@ The intended location for the installation is `/applications/nanodip`. For a ins
 
 ```sh
 mkdir -p /applications/nanodip_env
-git clone https://github.com/brj0/nanodip /applications/nanodip
 virtualenv --python 3.7 /applications/nanodip_env
+git clone https://github.com/brj0/nanodip /applications/nanodip
+cd /applications/nanodip
 source /applications/nanodip_env/bin/activate
 pip install -U setuptools
-cd /applications/nanodip
 pip install -e .
 ```
 

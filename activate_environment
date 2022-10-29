@@ -1,5 +1,0 @@
-#!/bin/bash
-
-source /applications/nanodip_env/bin/activate
-# source /applications/nanodipVenv01/bin/activate
-export PYTHONPATH='/applications/nanodip/'

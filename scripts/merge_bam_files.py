@@ -1,7 +1,6 @@
 import os
 import re
 import shutil
-import sys
 import time
 
 import numpy as np
@@ -9,9 +8,8 @@ import pandas as pd
 import pysam
 from tqdm import tqdm
 
-sys.path.insert(0, "/applications/nanodip")
-
 from nanodip.config import (
+    ILLUMINA_CG_MAP,
     ENDING,
     NANODIP_OUTPUT,
 )
@@ -58,6 +56,7 @@ CHROM = [
     "chr4_ctg9_hap1",
     "chr4_gl000193_random",
     "chr4_gl000194_random",
+    "chr6_apd_hap1",
     "chr6_cox_hap2",
     "chr6_dbb_hap3",
     "chr6_mann_hap4",
@@ -65,20 +64,29 @@ CHROM = [
     "chr6_qbl_hap6",
     "chr6_ssto_hap7",
     "chr7_gl000195_random",
+    "chr8_gl000196_random",
+    "chr8_gl000197_random",
     "chr9_gl000198_random",
     "chr9_gl000199_random",
+    "chr9_gl000200_random",
+    "chr9_gl000201_random",
+    "chr8_gl000196_random",
     "chr11_gl000202_random",
     "chr17_ctg5_hap1",
     "chr17_gl000203_random",
     "chr17_gl000204_random",
     "chr17_gl000205_random",
     "chr17_gl000206_random",
+    "chr18_gl000207_random",
     "chr19_gl000208_random",
     "chr19_gl000209_random",
+    "chr21_gl000210_random",
+    "chr18_gl000207_random",
     "chrUn_gl000211",
     "chrUn_gl000212",
     "chrUn_gl000213",
     "chrUn_gl000214",
+    "chrUn_gl000215",
     "chrUn_gl000216",
     "chrUn_gl000217",
     "chrUn_gl000218",
@@ -86,6 +94,7 @@ CHROM = [
     "chrUn_gl000220",
     "chrUn_gl000221",
     "chrUn_gl000222",
+    "chrUn_gl000223",
     "chrUn_gl000224",
     "chrUn_gl000225",
     "chrUn_gl000226",
@@ -98,13 +107,20 @@ CHROM = [
     "chrUn_gl000233",
     "chrUn_gl000234",
     "chrUn_gl000235",
+    "chrUn_gl000236",
     "chrUn_gl000237",
     "chrUn_gl000238",
     "chrUn_gl000239",
     "chrUn_gl000240",
     "chrUn_gl000241",
+    "chrUn_gl000242",
     "chrUn_gl000243",
+    "chrUn_gl000244",
+    "chrUn_gl000245",
     "chrUn_gl000246",
+    "chrUn_gl000247",
+    "chrUn_gl000248",
+    "chrUn_gl000249",
 ]
 DIR = "/data/nanodip_output/merged_class/%s"
 SHEET_NAME = "Sample%20list"
@@ -179,7 +195,7 @@ def merge_cases(cases, fname):
 
     chunk_size = 50
     out = DIR % (fname + ".bam")
-    tmp = DIR % "temp.csv"
+    tmp = DIR % "tmp.bam"
 
     for index in tqdm(range(0, len(all_files), chunk_size)):
         files_ = all_files[index : (index + chunk_size)]
@@ -197,36 +213,34 @@ def methylation_atlas(cases, fname):
     of the files in {cases.id_}.
     """
     all_files = []
-
     for c in cases.id_.to_list():
         all_files.extend(
             files_by_ending(NANODIP_OUTPUT, c, ENDING["freq_tsv"])
         )
-
     methyl_df_list = []
-
     for file_ in tqdm(all_files):
         next_df = pd.read_csv(file_, sep="\t")
         methyl_df_list.append(next_df)
-
     methyl_df = pd.concat(methyl_df_list)[
         ["chromosome", "start", "methylated_frequency"]
     ]
-    methyl_df["nreads"] = None
-    methyl_df["methylated"] = methyl_df.methylated_frequency
+    methyl_df["read_cnt"] = None
+    methyl_df["methyl_cnt"] = methyl_df.methylated_frequency
+    methyl_df = methyl_df[methyl_df.methyl_cnt.isin([0.0, 1.0])]
+    methyl_df.methyl_cnt = methyl_df.methyl_cnt.astype(int)
     methyl_df = (
         methyl_df.groupby(["chromosome", "start"])
-        .agg({"nreads": "size", "methylated": "sum"})
+        .agg({"read_cnt": "size", "methyl_cnt": "sum"})
         .reset_index()
     )
-    methyl_df["methylated_frequency"] = methyl_df.methylated / methyl_df.nreads
+    methyl_df["methyl_freq"] = methyl_df.methyl_cnt / methyl_df.read_cnt
+    methyl_df["methylated"] = round(methyl_df.methyl_freq)
     chrom_to_idx = {c: (i + 1) for i, c in enumerate(CHROM)}
     methyl_df["chrom_nr"] = methyl_df.chromosome.apply(
         lambda x: chrom_to_idx[x]
     )
     methyl_df = methyl_df.sort_values(by=["chrom_nr", "start"])
     methyl_df = methyl_df.reset_index(drop=True)
-
     methyl_df.to_csv(DIR % (fname + ".csv"), index=False)
     methyl_df.to_pickle(DIR % (fname + ".pickle"))
 
@@ -254,16 +268,25 @@ class MethylAtlas:
             self.search_idx, np.array(query, dtype=self.search_idx.dtype)
         )
 
-    def methyl(self, left_chrom, left_start, right_chrom, right_start):
+    def methyl(self, chrom, left_start, right_start):
         """Returns methylation sites within an interval."""
-        idx0 = self.idx(left_chrom, left_start)
-        idx1 = self.idx(right_chrom, right_start)
+        idx0 = self.idx(chrom, left_start)
+        idx1 = self.idx(chrom, right_start)
         if (
-            self.df.iloc[idx1].chromosome == right_chrom
+            self.df.iloc[idx1].chromosome == chrom
             and self.df.iloc[idx1].start == right_start
         ):
             idx1 += 1
         return self.df[idx0:idx1]
+
+    def __str__(self):
+        """Prints overview of object for debugging purposes."""
+        lines = [
+            f"MethylAtlas object:",
+            f"df: '{self.df}'",
+            f"search_idx:\n{self.search_idx}",
+        ]
+        return "\n".join(lines)
 
 
 # 17 cases
@@ -326,13 +349,94 @@ pitad_all = cases_df[
 ]
 
 # merge_cases(gbm_all[:20], "20_gbm")
+# merge_cases(gbm_all[20:21], "sample_gbm_nr20")
 # merge_cases(mng_all[:20], "20_mng")
 # merge_cases(pitad_all[:20], "20_pitad")
 
-methylation_atlas(gbm_all[:20], "20_gbm_methyl")
+# methylation_atlas(gbm_all[:20], "20_gbm_methyl")
+# methylation_atlas(gbm_all[20:21], "sample_gbm_nr20")
+# methylation_atlas(mng_all[:20], "20_mng_methyl")
+# methylation_atlas(pitad_all[:20], "20_pitad_methyl")
 
 gbm_atlas = MethylAtlas.from_pickle("20_gbm_methyl")
-gbm_atlas.methyl("chr1", 10468, "chr2", 2)
-gbm_atlas.df[1:807848]
+mng_atlas = MethylAtlas.from_pickle("20_mng_methyl")
+pitad_atlas = MethylAtlas.from_pickle("20_pitad_methyl")
 
-analysis_sample = gbm_all.iloc[20].id_
+# gbm_atlas.methyl("chr1", 10468, "chr2", 2)
+# gbm_atlas.df[1:807848]
+
+
+def cpg_offsets(seq, offset, methyl_status):
+    start0 = next(re.finditer("CG", seq)).start()
+    offsets = [
+        (cg.start() - start0 + offset, methyl_status)
+        for cg in re.finditer("CG", seq)
+    ]
+    offsets.sort()
+    return offsets
+
+
+def reads_with_methylation(file_):
+    f5c_out = pd.read_csv(
+        file_,
+        delimiter="\t",
+    )
+
+    f5c_out.loc[f5c_out.log_lik_ratio >= 2.5, "methyl_status"] = 1
+    f5c_out.loc[f5c_out.log_lik_ratio <= -2.5, "methyl_status"] = 0
+    f5c_out = f5c_out[~f5c_out.methyl_status.isnull()]
+
+    f5c_out["cpg_start_methyl"] = [
+        cpg_offsets(x, y, z)
+        for x, y, z in zip(
+            f5c_out.sequence, f5c_out.start, f5c_out.methyl_status
+        )
+    ]
+
+    reads = (
+        f5c_out.groupby(["read_name", "chromosome"])["cpg_start_methyl"]
+        .apply(sum)
+        .reset_index()
+        .sort_values(["chromosome"])
+    )
+    return reads
+
+
+sample_name = gbm_all.iloc[20].id_
+files_ = files_by_ending(NANODIP_OUTPUT, sample_name, ENDING["result_tsv"])
+
+t = time.time()
+reads = reads_with_methylation(files_[0])
+print("FINAL TIME=", time.time() - t)
+
+for _, read in reads.iterrows():
+    read_methyl = read.cpg_start_methyl
+    start = read_methyl[0][0]
+    end = read_methyl[-1][0]
+    ref = gbm_atlas.methyl(read.chromosome, start, end)
+    nr_cpg_overlap = len(
+        set(ref.start).intersection(set(x[0] for x in read_methyl))
+    )
+    print(read)
+    break
+
+
+# Y = pd.pivot(
+# reads, index="read_name", columns=["methyl_status"], values="cpg_start_methyl"
+# ).reset_index()
+# Y.columns = ["read_name", "unmethlated", "cpgs"]
+
+
+# sample = Sample(sample_name)
+# reference_cpgs = pd.read_csv(
+# ILLUMINA_CG_MAP,
+# delimiter="\t",
+# names=["cpg_site", "chromosome", "strand", "start"],
+# )
+# cpgs = pd.merge(sample.methyl_df, reference_cpgs, on=["cpg_site"])
+
+# f5c_out.apply(
+# lambda x: cpg_offsets(x["sequence"], x["start"], x["methyl_status"]),
+# axis=1,
+# )
+

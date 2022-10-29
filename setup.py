@@ -37,6 +37,11 @@ setup(
         "ipython",
         "jinja2",
         "kaleido",
+        # CAUTION: Requires a patched version of minknow api, file
+        # `[VENV]/lib/python3.7/site-packages/minknow_api/tools/protocols.py`.
+        # Without the patch, the generated fast5 sequencing data will be
+        # unreadable with f5c or nanopolish (wrong compression algorithm, which
+        # is the default in the MinKNOW backend).
         "minknow_api@git+https://github.com/neuropathbasel/minknow_api",
         "nbformat",
         "numpy",
@@ -49,7 +54,6 @@ setup(
         "reportlab==3.6.1",
         "scikit_learn",
         "scipy",
-        "setuptools>=59.6.0",
         "statsmodels",
         "tqdm",
         "umap-learn",

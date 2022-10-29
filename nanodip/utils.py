@@ -86,6 +86,7 @@ def extract_referenced_cpgs(sample_methylation,
         delimiter="\t",
         names=["ilmnid", "chromosome", "strand", "start"],
     )
+    # TODO What about CpG's with strand "-"
     sample_cpgs = pd.read_csv(
         sample_methylation,
         delimiter="\t",
