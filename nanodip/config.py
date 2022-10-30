@@ -1,6 +1,6 @@
 """
 Configuration
--------------------------------------------------------------------------------
+===============================================================================
 Below are system-specific parameters that may or may not require adaptation.
 Many variable names are self-explanatory. The key difference between Nanopore
 setups are between devices provided by ONT (MinIT inclusively running the MinIT

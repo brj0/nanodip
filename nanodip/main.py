@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 """
 ## NanoDiP all-in-one Jupyter Notebook
 
@@ -39,7 +37,9 @@ preferably bookmark this location for convenience. In case of errors, you may
 just again click the same button *restart the kernel, re-run the whole notebook
 (with dialog)*.
 
-___ ### Technical Details
+_______________________________________________________________________________
+
+### Technical Details
 * Tested with Python 3.7.5; 3.8.8 fails to load minknow_api in jupyter
 * notebook.  Verified to run on Ubuntu 18.04/Jetpack on ARMv8 and x86_64 CPUs;
 * not tested on Windows and Mac OS. The latter two platforms are unsupported,
@@ -50,23 +50,25 @@ ___ ### Technical Details
 * nanopolish (wrong compression algorithm, which is the default in the MinKNOW
 * backend).
 
-___ ### Headless / Command Line Mode CherryPy, the underlying web server of
+_______________________________________________________________________________
+
+### Headless / Command Line Mode CherryPy, the underlying web server of
 NanoDiP allows for headless (command line-based) utilization of the software
 besides or instead of browser-based use. Hence, the software may be operated as
 a post-hoc analysis pipeline for previously acquired data. This is particularly
 useful for benchmarking and validation purposes.
 
 #### Examples: Generate copy number of for sample
-**GBM_RTK2_20210311_Testrun_BC06**: `curl
-'http://localhost:8080/cnvplot?sampleName=GBM_RTK2_20210311_Testrun_BC06'`
+**GBM_RTK2_20210311_Testrun_BC06**:
+`curl 'http://localhost:8080/cnvplot?sampleName=GBM_RTK2_20210311_Testrun_BC06'`
 
 Calculate UMAP plot for sample **GBM_RTK2_20210311_Testrun_BC06** with
-reference annotation **AllIDATv2_20210804.xlsx**: `curl
-'http://localhost:8080/umapplot?sampleName=GBM_RTK2_20210311_Testrun_BC06&refAnno=AllIDATv2_20210804.xlsx'`
+reference annotation **AllIDATv2_20210804.xlsx**:
+`curl 'http://localhost:8080/umapplot?sampleName=GBM_RTK2_20210311_Testrun_BC06&refAnno=AllIDATv2_20210804.xlsx'`
 
 Assemble PDF report for sample **GBM_RTK2_20210311_Testrun_BC06** with
-reference annotation **AllIDATv2_20210804.xlsx**: `curl
-'http://localhost:8080/makePdf?sampleName=GBM_RTK2_20210311_Testrun_BC06&refAnno=AllIDATv2_20210804.xlsx'`
+reference annotation **AllIDATv2_20210804.xlsx**:
+`curl 'http://localhost:8080/makePdf?sampleName=GBM_RTK2_20210311_Testrun_BC06&refAnno=AllIDATv2_20210804.xlsx'`
 
 ### Version Details
 
@@ -75,13 +77,6 @@ reference annotation **AllIDATv2_20210804.xlsx**: `curl
 **32:** UMAP report score / PDF (EpiDiP)
 """
 
-# Verify running Python version (should be 3.7.5) and adjust jupyter notebook.
-import IPython
-import os
-from IPython.core.display import display, HTML
-# set display witdth to 100%
-display(HTML("<style>.container { width:100% !important; }</style>"))
-os.system('python --version')
 
 """
 ## Multithreading Options
@@ -93,23 +88,15 @@ environment-specific parameters. One way to do so is through the *os* module.
 # Execution-wide multithreading options, set according to your hardware. Jetson
 # AGX: suggest "2" needs to be set before importing other modules that query
 # these parameters.
+import os
 os.environ["NUMBA_NUM_THREADS"] = "2"
 os.environ["OPENBLAS_NUM_THREADS"] = "2"
 os.environ["MKL_NUM_THREADS"] = "2"
 
-"""
-## Modules
-This section imports the required modules that should have been installed via
-pip. Other package managers have not been tested. To install packages, use the
-setup script provided with this software or, alternatively, install them one
-by one, ideally in a virtual python environment. Note that the MinKNOW API
-requires manual patching after installation with pip.
-"""
-
 # python_modules_to_import
+
 # start_external_modules
 import logging
-import sys
 # end_external_modules
 
 # Set logging options
@@ -120,6 +107,7 @@ logging.basicConfig(
     format="%(levelname)s %(filename)s,%(lineno)d [%(asctime)s]: %(message)s",
     filemode="w",
 )
+
 
 # start_internal_modules
 from nanodip.webui import (
@@ -136,22 +124,3 @@ def start_nanodip():
 
 if __name__ == "__main__":
     start_nanodip()
-
-"""
-### ^^^ LIVE LOG ABOVE ^^^
-All CherryPy access will be logged here, including live progress bars for
-computationally intense analyses. Detailed access logging is turned off by
-default (accessLogging is False), but can be turned on, e.g., for debugging,
-in the configuration section at the beginning of this notebook. While it is not
-required to have at look at these during normal operation, information
-contained in the log may be helpful in troubleshooting. Line numbers in error
-messages indicated here typically match those given in the respective Jupyter
-Notebook cells.
-
-To preserve these messages, halt the Python kernel, save and close the notebook
-to send it for support. This makes sure that the code as well as the error
-messages will be preserved.
-
-To launch the user interface, wait until you see a pink log entry that the web
-server has started, then navigate to http://localhost:8080.
-"""

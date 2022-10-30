@@ -18,6 +18,7 @@ START_EXTERNAL = "# start_external_modules\n"
 END_EXTERNAL = "# end_external_modules\n"
 START_INTERNAL = "# start_internal_modules\n"
 END_INTERNAL = "# end_internal_modules\n"
+START_MODULES = "# python_modules_to_import\n"
 
 def external_imports(modules):
     """Return all external module imports used."""
@@ -90,7 +91,7 @@ def parse(content):
         if line.isspace():
             # Skip whitespace.
             content.pop(0)
-        elif line.startswith("# python_modules_to_import"):
+        elif line.startswith(START_MODULES):
             # interrupt to include modules
             content.pop(0)
             break
@@ -129,13 +130,15 @@ if __name__ == "__main__":
         print("notebook cleared.")
     else:
         module_names = [
-            "nanodip",
+            "main",
+            "_jupyter",
             "config",
             "utils",
             "data",
             "plots",
             "classifiers",
             "api",
+            "epidip",
             "webui",
         ]
         nonodip_modules_dict = {}
@@ -151,7 +154,8 @@ if __name__ == "__main__":
         nb = nbf.v4.new_notebook()
 
         parse(nanodip_modules[0])
-        for m in [imports] + nanodip_modules[1:] + [nanodip_modules[0]]:
+        parse(nanodip_modules[1])
+        for m in [imports] + nanodip_modules[2:] + nanodip_modules[0:2]:
             parse(m)
 
         nbf.write(nb, "nanodip.ipynb")
