@@ -378,6 +378,10 @@ def cpg_offsets(seq, offset, methyl_status):
 
 
 def reads_with_methylation(file_):
+    """Reads the f5c result output file and returns it as a dataframe
+    that contains a row for each read together with chromosome name and
+    a list of methylation sites with methylation status.
+    """
     f5c_out = pd.read_csv(
         file_,
         delimiter="\t",
@@ -404,33 +408,52 @@ def reads_with_methylation(file_):
 
 
 sample_name = gbm_all.iloc[20].id_
+# sample_name = mng_all.iloc[20].id_
+# sample_name = pitad_all.iloc[20].id_
 files_ = files_by_ending(NANODIP_OUTPUT, sample_name, ENDING["result_tsv"])
 
-reads = reads_with_methylation(files_[0])
+read_list = []
+for file_ in tqdm(files_, desc="Collecting reads"):
+    read_list.append(reads_with_methylation(file_))
+
+reads = pd.concat(read_list)
 
 t = time.time()
 atlas_list = [gbm_atlas, mng_atlas, pitad_atlas]
-atlas_to_matches = {a:[] for a in atlas_list}
-for _, read in reads.iterrows():
+atlas_to_matches = {a: [] for a in atlas_list}
+for _, read in tqdm(
+    reads.iterrows(), total=reads.shape[0], desc="Compare reads with reference"
+):
     read_methyl = read.cpg_start_methyl
     start = read_methyl[0][0]
     end = read_methyl[-1][0]
     for atlas in atlas_list:
         ref = atlas.methyl(read.chromosome, start, end)
-        # overlap = pd.merge(
-            # pd.DataFrame(read_methyl, columns=["start", "sample_methylated"]),
-            # ref[["start", "methylated"]],
-            # on="start",
-        # )
+        overlap = pd.merge(
+            pd.DataFrame(read_methyl, columns=["start", "sample_methylated"]),
+            ref[["start", "methylated"]],
+            on="start",
+        )
         matches = len(overlap[overlap.sample_methylated == overlap.methylated])
         atlas_to_matches[atlas].append(matches)
-    if _ == 100:
-        break
+    # if _ == 100:
+    # break
 
 print("FINAL TIME=", time.time() - t)
 
-pd.DataFrame(read_methyl, columns=["start", "methylated"])
+max_hit = [max(x) for x in zip(*(atlas_to_matches[a] for a in atlas_list))]
 
+best_ref = {
+    x: [
+        i
+        for i, (max_, atl) in enumerate(zip(max_hit, atlas_to_matches[x]))
+        if max_ == atl
+    ]
+    for x in atlas_list
+}
+
+hit_cnt = {x.name: sum(atlas_to_matches[x]) for x in atlas_list}
+read_cnt = {x.name: sum(best_ref[x]) for x in atlas_list}
 
 # Y = pd.pivot(
 # reads, index="read_name", columns=["methyl_status"], values="cpg_start_methyl"
