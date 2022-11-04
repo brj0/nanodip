@@ -376,6 +376,7 @@ class Sample:
         for f in bam_files:
             samfile = pysam.AlignmentFile(f, "rb")
             for chrom in genome:
+                # TODO will fail if bam index file not created (meth-call err)
                 for read in samfile.fetch(chrom.name):
                     read_positions.append([
                         # Coordinates in pysam are always 0-based (following

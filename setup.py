@@ -33,7 +33,9 @@ setup(
     url="https://github.com/brj0/nanodip",
     install_requires=[
         "cherrypy",
-        "grpcio",
+        # The current version of grpcio (1.50.0) interferes with minknow_api
+        # and causes subprocess.Popen (used in nanodip) to freeze occasionally.
+        "grpcio==1.44.0",
         "ipython",
         "jinja2",
         "kaleido",

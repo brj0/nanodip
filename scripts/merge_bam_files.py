@@ -252,14 +252,15 @@ class MethylAtlas:
 
     chrom_to_idx = {c: (i + 1) for i, c in enumerate(CHROM)}
 
-    def __init__(self, df):
+    def __init__(self, df, name):
         self.df = df
+        self.name = name
         self.search_idx = np.rec.fromarrays([df.chrom_nr, df.start])
 
     @classmethod
     def from_pickle(cls, name):
         df = pd.read_pickle(DIR % (name + ".pickle"))
-        return cls(df)
+        return cls(df, name)
 
     def idx(self, query_chrom, query_start):
         """Binary index search."""
@@ -405,20 +406,30 @@ def reads_with_methylation(file_):
 sample_name = gbm_all.iloc[20].id_
 files_ = files_by_ending(NANODIP_OUTPUT, sample_name, ENDING["result_tsv"])
 
-t = time.time()
 reads = reads_with_methylation(files_[0])
-print("FINAL TIME=", time.time() - t)
 
+t = time.time()
+atlas_list = [gbm_atlas, mng_atlas, pitad_atlas]
+atlas_to_matches = {a:[] for a in atlas_list}
 for _, read in reads.iterrows():
     read_methyl = read.cpg_start_methyl
     start = read_methyl[0][0]
     end = read_methyl[-1][0]
-    ref = gbm_atlas.methyl(read.chromosome, start, end)
-    nr_cpg_overlap = len(
-        set(ref.start).intersection(set(x[0] for x in read_methyl))
-    )
-    print(read)
-    break
+    for atlas in atlas_list:
+        ref = atlas.methyl(read.chromosome, start, end)
+        # overlap = pd.merge(
+            # pd.DataFrame(read_methyl, columns=["start", "sample_methylated"]),
+            # ref[["start", "methylated"]],
+            # on="start",
+        # )
+        matches = len(overlap[overlap.sample_methylated == overlap.methylated])
+        atlas_to_matches[atlas].append(matches)
+    if _ == 100:
+        break
+
+print("FINAL TIME=", time.time() - t)
+
+pd.DataFrame(read_methyl, columns=["start", "methylated"])
 
 
 # Y = pd.pivot(

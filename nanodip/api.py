@@ -793,7 +793,7 @@ def single_file_methylation_caller(analysis_dir):
     extract_referenced_cpgs(
         base_path + ENDING["freq_tsv"],
         base_path + ENDING["methoverl_tsv"],
-        base_path + ENDING["methoverlcnt_tsv"],
+        base_path + ENDING["methoverlcnt_txt"],
     )
     print(f"Methylation calling on {file_name} done.")
 
@@ -816,11 +816,22 @@ def remove_dirs_with_wrong_barcode(sample_name, barcode):
 
 def methylation_calling_done(analysis_dir):
     """Checks if methylation calling is done."""
-    return any(
-        file_
-        for file_ in os.listdir(analysis_dir)
-        if file_.endswith(ENDING["methoverlcnt_tsv"])
-    )
+    endings = [
+        ENDING[e]
+        for e in [
+            "methoverlcnt_txt",
+            "methoverl_tsv",
+            "result_tsv",
+            "freq_tsv",
+            "readsort_bai",
+            "readsort_bam",
+        ]
+    ]
+    ending_present = [
+        any(file_.endswith(ending) for file_ in os.listdir(analysis_dir))
+        for ending in endings
+    ]
+    return all(ending_present)
 
 def methylation_caller(sample_name, analyze_one=True):
     """Searches for callable fast5/fastq files that have not yet been
