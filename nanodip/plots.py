@@ -409,11 +409,11 @@ def umap_plot_from_data(sample, reference, umap_df, close_up):
     if close_up:
         umap_plot.update_traces(marker=dict(size=5))
         # Add hyperlinks
-        for _, row in umap_df.iloc[1:].iterrows():
-            url = CNV_LINK % row["id"]
+        for row in umap_df.iloc[1:].itertuples():
+            url = CNV_LINK % row.id
             umap_plot.add_annotation(
-                x=row["x"],
-                y=row["y"],
+                x=row.x,
+                y=row.y,
                 text=f"<a href='{url}' target='_blank'>&nbsp;</a>",
                 showarrow=False,
                 arrowhead=1,

@@ -195,7 +195,7 @@ class Reference:
         non_trivial_abbr = abbr.copy()
         non_trivial_abbr.pop("-")
         tcga_df = pd.read_csv(ANNOTATION_ACRONYMS_TCGA, delimiter="\t")
-        tcga = {r[0]:r[1] for _, r in tcga_df.iterrows()}
+        tcga = {r[1]:r[2] for r in tcga_df.itertuples()}
         def description(mc):
             """Returns description of methylation class {mc}."""
             mc = mc.upper()
@@ -470,10 +470,9 @@ def get_sample_methylation(sample, reference):
     sample_mean_methylation = sample.methyl_df.groupby(
         "cpg_site",
         as_index=False).mean()
-
-    for _, row in sample_mean_methylation.iterrows():
-        cpg = row["cpg_site"]
+    for row in sample_mean_methylation.itertuples():
+        cpg = row.cpg_site
         if cpg in sample.cpg_overlap:
             i = reference.cpg_site_to_index[cpg]
-            sample_methylation[i] = row["methylation"] > METHYLATION_CUTOFF
+            sample_methylation[i] = row.methylation > METHYLATION_CUTOFF
     return sample_methylation[sample.cpg_overlap_index]

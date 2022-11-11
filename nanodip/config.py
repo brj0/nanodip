@@ -163,6 +163,7 @@ EXCLUDED_FROM_ANALYSIS = [
     "queued_reads",
     "raw_for_playback",
     "reads",
+    "tmp",
     "user_scripts",
 ]
 
