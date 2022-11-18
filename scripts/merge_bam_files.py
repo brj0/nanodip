@@ -1,6 +1,13 @@
+"""
+This script can merge bam files to a methylation atlas and compare with
+sample.
+"""
+from operator import xor
 import os
 import re
+import random
 import shutil
+import pickle
 import time
 
 import numpy as np
@@ -123,6 +130,8 @@ CHROM = [
     "chrUn_gl000249",
 ]
 DIR = "/data/nanodip_output/merged_class/%s"
+LOG_FILE = "/data/nanodip_output/merged_class/methyl_atlas.log"
+NUM_LOOPS = 20
 SHEET_NAME = "Sample%20list"
 ANNOTATION_URL = (
     "https://docs.google.com/spreadsheets/d/%s/gviz/tq?tqx=out:csv&sheet=%s"
@@ -186,19 +195,19 @@ def annotated_cases():
 
 def merge_cases(cases, fname):
     """Merges all bam files that are within the filetree of the
-    files in {cases.id_}.
+    files in {cases}.
     """
-    all_files = []
+    bam_files = []
 
-    for c in cases.id_.to_list():
-        all_files.extend(files_by_ending(NANODIP_OUTPUT, c, "bam"))
+    for c in cases:
+        bam_files.extend(files_by_ending(NANODIP_OUTPUT, c, "bam"))
 
     chunk_size = 50
     out = DIR % (fname + ".bam")
     tmp = DIR % "tmp.bam"
 
-    for index in tqdm(range(0, len(all_files), chunk_size)):
-        files_ = all_files[index : (index + chunk_size)]
+    for index in tqdm(range(0, len(bam_files), chunk_size)):
+        files_ = bam_files[index : (index + chunk_size)]
         if index > 0:
             files_ = [tmp] + files_
         pysam.merge("-fo", out, *files_)
@@ -208,15 +217,23 @@ def merge_cases(cases, fname):
     pysam.index(out)
 
 
-def methylation_atlas(cases, fname):
-    """Merges all freq_tsv ending files that are within the filetree
-    of the files in {cases.id_}.
+def get_all_tsv_files(cases):
+    """Returns a list containing all freq_tsv files in the filetree of
+    {cases}.
     """
-    all_files = []
-    for c in cases.id_.to_list():
-        all_files.extend(
-            files_by_ending(NANODIP_OUTPUT, c, ENDING["freq_tsv"])
-        )
+    files = []
+    for c in cases:
+        files.extend(files_by_ending(NANODIP_OUTPUT, c, ENDING["freq_tsv"]))
+    return files
+
+
+def make_methylation_atlas_df(fname, cases=None, files=None):
+    """Merges all freq_tsv ending files that are within the filetree
+    of the files in {cases}.
+    """
+    if not xor(cases is None, files is None):
+        raise ValueError("Provide either 'cases' or 'files'")
+    all_files = files if cases is None else get_all_tsv_files(cases)
     methyl_df_list = []
     for file_ in tqdm(all_files):
         next_df = pd.read_csv(file_, sep="\t")
@@ -258,7 +275,7 @@ class MethylAtlas:
         self.search_idx = np.rec.fromarrays([df.chrom_nr, df.start])
 
     @classmethod
-    def from_pickle(cls, name):
+    def from_disk(cls, name):
         df = pd.read_pickle(DIR % (name + ".pickle"))
         return cls(df, name)
 
@@ -290,6 +307,181 @@ class MethylAtlas:
         return "\n".join(lines)
 
 
+def cpg_offsets(seq, offset, methyl_status):
+    """Transforms DNA sequance coordinate to offset of all CpG
+    sites.
+    Example:
+        >>> cpg_offsets('TGATCCGATCGATCG', 14850238, 1.0)
+        [[14850238, 1.0], [14850242, 1.0], [14850246, 1.0]]
+    """
+    start0 = next(re.finditer("CG", seq)).start()
+    offsets = [
+        [cg.start() - start0 + offset, methyl_status]
+        for cg in re.finditer("CG", seq)
+    ]
+    return offsets
+
+
+def get_sample_reads(sample_name):
+    """Return data from containing all sample reads with methylation
+    status.
+    """
+    files_ = files_by_ending(NANODIP_OUTPUT, sample_name, ENDING["result_tsv"])
+    read_list = []
+    for file_ in files_:
+        data = pd.read_csv(
+            file_,
+            delimiter="\t",
+        )
+        read_list.append(data)
+    f5c_out = pd.concat(read_list)
+    f5c_out.loc[f5c_out.log_lik_ratio >= 2.5, "methyl_status"] = 1
+    f5c_out.loc[f5c_out.log_lik_ratio <= -2.5, "methyl_status"] = 0
+    f5c_out = f5c_out[~f5c_out.methyl_status.isnull()]
+    f5c_out["cpg_start_methyl"] = [
+        cpg_offsets(x, y, z)
+        for x, y, z in zip(
+            f5c_out.sequence, f5c_out.start, f5c_out.methyl_status
+        )
+    ]
+    reads = (
+        f5c_out.groupby(["read_name", "chromosome"])["cpg_start_methyl"]
+        .apply(sum)
+        .reset_index()
+        .sort_values(["chromosome"])
+    ).reset_index(drop=True)
+    return reads
+
+
+def _atlas_similarity(sample_reads, atlas_list):
+    methyl_matches = {a: [] for a in atlas_list}
+    methyl_overlap = {a: [] for a in atlas_list}
+    for read in tqdm(
+        sample_reads.itertuples(),
+        total=sample_reads.shape[0],
+        desc="Compare reads with reference",
+    ):
+        read_methyl = read.cpg_start_methyl
+        start = read_methyl[0][0]
+        end = read_methyl[-1][0]
+        for atlas in atlas_list:
+            ref = atlas.methyl(read.chromosome, start, end)
+            overlap = pd.merge(
+                pd.DataFrame(
+                    read_methyl, columns=["start", "sample_methylated"]
+                ),
+                ref[["start", "methylated"]],
+                on="start",
+            )
+            matches = len(
+                overlap[overlap.sample_methylated == overlap.methylated]
+            )
+            methyl_matches[atlas].append(matches)
+            methyl_overlap[atlas].append(len(overlap))
+    return methyl_matches, methyl_overlap
+
+
+class Run:
+    def __init__(
+        self,
+        sample_name,
+        methyl_matches,
+        methyl_overlap,
+        atlas_list,
+        cpgs,
+        reference_dict=None,
+        true_class=None,
+    ):
+        self.sample_name = sample_name
+        self.matches = methyl_matches
+        self.overlap = methyl_overlap
+        self.atlas_list = atlas_list
+        self.cpgs = cpgs
+        self.reference_dict = reference_dict
+        self.true_class = true_class
+        self.hit_cnt = None
+        self.read_cnt = None
+        self.read_cnt_net = None
+        self.calculate_results()
+
+    def calculate_results(self):
+        methyl_net_matches = {
+            a: [
+                2 * hit - ovlp
+                for hit, ovlp in zip(self.matches[a], self.overlap[a])
+            ]
+            for a in self.atlas_list
+        }
+        max_hit = [
+            max(x) for x in zip(*(self.matches[a] for a in self.atlas_list))
+        ]
+        max_net_hit = [
+            max(x)
+            for x in zip(*(methyl_net_matches[a] for a in self.atlas_list))
+        ]
+        self.hit_cnt = {x.name: sum(self.matches[x]) for x in self.atlas_list}
+        self.read_cnt = {
+            atl.name: sum(
+                mat == max_ for mat, max_ in zip(self.matches[atl], max_hit)
+            )
+            for atl in self.atlas_list
+        }
+        self.read_cnt_net = {
+            atl.name: sum(
+                mat == max_
+                for mat, max_ in zip(methyl_net_matches[atl], max_net_hit)
+            )
+            for atl in self.atlas_list
+        }
+
+    def __str__(self):
+        """Prints overview of object for debugging purposes."""
+        lines = [
+            f"sample_name: {self.sample_name}",
+            f"true_class: {self.true_class}",
+            f"hit_cnt: {self.hit_cnt}",
+            f"read_cnt: {self.read_cnt}",
+            f"read_cnt_net: {self.read_cnt_net}",
+        ]
+        return "\n".join(lines)
+
+
+def atlas_similarity(sample_reads, atlas_list):
+    sample_cpgs = sample_reads.explode("cpg_start_methyl", ignore_index=True)
+    sample_cpgs[["start", "sample_methylated"]] = pd.DataFrame(
+        sample_cpgs.cpg_start_methyl.to_list()
+    )
+    sample_cpgs = sample_cpgs.drop("cpg_start_methyl", axis=1)
+
+    chrom_to_idx = {c: (i + 1) for i, c in enumerate(CHROM)}
+    methyl_overlap = {}
+    methyl_matches = {}
+    cpgs = {}
+
+    for atlas in atlas_list:
+        cpgs_df = sample_cpgs.merge(
+            atlas.df[["chromosome", "start", "methylated"]],
+            how="left",
+            on=["chromosome", "start"],
+        )
+        cpgs_df["chrom_nr"] = cpgs_df.chromosome.apply(
+            lambda x: chrom_to_idx[x]
+        )
+        cpgs_df = cpgs_df.sort_values(by=["chrom_nr", "start"])
+        cpgs_df = cpgs_df.reset_index(drop=True)
+        cpgs_df["hit"] = cpgs_df.sample_methylated == cpgs_df.methylated
+        cpgs_df["in_atlas"] = False
+        cpgs_df.loc[~cpgs_df.methylated.isna(), "in_atlas"] = True
+        summary = cpgs_df.groupby(["read_name", "chromosome"]).agg(
+            hit_cnt=pd.NamedAgg(column="hit", aggfunc="sum"),
+            overlap_cnt=pd.NamedAgg(column="in_atlas", aggfunc="sum"),
+        )
+        methyl_overlap[atlas] = summary.overlap_cnt.to_list()
+        methyl_matches[atlas] = summary.hit_cnt.to_list()
+        cpgs[atlas] = cpgs_df
+    return methyl_matches, methyl_overlap, cpgs
+
+
 # 17 cases
 cases_df = annotated_cases()
 gbm_rtk_ii = cases_df[cases_df.meth_grp.isin(["GBM_RTK_II"])]
@@ -311,11 +503,8 @@ gbm_all = cases_df[
     )
 ]
 
-# 17 cases
-mng_ben_1 = cases_df[cases_df.meth_grp.isin(["MNG_BEN-1"])]
-
-# 16 cases
-mng_ben_2 = cases_df[cases_df.meth_grp.isin(["MNG_BEN-2"])]
+# 33 cases
+mng_ben = cases_df[cases_df.meth_grp.isin(["MNG_BEN-1", "MNG_BEN-2"])]
 
 # 58 cases
 mng_all = cases_df[
@@ -349,116 +538,90 @@ pitad_all = cases_df[
     )
 ]
 
+cases_all = {
+    "gbm": gbm_all.id_.tolist(),
+    "mng": mng_ben.id_.tolist(),
+    "pitad": pitad_all.id_.tolist(),
+}
+min_case_per_entity = min(len(x) for x in cases_all.values())
+
+for iter_ in range(NUM_LOOPS):
+    random_cases = {
+        entity: random.sample(cases_all[entity], k=min_case_per_entity)
+        for entity in cases_all
+    }
+
+    random_samples = {
+        entity: random_cases[entity][0] for entity in random_cases
+    }
+    random_references = {
+        entity: random_cases[entity][1:] for entity in random_cases
+    }
+
+    # sizes = {}
+    # bam_files = {}
+
+    for entity in cases_all:
+        make_methylation_atlas_df(entity, random_references[entity])
+        # sizes[entity] = 0
+        # bam_files[entity] = []
+        # for c in random_references[entity]:
+        # bam_files[entity].extend(files_by_ending(NANODIP_OUTPUT, c, "bam"))
+        # for f in bam_files[entity]:
+        # sizes[entity] += os.path.getsize(f)
+
+    atlas_list = []
+    for entity in cases_all:
+        atlas_list.append(MethylAtlas.from_disk(entity))
+
+    for entity in cases_all:
+        sample_name = random_samples[entity]
+        sample_reads = get_sample_reads(sample_name)
+        methyl_matches, methyl_overlap, cpgs = atlas_similarity(
+            sample_reads,
+            atlas_list,
+        )
+        run = Run(
+            sample_name,
+            methyl_matches,
+            methyl_overlap,
+            atlas_list,
+            cpgs,
+            random_references,
+            entity,
+        )
+        with open(LOG_FILE, "a") as f:
+            f.write(str(run) + "\n\n")
+        with open(DIR % (f"run_20221118_{iter}.pickle"), "wb") as f:
+            pickle.dump(run, f)
+
+
+# sizes
+# {x:len(y) for x,y in bam_files.items()}
+
 # merge_cases(gbm_all[:20], "20_gbm")
 # merge_cases(gbm_all[20:21], "sample_gbm_nr20")
 # merge_cases(mng_all[:20], "20_mng")
 # merge_cases(pitad_all[:20], "20_pitad")
 
-# methylation_atlas(gbm_all[:20], "20_gbm_methyl")
-# methylation_atlas(gbm_all[20:21], "sample_gbm_nr20")
-# methylation_atlas(mng_all[:20], "20_mng_methyl")
-# methylation_atlas(pitad_all[:20], "20_pitad_methyl")
+# make_methylation_atlas_df("20_gbm_methyl", gbm_all[:20].id_)
+# make_methylation_atlas_df("sample_gbm_nr20", gbm_all[20:21].id_)
+# make_methylation_atlas_df("20_mng_methyl", mng_all[:20].id_)
+# make_methylation_atlas_df("20_pitad_methyl", pitad_all[:20].id_)
+# make_methylation_atlas_df("test", pitad_all[:2].id_)
 
-gbm_atlas = MethylAtlas.from_pickle("20_gbm_methyl")
-mng_atlas = MethylAtlas.from_pickle("20_mng_methyl")
-pitad_atlas = MethylAtlas.from_pickle("20_pitad_methyl")
+# gbm_atlas = MethylAtlas.from_disk("20_gbm_methyl")
+# mng_atlas = MethylAtlas.from_disk("20_mng_methyl")
+# pitad_atlas = MethylAtlas.from_disk("20_pitad_methyl")
 
-# gbm_atlas.methyl("chr1", 10468, "chr2", 2)
-# gbm_atlas.df[1:807848]
+# sample_name = gbm_all.iloc[20].id_
+# sample_reads = get_sample_reads(sample_name)
+# atlas_list = [gbm_atlas, mng_atlas, pitad_atlas]
 
+# methyl_matches, methyl_overlap, cpgs = atlas_similarity(
+# sample_reads,
+# atlas_list,
+# )
 
-def cpg_offsets(seq, offset, methyl_status):
-    start0 = next(re.finditer("CG", seq)).start()
-    offsets = [
-        (cg.start() - start0 + offset, methyl_status)
-        for cg in re.finditer("CG", seq)
-    ]
-    offsets.sort()
-    return offsets
-
-
-def reads_with_methylation(file_):
-    """Reads the f5c result output file and returns it as a dataframe
-    that contains a row for each read together with chromosome name and
-    a list of methylation sites with methylation status.
-    """
-    f5c_out = pd.read_csv(
-        file_,
-        delimiter="\t",
-    )
-
-    f5c_out.loc[f5c_out.log_lik_ratio >= 2.5, "methyl_status"] = 1
-    f5c_out.loc[f5c_out.log_lik_ratio <= -2.5, "methyl_status"] = 0
-    f5c_out = f5c_out[~f5c_out.methyl_status.isnull()]
-
-    f5c_out["cpg_start_methyl"] = [
-        cpg_offsets(x, y, z)
-        for x, y, z in zip(
-            f5c_out.sequence, f5c_out.start, f5c_out.methyl_status
-        )
-    ]
-
-    reads = (
-        f5c_out.groupby(["read_name", "chromosome"])["cpg_start_methyl"]
-        .apply(sum)
-        .reset_index()
-        .sort_values(["chromosome"])
-    )
-    return reads
-
-
-sample_name = gbm_all.iloc[20].id_
-# sample_name = mng_all.iloc[20].id_
-# sample_name = pitad_all.iloc[20].id_
-
-
-def get_sample_reads(sample_name):
-    """Return data from containing all sample reads with methylation
-    status.
-    """
-    files_ = files_by_ending(NANODIP_OUTPUT, sample_name, ENDING["result_tsv"])
-    read_list = []
-    for file_ in tqdm(files_, desc="Collecting reads"):
-        read_list.append(reads_with_methylation(file_))
-    return pd.concat(read_list)
-
-
-sample_reads = get_sample_reads(sample_name)
-
-atlas_list = [gbm_atlas, mng_atlas, pitad_atlas]
-methyl_matches = {a:[] for a in atlas_list}
-methyl_overlap = {a:[] for a in atlas_list}
-for read in tqdm(
-    sample_reads.itertuples(),
-    total=sample_reads.shape[0],
-    desc="Compare reads with reference",
-):
-    read_methyl = read.cpg_start_methyl
-    start = read_methyl[0][0]
-    end = read_methyl[-1][0]
-    for atlas in atlas_list:
-        ref = atlas.methyl(read.chromosome, start, end)
-        overlap = pd.merge(
-            pd.DataFrame(read_methyl, columns=["start", "sample_methylated"]),
-            ref[["start", "methylated"]],
-            on="start",
-        )
-        matches = len(overlap[overlap.sample_methylated == overlap.methylated])
-        methyl_matches[atlas].append(matches)
-        methyl_overlap[atlas].append(len(overlap))
-    # if _ == 100:
-    # break
-
-max_hit = [max(x) for x in zip(*(methyl_matches[a] for a in atlas_list))]
-
-best_ref = {
-    x: [
-        i
-        for i, (max_, atl) in enumerate(zip(max_hit, methyl_matches[x]))
-        if max_ == atl
-    ]
-    for x in atlas_list
-}
-
-hit_cnt = {x.name: sum(methyl_matches[x]) for x in atlas_list}
-read_cnt = {x.name: len(best_ref[x]) for x in atlas_list}
+# run = Run(sample_name, methyl_matches, methyl_overlap, atlas_list, cpgs)
+# print(run)
