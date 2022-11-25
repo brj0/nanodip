@@ -375,8 +375,11 @@ class Sample:
         read_positions = []
         for f in bam_files:
             samfile = pysam.AlignmentFile(f, "rb")
+            # If there is no bam.bai index file, pysam will fail.
+            if not samfile.has_index():
+                logger.warning(f"No index file for {f}. Skip.")
+                continue
             for chrom in genome:
-                # TODO will fail if bam index file not created (meth-call err)
                 for read in samfile.fetch(chrom.name):
                     read_positions.append([
                         # Coordinates in pysam are always 0-based (following

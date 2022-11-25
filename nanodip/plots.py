@@ -587,23 +587,23 @@ class UMAPData:
         self.umap_df.to_csv(self.path("umap_csv"), index=False)
 
         # Write UMAP plot to disk.
-        file_path = self.path("umapall_html")
-        self.plot.write_html(file_path, config=dict({"scrollZoom": True}))
-        self.plot.write_json(file_path[:-4] + "json")
-        self.plot.write_image(file_path[:-4] + "png") # Time consumption 1.8s
+        self.plot.write_html(
+            self.path("umapall_html"), config=dict({"scrollZoom": True})
+        )
+        self.plot.write_json(self.path("umapall_json"))
+        self.plot.write_image(self.path("umapall_png")) # Time consumption 1.8s
 
         # Write UMAP close-up plot to disk.
-        file_path = self.path("umap_top")
-        self.cu_plot.write_html(file_path, config=dict({"scrollZoom": True}))
-        self.cu_plot.write_json(file_path[:-4] + "json")
+        self.cu_plot.write_html(
+            self.path("umaptop_html"), config=dict({"scrollZoom": True})
+        )
+        self.cu_plot.write_json(self.path("umaptop_json"))
         self.cu_plot.write_image(
-            file_path[:-4] + "png", width=450, height=400, scale=3
-        )   # Time consumption 0.9s
+            self.path("umaptop_png"), width=600, scale=3
+        ) # Time consumption 0.9s
 
         # Write pie chart to disk.
-        self.pie_chart.write_image(
-            self.path("pie_png"), width=450, height=400, scale=3
-        )
+        self.pie_chart.write_image(self.path("pie_png"), width=600, scale=3)
 
         # Save close up ranking report.
         self.save_ranking_report() # Time consumption 0.4s

@@ -23,7 +23,6 @@ from nanodip.data import (
 from nanodip.utils import (
     composite_path,
 )
-
 # end_internal_modules
 
 # Define logger

@@ -1,12 +1,15 @@
 import bisect
+
 # import cupy
 from minknow_api.tools import protocols
+import threading
 import numpy as np
 import logging
 import os
 import argparse
 import grpc
 import pandas as pd
+import datetime
 from tqdm import tqdm
 import math
 import plotly.express as px
@@ -124,11 +127,14 @@ print("import done")
 logger = logging.getLogger(__name__)
 
 
-sample_name = "B1992_24268_20211126_BC12"
+sample_name = "B2022_30785_20220715_BC12"
+sample_name = "test20221124a"
 reference_name = "GSE90496_IfP01"
 
 sample = Sample(sample_name)
 reference = Reference(reference_name)
 
-analysis_dir = "/data/nanodip_output/test_06_16/FAP37158_pass_barcode06_5fa5ea82_0/"
+analysis_dir = (
+    "/data/nanodip_output/test20221124a/FAT00297_pass_barcode02_7959fab8_0"
+)
 

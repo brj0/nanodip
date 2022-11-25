@@ -173,7 +173,7 @@ RESULT_ENDING = {
     "cnv_png": "CNVplot.png",
     "ranking_pdf": "NanoDiP_ranking.pdf",
     "report_pdf": "NanoDiP_report.pdf",
-    "umap_top": "UMAP_top.html",
+    "umaptop_html": "UMAP_top.html",
     "umapall_html": "UMAP_all.html",
 }
 

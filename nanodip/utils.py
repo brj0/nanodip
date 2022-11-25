@@ -81,12 +81,12 @@ def extract_referenced_cpgs(sample_methylation,
         output_overlap: file path of CpG overlap
         output_overlap_cnt: file path of CpG overlap count
     """
+    # TODO What about CpG's with strand "-"
     reference_cpgs = pd.read_csv(
         ILLUMINA_CG_MAP,
         delimiter="\t",
         names=["ilmnid", "chromosome", "strand", "start"],
     )
-    # TODO What about CpG's with strand "-"
     sample_cpgs = pd.read_csv(
         sample_methylation,
         delimiter="\t",
@@ -234,8 +234,10 @@ def reference_annotations():
     return [a.replace(".xlsx", "") for a in annotations]
 
 def composite_path(directory, *args):
-    """Generate composite file-paths of the type
-        'directory/arg1_arg2_arg3'
+    """Generate composite file-paths.
+    Example:
+        >>> composite_path('/directory', 'arg1', 'arg2', 'arg3')
+        '/directory/arg1_arg2_arg3'
     """
     file_name = "_".join([str(x) for x in args])
     return os.path.join(

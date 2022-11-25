@@ -185,15 +185,55 @@ class ActivePlots:
         """Enables print and str for debugging purposes."""
         return str(self.plot)
 
+class MultiSemaphore:
+    """Two-level semaphore object for processes with light and heavy
+    utilization of the system.
+    """
+
+    def __init__(self):
+        self.light = threading.Semaphore()
+        self.heavy = threading.Semaphore()
+        self.proc_cnt = {"cnv": 0, "umap": 0, "cpg": 0, "clf": 0}
+        self.workload = {
+            "cnv": "light",
+            "umap": "heavy",
+            "cpg": "heavy",
+            "clf": "heavy",
+        }
+
+    def acquire(self, type_):
+        """Acquire lock."""
+        if self.workload[type_] == "light":
+            self.light.acquire()
+            self.proc_cnt[type_] += 1
+        elif self.workload[type_] == "heavy":
+            self.heavy.acquire()
+            self.proc_cnt[type_] += 1
+        else:
+            raise ValueError("Invalid type.")
+
+    def release(self, type_):
+        """Release lock."""
+        if self.workload[type_] == "light":
+            self.proc_cnt[type_] -= 1
+            self.light.release()
+        elif self.workload[type_] == "heavy":
+            self.proc_cnt[type_] -= 1
+            self.heavy.release()
+        else:
+            raise ValueError("Invalid type.")
+
+    def __str__(self):
+        """Prints overview of object for debugging purposes."""
+        return "Number of running processes:\n" + str(self.proc_cnt)
+
+
 class UI:
     """User interface implemented as CherryPy webserver."""
     # global variables within the CherryPy Web UI
     devices = Devices()
     active_plots = ActivePlots()
-    cnv_sem = threading.Semaphore()
-    umap_sem = threading.Semaphore()
-    cpg_sem = threading.Semaphore()
-    clf_sem = threading.Semaphore()
+    sem = MultiSemaphore()
 
     # Methylation calling, UMAP and and non-supervised classifiers all
     # heavily use system resources, and using them at the same time
@@ -214,10 +254,10 @@ class UI:
                 / psutil.virtual_memory().total
             ),
             "cpu": round(psutil.cpu_percent()),
-            "cpgs": 1 - UI.cpg_sem._value,
-            "cnvp": 1 - UI.cnv_sem._value,
-            "umap": 1 - UI.umap_sem._value,
-            "clf": 1 - UI.clf_sem._value,
+            "cpgs": UI.sem.proc_cnt["cpg"],
+            "cnvp": UI.sem.proc_cnt["cnv"],
+            "umap": UI.sem.proc_cnt["umap"],
+            "clf": UI.sem.proc_cnt["clf"],
         }
         # Calculate URL to avoid hard coding URLs in HTML templates.
         return render_template(
@@ -575,7 +615,7 @@ class UI:
         if genes and browser_tab_id:
             cnv_data = UI.active_plots.get(browser_tab_id)
             return cnv_data.plot_cnv_and_genes([genes])
-        UI.cnv_sem.acquire()
+        UI.sem.acquire("cnv")
         try:
             cnv_data = CNVData(sample_name)
         except FileNotFoundError:
@@ -585,19 +625,18 @@ class UI:
             try:
                 cnv_data.make_cnv_plot()
             except ValueError:
-                UI.cnv_sem.release()
+                UI.sem.release("cnv")
                 raise cherrypy.HTTPError(405, "No data to plot.")
         else:
             cnv_data.read_from_disk()
-        UI.cnv_sem.release()
+        UI.sem.release("cnv")
         UI.active_plots.set(browser_tab_id, cnv_data)
         return cnv_data.plot_cnv_and_genes()
 
     @cherrypy.expose
     def umap(self, sample_name, reference_name, new="False"):
         """Creates UMAP plot and returns it as JSON."""
-        UI.all_sem.acquire()
-        UI.umap_sem.acquire()
+        UI.sem.acquire("umap")
         try:
             umap_data = UMAPData(sample_name, reference_name)
         except FileNotFoundError:
@@ -606,13 +645,11 @@ class UI:
             try:
                 umap_data.make_umap_plot()
             except ValueError:
-                UI.umap_sem.release()
-                UI.all_sem.release()
+                UI.sem.release("umap")
                 raise cherrypy.HTTPError(405, "No data to plot.")
         else:
             umap_data.read_from_disk()
-        UI.umap_sem.release()
-        UI.all_sem.release()
+        UI.sem.release("umap")
         return json.dumps({
             "all": umap_data.plot_json,
             "close_up": umap_data.cu_plot_json
@@ -650,11 +687,9 @@ class UI:
         if start == "True":
             with open(file_path, "w") as f:
                 f.write("Classification started. Results will appear here.")
-            UI.all_sem.acquire()
-            UI.clf_sem.acquire()
+            UI.sem.acquire("clf")
             fit_and_evaluate_classifiers(sample_name, reference_name)
-            UI.clf_sem.release()
-            UI.all_sem.release()
+            UI.sem.release("clf")
         try:
             with open(file_path, "r") as f:
                 clf_results = f.read()
@@ -688,10 +723,11 @@ class UI:
         pie_chart_path = composite_path(
             NANODIP_REPORTS, sample_name, reference_name, ENDING["pie_png"]
         )
-
+        logo_path = cherrypy.config["/favicon.ico"]["tools.staticfile.filename"]
         html_report = render_template(
             "pdf_report.html",
             sample_name=sample_name,
+            logo_path=logo_path,
             sys_name=socket.gethostname(),
             date=date_time_string_now(),
             barcode=predominant_barcode(sample_name),
@@ -741,11 +777,9 @@ class UI:
     @cherrypy.expose
     def cpgs(self, sample_name=""):
         """Invokes methylation calling and returns statistics."""
-        UI.all_sem.acquire()
-        UI.cpg_sem.acquire()
+        UI.sem.acquire("cpg")
         stats = methylation_caller(sample_name)
-        UI.cpg_sem.release()
-        UI.all_sem.release()
+        UI.sem.release("cpg")
         return json.dumps(stats)
 
     @cherrypy.expose
