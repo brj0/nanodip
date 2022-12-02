@@ -9,12 +9,15 @@ import re
 import random
 import shutil
 import pickle
-import time
 
 import numpy as np
 import pandas as pd
 import pysam
 from tqdm import tqdm
+
+from nanodip.data import (
+    Genome,
+)
 
 from nanodip.config import (
     ENDING,
@@ -24,6 +27,17 @@ from nanodip.config import (
 from nanodip.utils import (
     files_by_ending,
 )
+
+# For debugging
+import sys
+import IPython
+import IPython.core.ultratb
+
+sys.excepthook = IPython.core.ultratb.ColorTB()
+import time
+
+pdp = lambda x: print(x.to_string())
+
 
 ANNOTATION_ID = "1qmis4MSoE0eAMMwG6xZbDCrs-F1jXECZvc4wKWLR0KY"
 CHROM = [
@@ -125,10 +139,11 @@ CHROM = [
 ]
 DIR = os.path.join(
     "/data/nanodip_output/merged_class",
-    datetime.datetime.now().strftime("%Y-%m-%d-%H%M")
+    datetime.datetime.now().strftime("%Y-%m-%d-%H%M"),
 )
 LOG_FILE = os.path.join(DIR, "methyl_atlas.log")
 NUM_LOOPS = 20
+NUM_LOOPS = 1  # TODO del
 SHEET_NAME = "Sample%20list"
 ANNOTATION_URL = (
     "https://docs.google.com/spreadsheets/d/%s/gviz/tq?tqx=out:csv&sheet=%s"
@@ -190,7 +205,7 @@ def annotated_cases():
     return cases_df
 
 
-def merge_cases(cases, fname):
+def merge_bam_files(cases, fname):
     """Merges all bam files that are within the filetree of the
     files in {cases}.
     """
@@ -224,9 +239,9 @@ def get_all_tsv_files(cases):
     return files
 
 
-def make_methylation_atlas_df(fname, cases=None, files=None):
-    """Merges all freq_tsv ending files that are within the filetree
-    of the files in {cases}.
+def merge_methylation(fname, cases=None, files=None):
+    """Merges all freq_tsv ending files that are either within the
+    filetree of the files in {cases} or within {files}.
     """
     if not xor(cases is None, files is None):
         raise ValueError("Provide either 'cases' or 'files'")
@@ -259,9 +274,9 @@ def make_methylation_atlas_df(fname, cases=None, files=None):
     methyl_df.to_pickle(os.path.join(DIR, fname + ".pickle"))
 
 
-class MethylAtlas:
-    """Container for Methylation Atlas containing all methylation
-    sites and providing search member functions.
+class MethylClass:
+    """Container for merged methylation class object containing all
+    methylation sites and providing search member functions.
     """
 
     chrom_to_idx = {c: (i + 1) for i, c in enumerate(CHROM)}
@@ -278,7 +293,7 @@ class MethylAtlas:
 
     def idx(self, query_chrom, query_start):
         """Binary index search."""
-        query = (MethylAtlas.chrom_to_idx[query_chrom], query_start)
+        query = (MethylClass.chrom_to_idx[query_chrom], query_start)
         return np.searchsorted(
             self.search_idx, np.array(query, dtype=self.search_idx.dtype)
         )
@@ -297,7 +312,7 @@ class MethylAtlas:
     def __str__(self):
         """Prints overview of object for debugging purposes."""
         lines = [
-            f"MethylAtlas object:",
+            f"MethylClass object:",
             f"name: '{self.name}'",
             f"df: '{self.df}'",
             f"search_idx:\n{self.search_idx}",
@@ -351,9 +366,12 @@ def get_sample_reads(sample_name):
     return reads
 
 
-def _atlas_similarity(sample_reads, atlas_list):
-    methyl_matches = {a: [] for a in atlas_list}
-    methyl_overlap = {a: [] for a in atlas_list}
+def _atlas_similarity(sample_reads, atlas):
+    """Same as atlas_similarity but loops over reads and is slower for
+    large data sets.
+    """
+    methyl_matches = {mc: [] for mc in atlas}
+    methyl_overlap = {mc: [] for mc in atlas}
     for read in tqdm(
         sample_reads.itertuples(),
         total=sample_reads.shape[0],
@@ -362,21 +380,103 @@ def _atlas_similarity(sample_reads, atlas_list):
         read_methyl = read.cpg_start_methyl
         start = read_methyl[0][0]
         end = read_methyl[-1][0]
-        for atlas in atlas_list:
-            ref = atlas.methyl(read.chromosome, start, end)
+        for mclass in atlas:
+            ref = mclass.methyl(read.chromosome, start, end)
             overlap = pd.merge(
-                pd.DataFrame(
-                    read_methyl, columns=["start", "sample_methylated"]
-                ),
+                pd.DataFrame(read_methyl, columns=["start", "methylated_smp"]),
                 ref[["start", "methylated"]],
                 on="start",
             )
             matches = len(
-                overlap[overlap.sample_methylated == overlap.methylated]
+                overlap[overlap.methylated_smp == overlap.methylated]
             )
-            methyl_matches[atlas].append(matches)
-            methyl_overlap[atlas].append(len(overlap))
+            methyl_matches[mclass].append(matches)
+            methyl_overlap[mclass].append(len(overlap))
     return methyl_matches, methyl_overlap
+
+
+def atlas_similarity(sample_reads, atlas):
+    """Returns overlapping and identical CpG methylation of sample with
+    each methylation class.
+    """
+    sample_cpgs = sample_reads.explode("cpg_start_methyl", ignore_index=True)
+    sample_cpgs[["start", "methylated_smp"]] = pd.DataFrame(
+        sample_cpgs.cpg_start_methyl.to_list()
+    )
+    sample_cpgs = sample_cpgs.drop("cpg_start_methyl", axis=1)
+
+    chrom_to_idx = {c: (i + 1) for i, c in enumerate(CHROM)}
+    methyl_overlap = {}
+    methyl_matches = {}
+    cpgs = {}
+
+    for mclass in atlas:
+        cpgs_df = sample_cpgs.merge(
+            mclass.df[["chromosome", "start", "methylated"]],
+            how="left",
+            on=["chromosome", "start"],
+        )
+        cpgs_df["chrom_nr"] = cpgs_df.chromosome.apply(
+            lambda x: chrom_to_idx[x]
+        )
+        cpgs_df = cpgs_df.sort_values(by=["chrom_nr", "start"])
+        cpgs_df = cpgs_df.reset_index(drop=True)
+        cpgs_df["hit"] = cpgs_df.methylated_smp == cpgs_df.methylated
+        cpgs_df["in_atlas"] = False
+        cpgs_df.loc[~cpgs_df.methylated.isna(), "in_atlas"] = True
+        summary = cpgs_df.groupby(["read_name", "chromosome"]).agg(
+            hit_cnt=pd.NamedAgg(column="hit", aggfunc="sum"),
+            overlap_cnt=pd.NamedAgg(column="in_atlas", aggfunc="sum"),
+        )
+        methyl_overlap[mclass] = summary.overlap_cnt.to_list()
+        methyl_matches[mclass] = summary.hit_cnt.to_list()
+        cpgs[mclass] = cpgs_df
+    return methyl_matches, methyl_overlap, cpgs
+
+
+def merged_atlas_with_sample(atlas, sample_reads):
+    """Merge and return all methylation classes to a single data frame."""
+    merged = atlas[0].df
+    chrom_to_idx = {c: (i + 1) for i, c in enumerate(CHROM)}
+    for mclass in atlas[1:]:
+        merged = merged.merge(
+            mclass.df,
+            how="outer",
+            on=["chromosome", "start"],
+            suffixes=[None, "_" + mclass.name],
+        )
+    suffix0 = "_" + atlas[0].name
+    merged.rename(
+        columns={
+            "read_cnt": "read_cnt" + suffix0,
+            "methyl_cnt": "methyl_cnt" + suffix0,
+            "methyl_freq": "methyl_freq" + suffix0,
+            "methylated": "methylated" + suffix0,
+            "chrom_nr": "chrom_nr" + suffix0,
+        },
+        inplace=True,
+    )
+    sample_cpgs = sample_reads.explode("cpg_start_methyl", ignore_index=True)
+    sample_cpgs[["start", "methylated_smp"]] = pd.DataFrame(
+        sample_cpgs.cpg_start_methyl.to_list()
+    )
+    sample_cpgs = sample_cpgs.drop("cpg_start_methyl", axis=1)
+    merged = merged.merge(
+        sample_cpgs,
+        how="outer",
+        on=["chromosome", "start"],
+        suffixes=[None, "_smp"],
+    )
+    merged = merged[
+        ~merged.methylated_gbm.isna()
+        & ~merged.methylated_mng.isna()
+        & ~merged.methylated_pitad.isna()
+        & ~merged.methylated_smp.isna()
+    ]
+    merged["chrom_nr"] = merged.chromosome.apply(lambda x: chrom_to_idx[x])
+    merged = merged.sort_values(by=["chrom_nr", "start"])
+    merged = merged.reset_index(drop=True)
+    return merged
 
 
 class Run:
@@ -387,7 +487,7 @@ class Run:
         sample_name,
         methyl_matches,
         methyl_overlap,
-        atlas_list,
+        atlas,
         cpgs,
         reference_dict=None,
         true_class=None,
@@ -395,7 +495,7 @@ class Run:
         self.sample_name = sample_name
         self.matches = methyl_matches
         self.overlap = methyl_overlap
-        self.atlas_list = atlas_list
+        self.atlas = atlas
         self.cpgs = cpgs
         self.reference_dict = reference_dict
         self.true_class = true_class
@@ -406,32 +506,31 @@ class Run:
 
     def calculate_results(self):
         methyl_net_matches = {
-            a: [
+            mc: [
                 2 * hit - ovlp
-                for hit, ovlp in zip(self.matches[a], self.overlap[a])
+                for hit, ovlp in zip(self.matches[mc], self.overlap[mc])
             ]
-            for a in self.atlas_list
+            for mc in self.atlas
         }
         max_hit = [
-            max(x) for x in zip(*(self.matches[a] for a in self.atlas_list))
+            max(x) for x in zip(*(self.matches[mc] for mc in self.atlas))
         ]
         max_net_hit = [
-            max(x)
-            for x in zip(*(methyl_net_matches[a] for a in self.atlas_list))
+            max(x) for x in zip(*(methyl_net_matches[mc] for mc in self.atlas))
         ]
-        self.hit_cnt = {x.name: sum(self.matches[x]) for x in self.atlas_list}
+        self.hit_cnt = {x.name: sum(self.matches[x]) for x in self.atlas}
         self.read_cnt = {
-            atl.name: sum(
-                mat == max_ for mat, max_ in zip(self.matches[atl], max_hit)
+            mclass.name: sum(
+                mat == max_ for mat, max_ in zip(self.matches[mclass], max_hit)
             )
-            for atl in self.atlas_list
+            for mclass in self.atlas
         }
         self.read_cnt_net = {
-            atl.name: sum(
+            mclass.name: sum(
                 mat == max_
-                for mat, max_ in zip(methyl_net_matches[atl], max_net_hit)
+                for mat, max_ in zip(methyl_net_matches[mclass], max_net_hit)
             )
-            for atl in self.atlas_list
+            for mclass in self.atlas
         }
 
     def __str__(self):
@@ -444,45 +543,6 @@ class Run:
             f"read_cnt_net: {self.read_cnt_net}",
         ]
         return "\n".join(lines)
-
-
-def atlas_similarity(sample_reads, atlas_list):
-    """Returns overlapping and identical CpG methylation of sample with
-    each atlas.
-    """
-    sample_cpgs = sample_reads.explode("cpg_start_methyl", ignore_index=True)
-    sample_cpgs[["start", "sample_methylated"]] = pd.DataFrame(
-        sample_cpgs.cpg_start_methyl.to_list()
-    )
-    sample_cpgs = sample_cpgs.drop("cpg_start_methyl", axis=1)
-
-    chrom_to_idx = {c: (i + 1) for i, c in enumerate(CHROM)}
-    methyl_overlap = {}
-    methyl_matches = {}
-    cpgs = {}
-
-    for atlas in atlas_list:
-        cpgs_df = sample_cpgs.merge(
-            atlas.df[["chromosome", "start", "methylated"]],
-            how="left",
-            on=["chromosome", "start"],
-        )
-        cpgs_df["chrom_nr"] = cpgs_df.chromosome.apply(
-            lambda x: chrom_to_idx[x]
-        )
-        cpgs_df = cpgs_df.sort_values(by=["chrom_nr", "start"])
-        cpgs_df = cpgs_df.reset_index(drop=True)
-        cpgs_df["hit"] = cpgs_df.sample_methylated == cpgs_df.methylated
-        cpgs_df["in_atlas"] = False
-        cpgs_df.loc[~cpgs_df.methylated.isna(), "in_atlas"] = True
-        summary = cpgs_df.groupby(["read_name", "chromosome"]).agg(
-            hit_cnt=pd.NamedAgg(column="hit", aggfunc="sum"),
-            overlap_cnt=pd.NamedAgg(column="in_atlas", aggfunc="sum"),
-        )
-        methyl_overlap[atlas] = summary.overlap_cnt.to_list()
-        methyl_matches[atlas] = summary.hit_cnt.to_list()
-        cpgs[atlas] = cpgs_df
-    return methyl_matches, methyl_overlap, cpgs
 
 
 # Make output dir
@@ -544,6 +604,15 @@ pitad_all = all_cases_df[
     )
 ]
 
+# 12 cases
+pitad_fsh = all_cases_df[
+    all_cases_df.meth_grp.isin(
+        [
+            "PITAD_FSH_LH",
+        ]
+    )
+]
+
 cases_all = {
     "gbm": gbm_all.id_.tolist(),
     "mng": mng_ben.id_.tolist(),
@@ -568,7 +637,7 @@ for iter_ in range(NUM_LOOPS):
     bam_files = {}
 
     for entity in cases_all:
-        make_methylation_atlas_df(entity, random_references[entity])
+        merge_methylation(entity, random_references[entity])
         sizes[entity] = 0
         bam_files[entity] = []
         for c in random_references[entity]:
@@ -577,59 +646,62 @@ for iter_ in range(NUM_LOOPS):
             sizes[entity] += os.path.getsize(f)
         print("Size of", entity, "bam files:", sizes[entity], "bytes")
 
-    atlas_list = []
+    atlas = []
     for entity in cases_all:
-        atlas_list.append(MethylAtlas.from_disk(entity))
+        atlas.append(MethylClass.from_disk(entity))
 
     # Restrict atlas to chr1-chr22
-    for atl in atlas_list:
-        atl.df = atl.df[atl.df.chromosome.isin(CHROM[:22])]
+    for mclass in atlas:
+        mclass.df = mclass.df[mclass.df.chromosome.isin(CHROM[:22])]
 
     # Restrict atlas to overlapping cpgs
-    atl0 = atlas_list[0]
-    for atl in atlas_list[1:]:
-        atl0.df = atl0.df.merge(
-            atl.df[["chromosome", "start"]],
+    mclass0 = atlas[0]
+    for mclass in atlas[1:]:
+        mclass0.df = mclass0.df.merge(
+            mclass.df[["chromosome", "start"]],
             on=["chromosome", "start"],
             suffixes=[None, "_y"],
         )
-    for atl in atlas_list[1:]:
-        atl.df = atl.df.merge(
-            atl0.df[["chromosome", "start"]],
+    for mclass in atlas[1:]:
+        mclass.df = mclass.df.merge(
+            mclass0.df[["chromosome", "start"]],
             on=["chromosome", "start"],
             suffixes=[None, "_y"],
         )
 
-    # # Make all atlas df's the same size
-    # min_cpg_cnt = min(atlas.df.shape[0] for atlas in atlas_list)
-    # for atlas in atlas_list:
-        # rand_idx = random.sample(range(atlas.df.shape[0]), k=min_cpg_cnt)
-        # rand_idx.sort()
-        # atlas.df = atlas.df.loc[rand_idx]
+    # # Make all df's in atlas the same size
+    # min_cpg_cnt = min(mclass.df.shape[0] for mclass in atlas)
+    # for mclass in atlas:
+    # rand_idx = random.sample(range(mclass.df.shape[0]), k=min_cpg_cnt)
+    # rand_idx.sort()
+    # mclass.df = mclass.df.loc[rand_idx]
 
     # Print atlases
-    for atl in atlas_list:
-        print(atl)
+    for mclass in atlas:
+        print(mclass)
 
     for entity in cases_all:
         sample_name = random_samples[entity]
         sample_reads = get_sample_reads(sample_name)
+        sample_reads["true_class"] = entity
         methyl_matches, methyl_overlap, cpgs = atlas_similarity(
             sample_reads,
-            atlas_list,
+            atlas,
         )
         run = Run(
             sample_name,
             methyl_matches,
             methyl_overlap,
-            atlas_list,
+            atlas,
             cpgs,
             random_references,
             entity,
         )
         with open(LOG_FILE, "a") as f:
             f.write(str(run) + "\n\n")
-        with open(os.path.join(DIR, f"{entity}_{iter_}_run.pickle"), "wb") as f:
+        with open(
+            os.path.join(DIR, f"{entity}_{iter_}_run.pickle"), "wb"
+        ) as f:
             pickle.dump(run, f)
 
 run_list = []
@@ -664,12 +736,12 @@ for atlas_nm in ["gbm", "mng", "pitad"]:
 print("# CpG distribution of atlases")
 for chrom in CHROM:
     line = [chrom, "\t"]
-    for atl in atlas_list:
+    for mclass in atlas:
         line.extend(
             [
-                atl.name,
+                mclass.name,
                 "=",
-                len(atl.df[atl.df.chromosome == chrom]),
+                len(mclass.df[mclass.df.chromosome == chrom]),
                 " ",
             ]
         )
@@ -677,12 +749,12 @@ for chrom in CHROM:
 
 # Print number of cpgs in atlases for all chromosomes
 line = ["chr1-chr22", "\t"]
-for atl in atlas_list:
+for mclass in atlas:
     line.extend(
         [
-            atl.name,
+            mclass.name,
             "=",
-            len(atl.df[atl.df.chromosome.isin(CHROM[:22])]),
+            len(mclass.df[mclass.df.chromosome.isin(CHROM[:22])]),
             " ",
         ]
     )
@@ -700,29 +772,93 @@ for r in run_list:
     print("read_cnt_net", r["read_cnt_net"])
     print()
 
-# merge_cases(gbm_all[:20], "20_gbm")
-# merge_cases(gbm_all[20:21], "sample_gbm_nr20")
-# merge_cases(mng_all[:20], "20_mng")
-# merge_cases(pitad_all[:20], "20_pitad")
 
-# make_methylation_atlas_df("20_gbm_methyl", gbm_all[:20].id_)
-# make_methylation_atlas_df("sample_gbm_nr20", gbm_all[20:21].id_)
-# make_methylation_atlas_df("20_mng_methyl", mng_all[:20].id_)
-# make_methylation_atlas_df("20_pitad_methyl", pitad_all[:20].id_)
-# make_methylation_atlas_df("test", pitad_all[:2].id_)
+sample_reads["start"] = sample_reads.cpg_start_methyl.apply(
+    lambda x: min(y[0] for y in x)
+)
+sample_reads["end"] = sample_reads.cpg_start_methyl.apply(
+    lambda x: max(y[0] for y in x)
+)
+sample_reads["read_len"] = sample_reads.end - sample_reads.start + 1
+merged = merged_atlas_with_sample(atlas, sample_reads)
 
-# gbm_atlas = MethylAtlas.from_disk("20_gbm_methyl")
-# mng_atlas = MethylAtlas.from_disk("20_mng_methyl")
-# pitad_atlas = MethylAtlas.from_disk("20_pitad_methyl")
+
+m = merged[
+    [
+        "chromosome",
+        "start",
+        "end",
+        "true_class",
+        "read_len",
+        "read_name",
+        "methylated_gbm",
+        "methylated_mng",
+        "methylated_pitad",
+        "methylated_smp",
+    ]
+]
+readnms = list(set(merged.read_name))
+r = readnms[0]
+r = "01ed94c0-93e1-45b5-9b13-63dc3cb00926"
+m[m.read_name == r]
+read_lengths = m[
+    ~m[["read_name", "chromosome"]].duplicated()
+].read_len.to_list()
+
+
+merged["gbm_hit"] = merged.methylated_smp == merged.methylated_gbm
+merged["mng_hit"] = merged.methylated_smp == merged.methylated_mng
+merged["pitad_hit"] = merged.methylated_smp == merged.methylated_pitad
+
+summary = merged.groupby(["read_name", "chromosome", "read_len"]).agg(
+    overlap_cnt=pd.NamedAgg(column="methylated_smp", aggfunc="size"),
+    gbm_hits=pd.NamedAgg(column="gbm_hit", aggfunc="sum"),
+    mng_hits=pd.NamedAgg(column="mng_hit", aggfunc="sum"),
+    pitad_hits=pd.NamedAgg(column="pitad_hit", aggfunc="sum"),
+)
+summary = summary.sort_values(by=["chromosome", "overlap_cnt"])
+
+i = 10
+summary_ = summary[summary.overlap_cnt >= i]
+
+print(
+    "gbm:",
+    sum(summary.gbm_hits),
+    "mng:",
+    sum(summary.mng_hits),
+    "pitad:",
+    sum(summary.pitad_hits),
+)
+
+pdp(summary)
+
+rgrp = merged.groupby(["read_name", "chromosome"])
+rgrp.apply(lambda x: x.methylated_smp.sum())
+
+
+# merge_bam_files(gbm_all[:20], "20_gbm")
+# merge_bam_files(gbm_all[20:21], "sample_gbm_nr20")
+# merge_bam_files(mng_all[:20], "20_mng")
+# merge_bam_files(pitad_all[:20], "20_pitad")
+
+# merge_methylation("20_gbm_methyl", gbm_all[:20].id_)
+# merge_methylation("sample_gbm_nr20", gbm_all[20:21].id_)
+# merge_methylation("20_mng_methyl", mng_all[:20].id_)
+# merge_methylation("20_pitad_methyl", pitad_all[:20].id_)
+# merge_methylation("test", pitad_all[:2].id_)
+
+# gbm_atlas = MethylClass.from_disk("20_gbm_methyl")
+# mng_atlas = MethylClass.from_disk("20_mng_methyl")
+# pitad_atlas = MethylClass.from_disk("20_pitad_methyl")
 
 # sample_name = gbm_all.iloc[20].id_
 # sample_reads = get_sample_reads(sample_name)
-# atlas_list = [gbm_atlas, mng_atlas, pitad_atlas]
+# atlas = [gbm_atlas, mng_atlas, pitad_atlas]
 
 # methyl_matches, methyl_overlap, cpgs = atlas_similarity(
 # sample_reads,
-# atlas_list,
+# atlas,
 # )
 
-# run = Run(sample_name, methyl_matches, methyl_overlap, atlas_list, cpgs)
+# run = Run(sample_name, methyl_matches, methyl_overlap, atlas, cpgs)
 # print(run)

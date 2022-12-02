@@ -1,5 +1,4 @@
 import bisect
-
 # import cupy
 from minknow_api.tools import protocols
 import threading
