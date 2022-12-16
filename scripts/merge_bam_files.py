@@ -32,12 +32,9 @@ from nanodip.utils import (
 import sys
 import IPython
 import IPython.core.ultratb
-
 sys.excepthook = IPython.core.ultratb.ColorTB()
 import time
-
 pdp = lambda x: print(x.to_string())
-
 
 ANNOTATION_ID = "1qmis4MSoE0eAMMwG6xZbDCrs-F1jXECZvc4wKWLR0KY"
 CHROM = [
@@ -823,10 +820,12 @@ cases_all = {
 
 atlas_samples = []
 for iter_ in tqdm(range(NUM_LOOPS), desc="sampling loops"):
-    atlas_samples.extend(random_atlas_samples(cases_all))
+    rand_samp = random_atlas_samples(cases_all)
+    merged_rand_samp = pd.concat(rand_samp)
+    merged_rand_samp["iter"] = iter_
+    atlas_samples.append(merged_rand_samp)
 
 merged = pd.concat(atlas_samples)
-merged["iter"] = iter_
 
 summary = (
     merged.groupby(
@@ -850,26 +849,27 @@ summary = (
 summary = summary.sort_values(by=["chrom_nr", "overlap_cnt"])
 
 merged.to_csv(os.path.join(DIR, "merged_cpgs.csv"), index=False)
-summary.to_csv(os.path.join(DIR, "summary_reads.csv"), index=False)
 
 summary["correct"] = False
-for true_class in cases_all.keys():
-    entities = set(cases_all.keys())
+all_entities = ["gbm", "mng", "pitad"]
+for true_class in all_entities:
+    entities = set(all_entities)
     alternatives = entities - set([true_class])
     summary.loc[
         (summary.true_class == true_class)
         & (summary[true_class] > summary[alternatives].max(axis=1)),
         "correct",
     ] = True
+summary.to_csv(os.path.join(DIR, "summary_reads.csv"), index=False)
 
 correct = []
-for i in range(1000):
+for i in range(5000):
     summary_ = summary[summary.overlap_cnt >= i]
     if len(summary_) > 0:
         prop = sum(summary_.correct) / len(summary_)
         correct.append(prop)
 
-np.array(correct).tofile(os.path.join(DIR, "summary_reads.csv"), sep=",")
+np.array(correct).tofile(os.path.join(DIR, "correct_reads_5000.csv"), sep=",")
 
 # merge_bam_files(gbm_all[:20], "20_gbm")
 # merge_bam_files(gbm_all[20:21], "sample_gbm_nr20")
