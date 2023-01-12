@@ -4,6 +4,7 @@
 
 # start_external_modules
 import logging
+import cupy
 import os
 from tqdm import tqdm
 import pandas as pd
@@ -139,4 +140,4 @@ def calculate_std(reference_name):
         pool.free_all_blocks()
 
 reference_name = "GSE90496_IfP01"
-calculate_std(reference_name)
+# calculate_std(reference_name)
