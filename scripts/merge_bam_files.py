@@ -334,8 +334,8 @@ def cpg_offsets(seq, offset, methyl_status):
 
 
 def get_sample_reads(sample_name):
-    """Return data from containing all sample reads with methylation
-    status.
+    """Return reads along with methylation sites/status of sample
+    {sample_name}.
     """
     files_ = files_by_ending(NANODIP_OUTPUT, sample_name, ENDING["result_tsv"])
     read_list = []
