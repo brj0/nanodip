@@ -638,7 +638,7 @@ class UI:
         """Creates UMAP plot and returns it as JSON."""
         UI.sem.acquire("umap")
         try:
-            umap_data = UMAPData(sample_name, reference_name)
+            umap_data = UMAPData.from_names(sample_name, reference_name)
         except FileNotFoundError:
             raise cherrypy.HTTPError(405, "URL not allowed")
         if not umap_data.files_on_disk() or new == "True":
@@ -803,7 +803,7 @@ class UI:
         """
         if sentrix_id and reference_id and reference_umap:
             download_epidip_data(sentrix_id, reference_umap)
-            umap_data = UMAPData(sentrix_id, reference_id)
+            umap_data = UMAPData.from_names(sentrix_id, reference_id)
             umap_data.read_precalculated_umap_matrix(reference_umap)
             umap_data.draw_pie_chart()
             umap_data.draw_scatter_plots()

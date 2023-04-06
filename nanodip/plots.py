@@ -363,8 +363,9 @@ def umap_plot_from_data(sample, reference, umap_df, close_up):
         UMAP plot as plotly object.
     """
     umap_sample = umap_df.iloc[0]
+    title0 = "Epidip data" if sample.name is None else f"{sample.name}"
     umap_title = (
-        f"UMAP for {sample.name} <br><sup>Reference: {reference.name} "
+        f"UMAP for {title0} <br><sup>Reference: {reference.name} "
         f"({len(reference.specimens)} cases), "
         f"{len(sample.cpg_overlap)} CpGs </sup>"
     )
@@ -389,13 +390,14 @@ def umap_plot_from_data(sample, reference, umap_df, close_up):
         render_mode=PLOTLY_RENDER_MODE,
         template="simple_white",
     )
-    umap_plot.add_annotation(
-        x=umap_sample["x"],
-        y=umap_sample["y"],
-        text=sample.name,
-        showarrow=True,
-        arrowhead=1,
-    )
+    if sample.name is not None:
+        umap_plot.add_annotation(
+            x=umap_sample["x"],
+            y=umap_sample["y"],
+            text=sample.name,
+            showarrow=True,
+            arrowhead=1,
+        )
     umap_plot.update_yaxes(
         scaleanchor = "x",
         scaleratio = 1,
@@ -404,20 +406,23 @@ def umap_plot_from_data(sample, reference, umap_df, close_up):
     umap_plot.update_xaxes(
         mirror=True,
     )
-
+    umap_df_ref = umap_df if sample.name is None else umap_df[1:]
+    links = [
+        f"<a href='{url}' target='_blank'>&nbsp;</a>"
+        for url in [CNV_LINK % id_ for id_ in umap_df_ref.id]
+    ]
+    # Add hyperlinks
+    umap_plot.add_trace(go.Scatter(
+        x=umap_df_ref.x,
+        y=umap_df_ref.y,
+        mode="text",
+        name="CNV links",
+        text=links,
+        hoverinfo="skip",
+    ))
     # If close-up add hyperlinks for all references and draw circle
     if close_up:
         umap_plot.update_traces(marker=dict(size=5))
-        # Add hyperlinks
-        for row in umap_df.iloc[1:].itertuples():
-            url = CNV_LINK % row.id
-            umap_plot.add_annotation(
-                x=row.x,
-                y=row.y,
-                text=f"<a href='{url}' target='_blank'>&nbsp;</a>",
-                showarrow=False,
-                arrowhead=1,
-            )
         # Draw circle
         radius = umap_df["distance"].iloc[-1]
         umap_plot.add_shape(
@@ -439,14 +444,15 @@ def dimension_reduction(sample, reference):
         sample: Sample to analyse.
         reference: Reference data which are compared with sample.
     Returns:
-        methyl_overlap: Methlation matrix with rows corresponding to sample
+        methyl_mtx: Methlation matrix with rows corresponding to sample
             (first row) and reference specimens (remaining rows) and columns
             corresponding to CpGs present both in the reference specimens
             and the sample data set.
         umap_df: UMAP DataFrame corresponding to dimension reduction of
-            methyl_overlap.
+            methyl_mtx.
     """
-    import umap #Moved here due to long loading time (13.5s)
+    # Moved here due to long loading time (13.5s)
+    import umap
 
     logger.info("Start UMAP for %s / %s.", sample.name, reference.name)
     logger.info(reference)
@@ -461,33 +467,47 @@ def dimension_reduction(sample, reference):
         raise ValueError("Sample has no overlapping CpG's with reference.")
 
     # Extract reference and sample methylation according to CpG overlap.
-    reference_methylation = get_reference_methylation(sample, reference)
+    reference_methylation = get_reference_methylation(
+        reference.specimens, sample.cpg_overlap,
+    )
     logger.info("Reference methylation extracted:\n%s", reference_methylation)
-    sample_methylation = get_sample_methylation(sample, reference)
-    logger.info("Sample methylation extracted:\n%s", sample_methylation)
+
+    if sample.name is None:
+        methyl_mtx = reference_methylation
+    else:
+        sample_methylation = get_sample_methylation(sample)
+        logger.info("Sample methylation extracted:\n%s", sample_methylation)
+        methyl_mtx = np.vstack([sample_methylation, reference_methylation])
 
     # Calculate UMAP Nx2 Matrix. Time intensive (~1min).
-    methyl_overlap = np.vstack([sample_methylation, reference_methylation])
     logger.info("UMAP algorithm initiated.")
-    umap_2d = umap.UMAP(verbose=True).fit_transform(methyl_overlap)
+    umap_2d = umap.UMAP(verbose=True).fit_transform(methyl_mtx)
     logger.info("UMAP algorithm done.")
 
     # Free memory
     del reference_methylation
-    del sample_methylation
 
-    umap_sample = umap_2d[0]
-    umap_df = pd.DataFrame({
-        "distance": [np.linalg.norm(z - umap_sample) for z in umap_2d],
-        "methylation_class": [sample.name] + reference.methylation_class,
-        "description":  ["Analysis sample"] + reference.description,
-        "id": [sample.name] + reference.specimens,
-        "x": umap_2d[:,0],
-        "y": umap_2d[:,1],
-    })
+    if sample.name is None:
+        umap_df = pd.DataFrame({
+            "methylation_class": reference.methylation_class,
+            "description": reference.description,
+            "id": reference.specimens,
+            "x": umap_2d[:, 0],
+            "y": umap_2d[:, 1],
+        })
+    else:
+        umap_sample = umap_2d[0]
+        umap_df = pd.DataFrame({
+            "distance": [np.linalg.norm(z - umap_sample) for z in umap_2d],
+            "methylation_class": [sample.name] + reference.methylation_class,
+            "description":  ["Analysis sample"] + reference.description,
+            "id": [sample.name] + reference.specimens,
+            "x": umap_2d[:,0],
+            "y": umap_2d[:,1],
+        })
 
     logger.info("UMAP done. Matrix created.")
-    return (methyl_overlap, umap_df)
+    return (methyl_mtx, umap_df)
 
 def pie_chart(umap_data):
     """Returns plotly pie chart of the methylation classes of the nearest UMAP
@@ -522,9 +542,9 @@ def pie_chart(umap_data):
 
 class UMAPData:
     """UMAP data container and methods for invoking UMAP plot algorithm."""
-    def __init__(self, sample_name, reference_name):
-        self.sample = Sample(sample_name)
-        self.reference = Reference(reference_name)
+    def __init__(self, sample, reference):
+        self.sample = sample
+        self.reference = reference
         self.methyl_overlap = None
         self.umap_df = None
         self.cu_umap_df = None
@@ -533,6 +553,10 @@ class UMAPData:
         self.cu_plot = None
         self.cu_plot_json = None
         self.pie_chart = None
+
+    @classmethod
+    def from_names(cls, sample_name, reference_name):
+        return cls(Sample(sample_name), Reference(reference_name))
 
     def path(self, ending):
         """Returns generic path with corresponding ending."""

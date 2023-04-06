@@ -21,9 +21,12 @@ from nanodip.config import (
     GPU_RAM_USAGE,
 )
 from nanodip.data import (
+    get_reference_methylation,
+    Sample,
     Reference,
 )
 from nanodip.plots import (
+    dimension_reduction,
     UMAPData,
 )
 from nanodip.utils import (
@@ -113,7 +116,7 @@ def calculate_std(reference_id):
         beta_stds = beta_stds.get()
 
     # Standard deviations >1 are useless (typically INF values)
-    beta_stds[beta_stds > 1] = 0
+    beta_stds[(beta_stds > 1) | (np.isnan(beta_stds))] = 0
     std_bin = composite_path(EPIDIP_TMP, reference_id, ENDING["stdarr_bin"])
     beta_stds.tofile(std_bin)
 
@@ -139,7 +142,6 @@ def calculate_std(reference_id):
     beta_value_df.to_csv(path_or_buf=std_sorted_csv, index=False)
 
     # Need to release GPU memory explicitly
-    del beta_value_df
     del beta_stds
     del beta_values
 
@@ -147,102 +149,43 @@ def calculate_std(reference_id):
     if gpu_enabled():
         pool.free_all_blocks()
 
+    return beta_value_df
+
+def epidip_dimemsion_reduction(reference, nr_top_cpgs):
+    """Performs UMAP 2d-dimension reduction.
+
+    Args:
+        reference: Reference data to analyze.
+        nr_top_cpgs: Top CpG's, with highest standard deviation being
+            analyzed.
+    Returns:
+        methyl_mtx: Methlation matrix with rows corresponding to
+            {reference} specimens and columns corresponding to top
+            {nr_top_cpgs} CpGs with highest standard deviation.
+        umap_df: UMAP DataFrame corresponding to dimension reduction of
+            methyl_mtx.
+    """
+    beta_value_df = calculate_std(reference.name)
+
+    dummy_sample = Sample(None)
+    # Add CpG's with the highest standard deviation
+    dummy_sample.set_methyl_df(
+        beta_value_df["cpg_site"][:nr_top_cpgs]
+    )
+
+    return dimension_reduction(dummy_sample, reference)
+
 
 reference_id = "GSE90496_IfP01"
-sample_id = "all_samples"
-# calculate_std(reference_id)
+nr_top_cpgs = 5000
+reference = Reference(reference_id)
+
+# methyl_df, umap_df = epidip_dimemsion_reduction(reference, nr_top_cpgs)
 
 
-umap_data = UMAPData(sample_id, reference_id)
-std_sorted_csv = composite_path(
-    EPIDIP_TMP, reference_id, ENDING["stdsortarr_bin"]
-)
-beta_value_df = pd.read_csv(std_sorted_csv)
+# std_sorted_csv = composite_path(
+    # EPIDIP_TMP, reference_id, ENDING["stdsortarr_bin"]
+# )
+# beta_value_df = pd.read_csv(std_sorted_csv)
 
-
-def epidipUmap(
-    referenceName, referenceStdName, topN
-):  # calculate UMAP plot from files in a given reference set for topN probes
-
-    if not os.path.exists(epidipTmp):
-        os.makedirs(epidipTmp)
-    stdFile = epidipTmp + "/" + referenceStdName + "_stdArray.bin"
-    stdSortFileCsv = epidipTmp + "/" + referenceStdName + "_stdSortArray.csv"
-    epidipUmapXlsx = (
-        epidipTmp
-        + "/"
-        + datetimestringnow()
-        + "_EpiDiP_"
-        + str(topN)
-        + "_"
-        + referenceName.replace(".xlsx", "")
-        + "_"
-        + referenceStdName.replace(".xlsx", "")
-        + ".xlsx"
-    )
-    binSuffix = "_betas_filtered.bin"
-    betaStdDf = pandas.read_csv(stdSortFileCsv, header="infer", sep=",")
-    referenceString = referenceName.replace(".xlsx", "")
-    referenceSheetFile = (
-        referenceDir + "/" + referenceName
-    )  # load reference annotation
-    referenceSheet = pandas.read_excel(
-        referenceSheetFile,
-        header=None,
-        names=["SentrixID", "MethClass", "MethText"],
-    )
-    binFiles = pandas.DataFrame(
-        listdir(binDir)
-    )  # collect reference case binary file names
-    binFiles.columns = ["binFileName"]  # name first column
-    binFiles["SentrixID"] = binFiles.apply(
-        lambda row: row.binFileName.replace(binSuffix, ""), axis=1
-    )  # get SentrixID with string operation on dataframe
-    binFiles["binPath"] = binFiles.apply(
-        lambda row: binDir + "/" + row.binFileName, axis=1
-    )  # get Path with string operation on dataframe
-    referenceSheet = referenceSheet.merge(
-        binFiles, on="SentrixID", how="inner"
-    )  # get overlap between reference list and available bin files
-    numCases = referenceSheet.shape[0]
-    floatSize = 8  # size per float in GPU RAM (tested on AGX Xavier)
-    betaValues = numpy.full(
-        [numCases, topN], -1, dtype="float32", order="C"
-    )  # create fixed-size cupy array filled with -1
-    float64bytes = 8  # binary float64 representation
-    betaStdDf = betaStdDf[0:topN]
-    betaStdDf.sort_values(
-        by="binIndex",
-        axis=0,
-        ascending=True,
-        inplace=True,
-        kind="quicksort",
-        na_position="last",
-        ignore_index=False,
-        key=None,
-    )  # sort the topN lines betaStdDf offsets to facilitate faster loading from permanent storage; rewinding is slow
-    betaStdDf["binOffset"] = betaStdDf.apply(
-        lambda row: row.binIndex * float64bytes, axis=1
-    )  # pre-calculate offsets (in bytes)
-    ind = list(betaStdDf["binOffset"])
-    p_bar0 = tqdm(range(numCases))
-    c = 0
-    for f in p_bar0:
-        with open(referenceSheet["binPath"][f], "rb") as b:
-            buf = bytearray()
-            for i in ind:
-                b.seek(i)  # offset (pre-calculated)
-                buf += b.read(float64bytes)  # read bytes into buffer
-        betaValues[c] = numpy.float32(numpy.frombuffer(buf, dtype="float64"))
-        c += 1
-    betaValues = numpy.nan_to_num(
-        betaValues, nan=0.49
-    )  # replace nan with 0.49
-    betaValuesDf = pandas.DataFrame(betaValues)
-    embedding = pandas.DataFrame(umap.UMAP().fit_transform(betaValues))
-    del betaValues
-    del betaStdDf
-    embedding.columns = ["UMAP 0", "UMAP 1"]
-    referenceSheet = referenceSheet.join(embedding)
-    referenceSheet.to_excel(epidipUmapXlsx)
-    return epidipUmapXlsx
+# umap_data = UMAPData(dummy_sample, reference)

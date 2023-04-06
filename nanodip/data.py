@@ -121,37 +121,41 @@ def make_binary_reference_data_if_needed():
 
 class Reference:
     """Container of reference data and metadata."""
+
+    # Save cpgs with index as dictionary to allow fast index lookup.
+    with open(REFERENCE_CPG_SITES, "r") as f:
+        cpg_site_to_index = {
+            cpg:i for i, cpg in enumerate(f.read().splitlines())
+        }
+    # All possible CpG sites
+    cpg_sites = cpg_site_to_index.keys()
+    # Id's of all reference specimens
+    with open(REFERENCE_SPECIMENS) as f:
+        all_specimens = f.read().splitlines()
+    # Save as dictionary to allow fast index lookup.
+    specimen_to_index = {
+        s:i for i, s in enumerate(all_specimens)
+    }
+
     def __init__(self, name):
         make_binary_reference_data_if_needed()
         self.name = name
-        with open(REFERENCE_CPG_SITES, "r") as f:
-            # Save cpgs as dictionary to allow fast index lookup.
-            self.cpg_site_to_index = {
-                cpg:i for i, cpg in enumerate(f.read().splitlines())
-            }
-        self.cpg_sites = self.cpg_site_to_index.keys()
         self.annotation = self.get_annotation()
-        with open(REFERENCE_SPECIMENS) as f:
-            self.all_specimens = f.read().splitlines()
         # Only consider specimens with annotation entry and binary file.
         annotated_specimens = set(self.annotation["id"]) & set(
-            self.all_specimens
+            Reference.all_specimens
         )
-        # Save as dictionary to allow fast index lookup.
-        specimen_to_index = {s:i for i, s in enumerate(self.all_specimens)}
         self.specimens_index = [
-            specimen_to_index[a] for a in annotated_specimens
+            Reference.specimen_to_index[a] for a in annotated_specimens
         ]
         self.specimens_index.sort()
         # Save as dictionary to allow fast methylation class lookup.
-        specimen_to_mc = {
-            i:mc for i, mc in zip(
-                self.annotation.id, self.annotation.methylation_class
-            )
-        }
+        specimen_to_mc = dict(
+            zip(self.annotation.id, self.annotation.methylation_class)
+        )
         # Annotated specimens sorted by increasing index
         self.specimens = [
-            self.all_specimens[i] for i in self.specimens_index
+            Reference.all_specimens[i] for i in self.specimens_index
         ]
         self.methylation_class = [
             specimen_to_mc[s] for s in self.specimens
@@ -188,10 +192,9 @@ class Reference:
         a heuristic approach.
         """
         abbr_df = pd.read_csv(ANNOTATION_ACRONYMS_BASEL)
-        abbr = {
-            mc:desc for mc, desc in
+        abbr = dict(
             zip(abbr_df.MethylClassStr, abbr_df.MethylClassShortDescr)
-        }
+        )
         non_trivial_abbr = abbr.copy()
         non_trivial_abbr.pop("-")
         tcga_df = pd.read_csv(ANNOTATION_ACRONYMS_TCGA, delimiter="\t")
@@ -233,13 +236,15 @@ class Reference:
             f"Reference object:",
             f"name: '{self.name}'",
             f"annotation:\n{self.annotation}",
-            f"cpg_site_to_index:\n{pd.DataFrame(self.cpg_site_to_index.items())}",
-            f"cpg_sites:\n{pd.DataFrame(self.cpg_sites)}",
-            f"all_specimens:\n{pd.DataFrame(self.all_specimens)}",
             f"specimens :\n{pd.DataFrame(self.specimens)}",
             f"specimens_index\n{pd.DataFrame(self.specimens_index)}",
             f"methylation_class: {pd.DataFrame(self.methylation_class)}",
             f"description: {pd.DataFrame(self.description)}",
+            f"\n\nShared values of all Reference objects:",
+            f"cpg_site_to_index:\n{pd.DataFrame(Reference.cpg_site_to_index.items())}",
+            f"cpg_sites:\n{pd.DataFrame(Reference.cpg_sites)}",
+            f"all_specimens:\n{pd.DataFrame(Reference.all_specimens)}",
+            f"specimen_to_index:\n{pd.DataFrame(Reference.specimen_to_index.items())}",
         ]
         return "\n".join(lines)
 
@@ -344,9 +349,12 @@ def cpg_methyl_from_reads(sample_name):
         methylation status.
     """
 
-    cpg_files = files_by_ending(NANODIP_OUTPUT, sample_name,
-                                ending=ENDING["methoverl_tsv"])
     methylation_info = pd.DataFrame(columns=["cpg_site", "methylation"])
+    if sample_name is None:
+        return methylation_info
+    cpg_files = files_by_ending(
+        NANODIP_OUTPUT, sample_name, ending=ENDING["methoverl_tsv"]
+    )
     for f in cpg_files:
         # Some fast5 files do not contain any CpGs.
         try:
@@ -355,7 +363,7 @@ def cpg_methyl_from_reads(sample_name):
             methylation_info = methylation_info.append(cpgs)
         except FileNotFoundError:
             logger.exception("Empty file encountered, skipping")
-    return methylation_info
+    return methylation_info.reset_index(drop=True)
 
 class Sample:
     """Container of sample data."""
@@ -401,11 +409,19 @@ class Sample:
         reference set, e.g. sex chromosomes.
         """
         self.cpg_overlap = set(self.methyl_df["cpg_site"]).intersection(
-            reference.cpg_sites)
+            Reference.cpg_sites)
         self.cpg_overlap_index = [
-            reference.cpg_site_to_index[f] for f in self.cpg_overlap
+            Reference.cpg_site_to_index[f] for f in self.cpg_overlap
         ]
         self.cpg_overlap_index.sort()
+
+    def set_methyl_df(self, cpgs):
+        """Sets methyl_df manually with empty methylation info. This is
+        used for dummy samples where name==None.
+        """
+        self.methyl_df = pd.DataFrame(
+            [(x, None) for x in cpgs], columns=self.methyl_df.columns,
+        )
 
     def __str__(self):
         """Prints overview of object for debugging purposes."""
@@ -445,7 +461,8 @@ def reference_methylation_from_index(reference_index, cpg_index):
             )[cpg_index]
     return reference_submatrix
 
-def get_reference_methylation(sample, reference):
+# TODO del
+def _get_reference_methylation(sample, reference):
     """Extract and return (reference-specimen x CpG-site) methylation
     matrix from overlap of sample CpG's with annotated reference data.
     """
@@ -455,27 +472,61 @@ def get_reference_methylation(sample, reference):
     cpg_index = sample.cpg_overlap_index
     return reference_methylation_from_index(reference_index, cpg_index)
 
-def get_sample_methylation(sample, reference):
-    """Calculate and return sample methylation from reads.
+def get_reference_methylation(reference_specimens, cpgs):
+    """Extract and return (reference-specimen x CpG-site) methylation
+    matrix.
+
+        Args:
+            reference_specimens: Iterable object of reference specimen id's.
+            cpgs: Iterable object of CpG site id's.
+
+        Returns:
+            Binary matrix of dimension len(reference_specimens)xlen(cpgs)
+            containing corresponding Methylation status.
+    """
+    if not cpgs:
+        raise ValueError("Set of CpG sites is empty")
+    if not reference_specimens:
+        raise ValueError("Set of reference specimens is empty")
+
+    reference_index = [
+        Reference.specimen_to_index[a] for a in reference_specimens
+    ]
+    reference_index.sort()
+
+    cpg_index = [
+        Reference.cpg_site_to_index[c] for c in cpgs
+    ]
+    cpg_index.sort()
+    return reference_methylation_from_index(reference_index, cpg_index)
+
+def get_sample_methylation(sample):
+    """Calculate and return sample methylation from reads (CpG overlap
+    needs to be calculated prior to using this function and depends on
+    reference).
 
     Args:
         sample: Sample to be analysed.
-        reference: Reference used to determine CpG overlap with sample.
 
     Returns:
         Numpy array containing sample methylation on CpG overlap
-            sites. A site is considered methylated if the mean methylation
-            over all reads is greater than METHYLATION_CUTOFF.
+        sites. A site is considered methylated if the mean methylation
+        over all reads is greater than METHYLATION_CUTOFF.
     """
+    if sample.methyl_df.empty:
+        raise ValueError(
+            "CpG set of {sample.name} empty. Use 'set_cpg_overlap' first."
+        )
     sample_methylation = np.full(
-        len(reference.cpg_sites), 0, dtype=bool
+        len(Reference.cpg_sites), 0, dtype=bool
     )
     sample_mean_methylation = sample.methyl_df.groupby(
         "cpg_site",
-        as_index=False).mean()
+        as_index=False,
+    ).mean()
     for row in sample_mean_methylation.itertuples():
         cpg = row.cpg_site
         if cpg in sample.cpg_overlap:
-            i = reference.cpg_site_to_index[cpg]
+            i = Reference.cpg_site_to_index[cpg]
             sample_methylation[i] = row.methylation > METHYLATION_CUTOFF
     return sample_methylation[sample.cpg_overlap_index]

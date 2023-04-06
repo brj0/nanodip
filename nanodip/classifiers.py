@@ -96,7 +96,7 @@ def fit_and_evaluate_classifiers(sample_name, reference_name):
     reference = Reference(reference_name)
     # Define training/test/sample data.
     X_train, X_test, y_train, y_test = training_test_data(sample, reference)
-    x_sample = get_sample_methylation(sample, reference)
+    x_sample = get_sample_methylation(sample)
     # Define classifier models.
     rf_clf = RandomForestClassifier(
         n_estimators=150,
