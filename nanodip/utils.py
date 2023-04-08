@@ -6,14 +6,14 @@ Contains general utility functions.
 
 
 # start_external_modules
-import os
-import warnings
-
-from statsmodels.stats.proportion import proportion_confint
 import colorsys
 import datetime
 import hashlib
 import inspect
+import os
+import warnings
+
+from statsmodels.stats.proportion import proportion_confint
 import jinja2
 import pandas as pd
 import xhtml2pdf.pisa
@@ -28,7 +28,6 @@ from nanodip.config import (
     BETA_VALUES,
     CHROMOSOMES,
     DATA,
-    ENDING,
     EXCLUDED_FROM_ANALYSIS,
     F5C,
     GENES,

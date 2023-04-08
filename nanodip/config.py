@@ -40,9 +40,6 @@ __version__ = "0.0.31"
 # Enables/disables debug mode.
 DEBUG_MODE = True
 
-# TODO implement this.
-VERBOSITY = 0
-
 
 """
 Data directories for MinKNOW and NanoDiP output.

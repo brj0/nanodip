@@ -5,7 +5,6 @@
 # start_external_modules
 import logging
 import os
-import cupy
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
@@ -167,13 +166,15 @@ def epidip_dimemsion_reduction(reference, nr_top_cpgs):
     """
     beta_value_df = calculate_std(reference.name)
 
-    dummy_sample = Sample(None)
-    # Add CpG's with the highest standard deviation
-    dummy_sample.set_methyl_df(
-        beta_value_df["cpg_site"][:nr_top_cpgs]
-    )
 
-    return dimension_reduction(dummy_sample, reference)
+    # std_sorted_csv = composite_path(
+        # EPIDIP_TMP, reference_id, ENDING["stdsortarr_bin"]
+    # )
+    # beta_value_df = pd.read_csv(std_sorted_csv)
+
+    cpgs_data = Sample.by_cpgs(beta_value_df["cpg_site"][:nr_top_cpgs])
+    umap_data = UMAPData(cpgs_data, reference)
+    umap_data.make_umap_plot()
 
 
 reference_id = "GSE90496_IfP01"
@@ -183,9 +184,5 @@ reference = Reference(reference_id)
 # methyl_df, umap_df = epidip_dimemsion_reduction(reference, nr_top_cpgs)
 
 
-# std_sorted_csv = composite_path(
-    # EPIDIP_TMP, reference_id, ENDING["stdsortarr_bin"]
-# )
-# beta_value_df = pd.read_csv(std_sorted_csv)
 
 # umap_data = UMAPData(dummy_sample, reference)

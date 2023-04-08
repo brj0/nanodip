@@ -116,6 +116,7 @@ def make_binary_reference_data(
         f.write(index)
 
 def make_binary_reference_data_if_needed():
+    """Creates binary reference data if not found on disk."""
     if not binary_reference_data_exists():
         make_binary_reference_data()
 
@@ -348,10 +349,7 @@ def cpg_methyl_from_reads(sample_name):
         Pandas Data Frame containing the reads Illumina cpg_sites and
         methylation status.
     """
-
     methylation_info = pd.DataFrame(columns=["cpg_site", "methylation"])
-    if sample_name is None:
-        return methylation_info
     cpg_files = files_by_ending(
         NANODIP_OUTPUT, sample_name, ending=ENDING["methoverl_tsv"]
     )
@@ -367,12 +365,27 @@ def cpg_methyl_from_reads(sample_name):
 
 class Sample:
     """Container of sample data."""
-    def __init__(self, name):
+    def __init__(self, name, cpgs=None):
+        # Either Sample is initialized by name/id or by CpG's
+        if (name is None and cpgs is None) or (
+            name is not None and cpgs is not None
+        ):
+            raise ValueError("Either {name} or {cpgs} must be given")
         self.name = name
-        self.methyl_df = cpg_methyl_from_reads(name)
-        self.cpg_overlap = set()
+        self.methyl_df = None
+        self.cpg_overlap = None
         self.cpg_overlap_index = None
         self.reads = None
+        self.set_cpgs(cpgs)
+
+    @classmethod
+    def by_cpgs(cls, cpgs):
+        """Constructor for manually define sample by CpG site set."""
+        return cls(None, cpgs)
+
+    def cpgs_only(self):
+        """Returns true iff only CpG set is given without methylation info."""
+        return self.name is None
 
     def set_reads(self):
         """Calculate all read start and end positions and save data
@@ -385,7 +398,7 @@ class Sample:
             samfile = pysam.AlignmentFile(f, "rb")
             # If there is no bam.bai index file, pysam will fail.
             if not samfile.has_index():
-                logger.warning(f"No index file for {f}. Skip.")
+                logger.warning("No index file for %s. Skip.", f)
                 continue
             for chrom in genome:
                 for read in samfile.fetch(chrom.name):
@@ -401,9 +414,22 @@ class Sample:
                     assert (read.reference_length != 0), "Empty read"
         self.reads = read_positions
 
-    def set_cpg_overlap(self, reference):
+    def set_cpgs(self, cpgs=None):
+        """Sets CpG sites and additional data. This can be set manually
+        (used for dummy samples containing CpG's only) or will be set
+        automatically by searching the disk for methylation data
+        coresponding to {sample.name}.
+        """
+        if cpgs is None:
+            self.methyl_df = cpg_methyl_from_reads(self.name)
+        else:
+            self.methyl_df = pd.DataFrame([(x, None) for x in cpgs])
+        self.methyl_df.columns = ["cpg_site", "methylation"]
+        self.set_cpg_overlap()
+
+    def set_cpg_overlap(self):
         """Sets CpG overlap and cpg-site-index between sample
-        and reference.
+        and reference CpGs.
 
         This is necessary since some probes have been skipped from the
         reference set, e.g. sex chromosomes.
@@ -414,14 +440,6 @@ class Sample:
             Reference.cpg_site_to_index[f] for f in self.cpg_overlap
         ]
         self.cpg_overlap_index.sort()
-
-    def set_methyl_df(self, cpgs):
-        """Sets methyl_df manually with empty methylation info. This is
-        used for dummy samples where name==None.
-        """
-        self.methyl_df = pd.DataFrame(
-            [(x, None) for x in cpgs], columns=self.methyl_df.columns,
-        )
 
     def __str__(self):
         """Prints overview of object for debugging purposes."""
@@ -461,17 +479,6 @@ def reference_methylation_from_index(reference_index, cpg_index):
             )[cpg_index]
     return reference_submatrix
 
-# TODO del
-def _get_reference_methylation(sample, reference):
-    """Extract and return (reference-specimen x CpG-site) methylation
-    matrix from overlap of sample CpG's with annotated reference data.
-    """
-    if not sample.cpg_overlap:
-        raise ValueError("CpG overlap is empty")
-    reference_index = reference.specimens_index
-    cpg_index = sample.cpg_overlap_index
-    return reference_methylation_from_index(reference_index, cpg_index)
-
 def get_reference_methylation(reference_specimens, cpgs):
     """Extract and return (reference-specimen x CpG-site) methylation
     matrix.
@@ -501,9 +508,7 @@ def get_reference_methylation(reference_specimens, cpgs):
     return reference_methylation_from_index(reference_index, cpg_index)
 
 def get_sample_methylation(sample):
-    """Calculate and return sample methylation from reads (CpG overlap
-    needs to be calculated prior to using this function and depends on
-    reference).
+    """Calculate and return sample methylation from reads.
 
     Args:
         sample: Sample to be analysed.
@@ -515,7 +520,7 @@ def get_sample_methylation(sample):
     """
     if sample.methyl_df.empty:
         raise ValueError(
-            "CpG set of {sample.name} empty. Use 'set_cpg_overlap' first."
+            "CpG set of {sample.name} is empty."
         )
     sample_methylation = np.full(
         len(Reference.cpg_sites), 0, dtype=bool

@@ -13,7 +13,6 @@ from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neural_network import MLPClassifier
-from sklearn.svm import SVC
 # end_external_modules
 
 # start_internal_modules
@@ -53,7 +52,7 @@ def evaluate_clf(clf, x_sample, X_test, y_test):
     # Fraction of correctly classified test samples.
     accuracy = accuracy_score(y_test, y_predict)
     prob = clf.predict_proba([x_sample])[0]
-    prob_per_class = [(p, c) for p, c in zip(prob, clf.classes_)]
+    prob_per_class = list(zip(prob, clf.classes_))
     prob_per_class.sort(reverse=True)
     result = (
         "Evaluation of %s\n"
@@ -76,7 +75,6 @@ def training_test_data(sample, reference):
         X_train, X_test, y_train, y_test: Split training and test
             data pairs.
     """
-    sample.set_cpg_overlap(reference)
     X = reference_methylation_from_index(
         reference.specimens_index, sample.cpg_overlap_index
     )
@@ -110,6 +108,7 @@ def fit_and_evaluate_classifiers(sample_name, reference_name):
         verbose=True,
     )
     # SVM are very time consuming.
+    # from sklearn.svm import SVC
     # svm_clf = SVC(
         # kernel="linear",
         # probability=True,

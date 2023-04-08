@@ -58,10 +58,12 @@ def get_bin_edges(n_bins, genome):
     return edges
 
 def get_cnv(read_positions, genome):
-    """Return CNV.
+    """Returns CNV.
+
     Args:
         read_positions: List of reads in the form [start, end].
         genome: Reference genome.
+
     Returns:
         bin_midpoints: numpy array of x-values
         copy_numbers: numpy array of y-values
@@ -362,10 +364,13 @@ def umap_plot_from_data(sample, reference, umap_df, close_up):
     Returns:
         UMAP plot as plotly object.
     """
+    # If true, sample methylation is part of analysis.
+    add_sample = not sample.cpgs_only()
+
     umap_sample = umap_df.iloc[0]
-    title0 = "Epidip data" if sample.name is None else f"{sample.name}"
+    title0 = f"for {sample.name}" if add_sample else ""
     umap_title = (
-        f"UMAP for {title0} <br><sup>Reference: {reference.name} "
+        f"UMAP {title0} <br><sup>Reference: {reference.name} "
         f"({len(reference.specimens)} cases), "
         f"{len(sample.cpg_overlap)} CpGs </sup>"
     )
@@ -390,7 +395,7 @@ def umap_plot_from_data(sample, reference, umap_df, close_up):
         render_mode=PLOTLY_RENDER_MODE,
         template="simple_white",
     )
-    if sample.name is not None:
+    if add_sample:
         umap_plot.add_annotation(
             x=umap_sample["x"],
             y=umap_sample["y"],
@@ -406,7 +411,7 @@ def umap_plot_from_data(sample, reference, umap_df, close_up):
     umap_plot.update_xaxes(
         mirror=True,
     )
-    umap_df_ref = umap_df if sample.name is None else umap_df[1:]
+    umap_df_ref = umap_df[1:] if add_sample else umap_df
     links = [
         f"<a href='{url}' target='_blank'>&nbsp;</a>"
         for url in [CNV_LINK % id_ for id_ in umap_df_ref.id]
@@ -419,6 +424,7 @@ def umap_plot_from_data(sample, reference, umap_df, close_up):
         name="CNV links",
         text=links,
         hoverinfo="skip",
+        visible="legendonly",
     ))
     # If close-up add hyperlinks for all references and draw circle
     if close_up:
@@ -437,29 +443,33 @@ def umap_plot_from_data(sample, reference, umap_df, close_up):
         )
     return umap_plot
 
-def dimension_reduction(sample, reference):
+def dimension_reduction(reference, sample):
     """Performs UMAP 2d-dimension reduction.
 
     Args:
-        sample: Sample to analyse.
         reference: Reference data which are compared with sample.
+        sample: Sample to analyse containing CpG's possibly with
+            methylation status.
     Returns:
-        methyl_mtx: Methlation matrix with rows corresponding to sample
-            (first row) and reference specimens (remaining rows) and columns
-            corresponding to CpGs present both in the reference specimens
-            and the sample data set.
+        methyl_mtx: Methlation matrix with rows corresponding to
+            reference specimens and columns corresponding to CpGs of
+            sample overlapping reference. If sample contains methylation
+            status for each CpG, then a first row corresponding to
+            sample is added to matrix.
         umap_df: UMAP DataFrame corresponding to dimension reduction of
             methyl_mtx.
     """
     # Moved here due to long loading time (13.5s)
     import umap
 
+    # If true, sample methylation is part of analysis.
+    add_sample = not sample.cpgs_only()
+
     logger.info("Start UMAP for %s / %s.", sample.name, reference.name)
     logger.info(reference)
 
     # Calculate overlap of sample CpG's with reference CpG's (some probes
     # have been skipped from the reference set, e.g. sex chromosomes).
-    sample.set_cpg_overlap(reference)
     logger.info(sample)
 
     if not sample.cpg_overlap:
@@ -472,12 +482,12 @@ def dimension_reduction(sample, reference):
     )
     logger.info("Reference methylation extracted:\n%s", reference_methylation)
 
-    if sample.name is None:
-        methyl_mtx = reference_methylation
-    else:
+    if add_sample:
         sample_methylation = get_sample_methylation(sample)
         logger.info("Sample methylation extracted:\n%s", sample_methylation)
         methyl_mtx = np.vstack([sample_methylation, reference_methylation])
+    else:
+        methyl_mtx = reference_methylation
 
     # Calculate UMAP Nx2 Matrix. Time intensive (~1min).
     logger.info("UMAP algorithm initiated.")
@@ -487,15 +497,7 @@ def dimension_reduction(sample, reference):
     # Free memory
     del reference_methylation
 
-    if sample.name is None:
-        umap_df = pd.DataFrame({
-            "methylation_class": reference.methylation_class,
-            "description": reference.description,
-            "id": reference.specimens,
-            "x": umap_2d[:, 0],
-            "y": umap_2d[:, 1],
-        })
-    else:
+    if add_sample:
         umap_sample = umap_2d[0]
         umap_df = pd.DataFrame({
             "distance": [np.linalg.norm(z - umap_sample) for z in umap_2d],
@@ -504,6 +506,14 @@ def dimension_reduction(sample, reference):
             "id": [sample.name] + reference.specimens,
             "x": umap_2d[:,0],
             "y": umap_2d[:,1],
+        })
+    else:
+        umap_df = pd.DataFrame({
+            "methylation_class": reference.methylation_class,
+            "description": reference.description,
+            "id": reference.specimens,
+            "x": umap_2d[:, 0],
+            "y": umap_2d[:, 1],
         })
 
     logger.info("UMAP done. Matrix created.")
@@ -568,17 +578,21 @@ class UMAPData:
     def make_umap_plot(self):
         """Invoke UMAP plot algorithm and save files to disk."""
         self.methyl_overlap, self.umap_df = dimension_reduction(
-            self.sample, self.reference
+            self.reference, self.sample
         )
-        self.draw_scatter_plots()
-        self.draw_pie_chart()
-        self.save_to_disk()
+        self.draw_scatter_plot()
+        # If true, sample methylation is part of analysis.
+        add_sample = not self.sample.cpgs_only()
+        if add_sample:
+            self.draw_cu_scatter_plot()
+            self.draw_pie_chart()
+        self.save_to_disk("all" if add_sample else "no_sample")
 
     def draw_pie_chart(self):
         """Draw pie chart of nearest UMAP neighbors."""
         self.pie_chart = pie_chart(self)
 
-    def draw_scatter_plots(self):
+    def draw_scatter_plot(self):
         """Draws UMAP scatter plot with close-up plot from data."""
         self.plot = umap_plot_from_data(
             self.sample,
@@ -587,6 +601,11 @@ class UMAPData:
             close_up=False,
         )
         logger.info("UMAP plot generated.")
+        # Convert to json.
+        self.plot_json = self.plot.to_json()
+
+    def draw_cu_scatter_plot(self):
+        """Draws UMAP scatter close-up plot from data."""
         self.cu_umap_df = self.umap_df.sort_values(
             by="distance"
         )[:UMAP_PLOT_TOP_MATCHES + 1]
@@ -597,40 +616,48 @@ class UMAPData:
             close_up=True,
         )
         logger.info("UMAP close-up plot generated.")
-
         # Convert to json.
-        self.plot_json = self.plot.to_json()
         self.cu_plot_json = self.cu_plot.to_json()
 
-    def save_to_disk(self):
+    def save_to_disk(self, params="all"):
         """Saves relevant data to disk."""
+        if params == "all":
+            obj = ["mmtx", "umtx", "plt", "cplt", "pie", "rnk"]
+        elif params == "no_sample":
+            obj = ["mmtx", "umtx", "plt"]
         # Save methylation matrix.
-        np.save(self.path("methoverl_npy"), self.methyl_overlap)
+        if "mmtx" in obj:
+            np.save(self.path("methoverl_npy"), self.methyl_overlap)
 
         # Save UMAP Matrix.
-        self.umap_df.to_csv(self.path("umap_csv"), index=False)
+        if "umtx" in obj:
+            self.umap_df.to_csv(self.path("umap_csv"), index=False)
 
         # Write UMAP plot to disk.
-        self.plot.write_html(
-            self.path("umapall_html"), config=dict({"scrollZoom": True})
-        )
-        self.plot.write_json(self.path("umapall_json"))
-        self.plot.write_image(self.path("umapall_png")) # Time consumption 1.8s
+        if "plt" in obj:
+            self.plot.write_html(
+                self.path("umapall_html"), config=dict({"scrollZoom": True})
+            )
+            self.plot.write_json(self.path("umapall_json"))
+            self.plot.write_image(self.path("umapall_png")) # Time consumption 1.8s
 
         # Write UMAP close-up plot to disk.
-        self.cu_plot.write_html(
-            self.path("umaptop_html"), config=dict({"scrollZoom": True})
-        )
-        self.cu_plot.write_json(self.path("umaptop_json"))
-        self.cu_plot.write_image(
-            self.path("umaptop_png"), width=600, scale=3
-        ) # Time consumption 0.9s
+        if "cplt" in obj:
+            self.cu_plot.write_html(
+                self.path("umaptop_html"), config=dict({"scrollZoom": True})
+            )
+            self.cu_plot.write_json(self.path("umaptop_json"))
+            self.cu_plot.write_image(
+                self.path("umaptop_png"), width=600, scale=3
+            ) # Time consumption 0.9s
 
         # Write pie chart to disk.
-        self.pie_chart.write_image(self.path("pie_png"), width=600, scale=3)
+        if "pie" in obj:
+            self.pie_chart.write_image(self.path("pie_png"), width=600, scale=3)
 
         # Save close up ranking report.
-        self.save_ranking_report() # Time consumption 0.4s
+        if "rnk" in obj:
+            self.save_ranking_report() # Time consumption 0.4s
 
     def save_ranking_report(self):
         """Save pdf containing the nearest neighbours from umap analyis."""

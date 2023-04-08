@@ -186,8 +186,8 @@ class ActivePlots:
         return str(self.plot)
 
 class MultiSemaphore:
-    """Two-level semaphore object for processes with light and heavy
-    utilization of the system.
+    """Two-level semaphore object allowing one process using light and
+    one process using heavy utilization of the system simultaneously.
     """
 
     def __init__(self):
@@ -237,7 +237,7 @@ class UI:
 
     # Methylation calling, UMAP and and non-supervised classifiers all
     # heavily use system resources, and using them at the same time
-    # leads to crash. Therefore shared semaphore is used.
+    # leads to crash. Therefore a shared semaphore is used.
     all_sem = threading.Semaphore()
 
     @cherrypy.expose
@@ -682,7 +682,7 @@ class UI:
         evaluation output.
         """
         file_path = composite_path(
-            NANODIP_REPORTS, sample_name, reference_name, ENDING["clf"],
+            NANODIP_REPORTS, sample_name, reference_name, ENDING["clf_txt"],
         )
         if start == "True":
             with open(file_path, "w") as f:
@@ -806,7 +806,8 @@ class UI:
             umap_data = UMAPData.from_names(sentrix_id, reference_id)
             umap_data.read_precalculated_umap_matrix(reference_umap)
             umap_data.draw_pie_chart()
-            umap_data.draw_scatter_plots()
+            umap_data.draw_scatter_plot()
+            umap_data.draw_cu_scatter_plot()
             umap_data.save_to_disk()
             UI.make_pdf(
                 self, sample_name=sentrix_id, reference_name=reference_id
