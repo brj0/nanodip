@@ -6,6 +6,7 @@
 
 {% block body %}
 
+{% if not ntop %}
 <div id="umap_radio" class="hidden">
   <input type="radio" id="choice_all" name="display_type" value="all" checked="checked">
   <label for="choice_all">All</label>
@@ -13,6 +14,7 @@
   <input type="radio" id="choice_cu" name="display_type" value="cu">
   <label for="choice_cu">Close-up</label>
 </div>
+{% endif %}
 
 <div class="loader" id="loader"></div>
 <div id="umap_all"></div>
@@ -36,9 +38,10 @@
       type: "GET",
       contentType: "application/json;charset=UTF-8",
       data: {
-        "sample_name": "{{sample_name}}",
         "reference_name": "{{reference_name}}",
+        "sample_name": "{{sample_name}}",
         "new": "{{new}}",
+        "ntop": "{{ntop}}",
       },
       dataType:"json",
       error: function() {

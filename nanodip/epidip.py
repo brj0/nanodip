@@ -3,8 +3,12 @@
 """
 
 # start_external_modules
+from urllib import request
 import logging
 import os
+import time
+
+from pdf2image import convert_from_path
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
@@ -14,24 +18,20 @@ import pandas as pd
 # start_internal_modules
 from nanodip.config import (
     BETA_VALUES,
+    CNV_LINK,
     ENDING,
     EPIDIP_TMP,
     GPU_FLOAT_SIZE,
     GPU_RAM_USAGE,
+    NANODIP_REPORTS,
+    UMAP_LINK,
 )
 from nanodip.data import (
-    get_reference_methylation,
-    Sample,
     Reference,
-)
-from nanodip.plots import (
-    dimension_reduction,
-    UMAPData,
 )
 from nanodip.utils import (
     composite_path,
 )
-
 # end_internal_modules
 
 # Define logger
@@ -42,7 +42,6 @@ def gpu_enabled():
     """Tests if CUDA device is present."""
     try:
         import cupy
-
         cupy.cuda.Device()
         return True
     except:
@@ -52,8 +51,31 @@ def gpu_enabled():
 # Import cupy if available.
 if gpu_enabled():
     import cupy as xp
+    import cupy
 else:
     import numpy as xp
+
+
+def download_epidip_data(sentrix_id, reference_umap):
+    """Downloads UMAP plot coordinates of reference data and CNV plot of
+    sample with given Sentrix ID.
+    """
+    umap_coordinates_local = composite_path(
+        NANODIP_REPORTS,
+        sentrix_id,
+        reference_umap[:-5],
+        ENDING["umap_xlsx"],
+    )
+
+    url = UMAP_LINK % reference_umap
+    request.urlretrieve(url, umap_coordinates_local)
+
+    cnv_local = composite_path(NANODIP_REPORTS, sentrix_id, ENDING["cnv_pdf"])
+    url = CNV_LINK % sentrix_id
+    request.urlretrieve(url, cnv_local)
+
+    image = convert_from_path(cnv_local)[0]
+    image.save(cnv_local.replace("pdf", "png"), "png")
 
 
 def calculate_std(reference_id):
@@ -87,10 +109,16 @@ def calculate_std(reference_id):
     # Number of cases is variable
     block_size = GPU_RAM_USAGE // (GPU_FLOAT_SIZE * len(reference.specimens))
 
+    # TODO Segmentation fault (core dumped)
+    print("**************************0*******************************")
+    print("specimens_cnt=", specimens_cnt, "block_size=", block_size)
+    print("xp=", xp)
+
     # Initialize memory for loop.
     beta_values = xp.full(
         [specimens_cnt, block_size], -1, dtype=float, order="C"
     )
+    print("**************************1*******************************")
     beta_stds = xp.array([])
 
     # Break data into blocks along the cpg-columns, adjusted to
@@ -135,10 +163,10 @@ def calculate_std(reference_id):
         ignore_index=False,
         key=None,
     )
-    std_sorted_csv = composite_path(
+    std_sorted = composite_path(
         EPIDIP_TMP, reference_id, ENDING["stdsortarr_bin"]
     )
-    beta_value_df.to_csv(path_or_buf=std_sorted_csv, index=False)
+    beta_value_df.to_csv(path_or_buf=std_sorted, index=False)
 
     # Need to release GPU memory explicitly
     del beta_stds
@@ -150,39 +178,20 @@ def calculate_std(reference_id):
 
     return beta_value_df
 
-def epidip_dimemsion_reduction(reference, nr_top_cpgs):
-    """Performs UMAP 2d-dimension reduction.
 
-    Args:
-        reference: Reference data to analyze.
-        nr_top_cpgs: Top CpG's, with highest standard deviation being
-            analyzed.
-    Returns:
-        methyl_mtx: Methlation matrix with rows corresponding to
-            {reference} specimens and columns corresponding to top
-            {nr_top_cpgs} CpGs with highest standard deviation.
-        umap_df: UMAP DataFrame corresponding to dimension reduction of
-            methyl_mtx.
+def top_variable_cpgs(reference, nr_top_cpgs):
+    """Returns the 'nr_top_cpgs' most variable CpG's of 'reference',
+    measured by standard deviation.
     """
-    beta_value_df = calculate_std(reference.name)
-
-
-    # std_sorted_csv = composite_path(
-        # EPIDIP_TMP, reference_id, ENDING["stdsortarr_bin"]
-    # )
-    # beta_value_df = pd.read_csv(std_sorted_csv)
-
-    cpgs_data = Sample.by_cpgs(beta_value_df["cpg_site"][:nr_top_cpgs])
-    umap_data = UMAPData(cpgs_data, reference)
-    umap_data.make_umap_plot()
-
-
-reference_id = "GSE90496_IfP01"
-nr_top_cpgs = 5000
-reference = Reference(reference_id)
-
-# methyl_df, umap_df = epidip_dimemsion_reduction(reference, nr_top_cpgs)
-
-
-
-# umap_data = UMAPData(dummy_sample, reference)
+    std_sorted = composite_path(
+        EPIDIP_TMP, reference.name, ENDING["stdsortarr_bin"]
+    )
+    # Calculates the stds and stores them in a file if it does not
+    # already exist or is older than 1 hour.
+    if (
+        not os.path.exists(std_sorted)
+        or time.time() - os.path.getmtime(std_sorted) > 60 * 60
+    ):
+        calculate_std(reference.name)
+    beta_value_df = pd.read_csv(std_sorted)
+    return beta_value_df["cpg_site"][:nr_top_cpgs]

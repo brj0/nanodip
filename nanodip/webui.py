@@ -10,7 +10,6 @@ the Web UI cell below.
 """
 
 # start_external_modules
-from urllib import request
 import json
 import logging
 import os
@@ -19,7 +18,6 @@ import shutil
 import socket
 import threading
 
-from pdf2image import convert_from_path
 import cherrypy
 import grpc
 import psutil
@@ -30,11 +28,9 @@ from nanodip.config import (
     ANALYSIS_EXCLUSION_PATTERNS,
     CHERRYPY_HOST,
     CHERRYPY_PORT,
-    CNV_LINK,
     DATA,
     DEBUG_MODE,
     ENDING,
-    UMAP_LINK,
     EPIDIP_UMAP_COORDINATE_FILES,
     NANODIP_REPORTS,
     NEEDED_NUMBER_OF_BASES,
@@ -68,11 +64,17 @@ from nanodip.api import (
 )
 from nanodip.data import (
     Genome,
+    Reference,
+    Sample,
     binary_reference_data_exists,
 )
 from nanodip.plots import (
     CNVData,
     UMAPData,
+)
+from nanodip.epidip import(
+    download_epidip_data,
+    top_variable_cpgs,
 )
 from nanodip.classifiers import (
     fit_and_evaluate_classifiers,
@@ -135,27 +137,6 @@ class Devices:
         out += ", ".join([str(d) for d in self.list])
         out += "]"
         return out
-
-def download_epidip_data(sentrix_id, reference_umap):
-    """Downloads UMAP plot coordinates of reference data and CNV plot of
-    sample with given Sentrix ID.
-    """
-    umap_coordinates_local = composite_path(
-        NANODIP_REPORTS,
-        sentrix_id,
-        reference_umap[:-5],
-        ENDING["umap_xlsx"],
-    )
-
-    url = UMAP_LINK % reference_umap
-    request.urlretrieve(url, umap_coordinates_local)
-
-    cnv_local = composite_path(NANODIP_REPORTS, sentrix_id, ENDING["cnv_pdf"])
-    url = CNV_LINK % sentrix_id
-    request.urlretrieve(url, cnv_local)
-
-    image = convert_from_path(cnv_local)[0]
-    image.save(cnv_local.replace("pdf", "png"), "png")
 
 class ActivePlots:
     """Container to keep the most recent plots in memory to speed up
@@ -390,6 +371,7 @@ class UI:
             )
             return render_template(
                 "start.html",
+                url_action=url_for(UI.start),
                 start_now=start_now,
                 test=False,
                 sample_id=sample_id,
@@ -406,6 +388,7 @@ class UI:
         flow_cell = {pos:flow_cell_id(pos) for pos in idle}
         return render_template(
             "start.html",
+            url_action=url_for(UI.start),
             start_now=start_now,
             test=False,
             idle=idle,
@@ -440,6 +423,7 @@ class UI:
         flow_cell = {pos:flow_cell_id(pos) for pos in idle}
         return render_template(
             "start.html",
+            url_action=url_for(UI.start_test),
             start_now=False,
             test=True,
             idle=idle,
@@ -586,7 +570,7 @@ class UI:
         if func == "umap":
             return render_template(
                 "analysis_umap.html",
-                url_umap=url_for(UI.umap),
+                url_umap=url_for(UI.umap_plt),
                 sample_name=sample_name,
                 reference_name=reference_name,
                 new=new,
@@ -634,11 +618,11 @@ class UI:
         return cnv_data.plot_cnv_and_genes()
 
     @cherrypy.expose
-    def umap(self, sample_name, reference_name, new="False"):
+    def umap_plt(self, reference_name, sample_name, new="False", ntop=""):
         """Creates UMAP plot and returns it as JSON."""
         UI.sem.acquire("umap")
         try:
-            umap_data = UMAPData.from_names(sample_name, reference_name)
+            umap_data = UMAPData.from_names(reference_name, sample_name)
         except FileNotFoundError:
             raise cherrypy.HTTPError(405, "URL not allowed")
         if not umap_data.files_on_disk() or new == "True":
@@ -654,6 +638,62 @@ class UI:
             "all": umap_data.plot_json,
             "close_up": umap_data.cu_plot_json
         })
+
+    @cherrypy.expose
+    def umap_plt_epidip(
+        self,
+        reference_name,
+        ntop,
+        sample_name="",
+        new="",
+    ):
+        """Creates UMAP plot and returns it as JSON."""
+        try:
+            nr_top_cpgs = int(ntop)
+        except ValueError:
+            raise cherrypy.HTTPError(405, "'ntop' must be an integer")
+        UI.sem.acquire("umap")
+        try:
+            reference = Reference(reference_name)
+            top_cpgs = top_variable_cpgs(reference, nr_top_cpgs)
+            sample = Sample.from_cpgs(top_cpgs)
+            umap_data = UMAPData(reference, sample)
+        except FileNotFoundError:
+            raise cherrypy.HTTPError(405, "URL not allowed")
+        try:
+            umap_data.make_umap_plot()
+        except ValueError:
+            UI.sem.release("umap")
+            raise cherrypy.HTTPError(405, "No data to plot.")
+        else:
+            umap_data.read_from_disk()
+        UI.sem.release("umap")
+        return json.dumps({
+            "all": umap_data.plot_json,
+        })
+
+    @cherrypy.expose
+    def epidip_umap(
+        self,
+        reference_name="",
+        ntop="",
+        sample_name="",
+    ):
+        """Page for invoking UMAP for EpiDiP reference data."""
+        if bool(reference_name) and bool(ntop):
+            return render_template(
+                "analysis_umap.html",
+                url_umap=url_for(UI.umap_plt_epidip),
+                sample_name=sample_name,
+                reference_name=reference_name,
+                ntop=ntop,
+                first_use = not binary_reference_data_exists(),
+            )
+        return render_template(
+            "epidip_umap.html",
+            url_action=url_for(UI.epidip_umap),
+            references=reference_annotations(),
+        )
 
     @cherrypy.expose
     def classifiers(
@@ -803,7 +843,7 @@ class UI:
         """
         if sentrix_id and reference_id and reference_umap:
             download_epidip_data(sentrix_id, reference_umap)
-            umap_data = UMAPData.from_names(sentrix_id, reference_id)
+            umap_data = UMAPData.from_names(reference_id, sentrix_id)
             umap_data.read_precalculated_umap_matrix(reference_umap)
             umap_data.draw_pie_chart()
             umap_data.draw_scatter_plot()
@@ -815,6 +855,7 @@ class UI:
         else:
             return render_template(
                 "epidip_report.html",
+                url_action=url_for(UI.epidip_report),
                 reference_umap=reference_umap,
                 epidip_umaps=EPIDIP_UMAP_COORDINATE_FILES,
                 references=reference_annotations(),

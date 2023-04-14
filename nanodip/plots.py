@@ -552,7 +552,7 @@ def pie_chart(umap_data):
 
 class UMAPData:
     """UMAP data container and methods for invoking UMAP plot algorithm."""
-    def __init__(self, sample, reference):
+    def __init__(self, reference, sample):
         self.sample = sample
         self.reference = reference
         self.methyl_overlap = None
@@ -565,8 +565,13 @@ class UMAPData:
         self.pie_chart = None
 
     @classmethod
-    def from_names(cls, sample_name, reference_name):
-        return cls(Sample(sample_name), Reference(reference_name))
+    def from_names(cls, reference_name, sample_name):
+        return cls(Reference(reference_name), Sample(sample_name))
+
+    @classmethod
+    def from_cpgs(cls, reference_name, cpgs):
+        sample = Sample.from_cpgs(cpgs)
+        return cls(Reference(reference_name), sample)
 
     def path(self, ending):
         """Returns generic path with corresponding ending."""
@@ -667,12 +672,12 @@ class UMAPData:
         with open(self.path("cpg_cnt"), "w") as f:
             f.write(f"{len(self.sample.cpg_overlap)}")
 
-    def files_on_disk(self):
+    def files_on_disk(self, close_up=True):
         """Check if files are on disk."""
         return (
             os.path.exists(self.path("methoverl_npy")) and
             os.path.exists(self.path("umapall_json")) and
-            os.path.exists(self.path("umaptop_json")) and
+            (os.path.exists(self.path("umaptop_json")) or not close_up) and
             os.path.exists(self.path("umap_csv"))
         )
 
@@ -682,9 +687,10 @@ class UMAPData:
         with open(self.path("umapall_json"), "r") as f:
             self.plot_json = f.read()
 
-        # Read UMAP close-up plot as json.
-        with open(self.path("umaptop_json"), "r") as f:
-            self.cu_plot_json = f.read()
+        # Read UMAP close-up plot as json if it exists.
+        if os.path.exists(self.path("umaptop_json")):
+            with open(self.path("umaptop_json"), "r") as f:
+                self.cu_plot_json = f.read()
 
         # Read Methylation Matrix.
         self.methyl_overlap = np.load(self.path("methoverl_npy"), allow_pickle=True)

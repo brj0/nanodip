@@ -32,15 +32,7 @@
 
 {% else %}
 
-  {% if test %}
-
-  <form action="start_test" method="GET">
-
-  {% else %}
-
-  <form action="start" method="GET">
-
-  {% endif %}
+  <form action="{{url_action}}" method="GET">
 
     Select an idle Mk1b:&nbsp;
 

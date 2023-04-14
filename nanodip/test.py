@@ -111,6 +111,11 @@ from nanodip.classifiers import (
     training_test_data,
     evaluate_clf,
 )
+from nanodip.epidip import(
+    calculate_std,
+    gpu_enabled,
+    top_variable_cpgs,
+)
 
 import nanodip.config as config
 import nanodip.data as data
@@ -127,18 +132,14 @@ print("import done")
 logger = logging.getLogger(__name__)
 
 
-sample_name = "test20221124a"
+# sample_name = "test20221124a"
 sample_name = "B2022_30785_20220715_BC12"
-
+reference_name = "MNG_IfP_v1"
+reference_name = "AllIDATv2_20210804"
 reference_name = "GSE90496_IfP01"
 
 sample = Sample(sample_name)
 reference = Reference(reference_name)
+calculate_std(reference_name)
 
-cpgs = list(sample.cpg_overlap)[:100]
 
-ns = Sample.by_cpgs(cpgs)
-
-analysis_dir = (
-    "/data/nanodip_output/test20221124a/FAT00297_pass_barcode02_7959fab8_0"
-)

@@ -206,6 +206,9 @@ ENDING = {
     "umaptop_png": "UMAP_top.png",
 }
 
+# Name for Samples cpgs containing only
+EMPTY_SAMPLE = "nosample"
+
 
 
 """

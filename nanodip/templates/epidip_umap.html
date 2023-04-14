@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}
+  EpiDiP UMAP
+{% endblock %}
+
+{% block body %}
+
+  <form action="{{url_action}}" method="GET">
+
+    Reference set:&nbsp;
+    <select name="reference_name" id="reference_name">
+    {% for ref in references %}
+      <option value="{{ref}}">{{ref}}</option>
+    {% endfor %}
+    </select>
+    &nbsp;
+    &nbsp;
+
+    Numter of top CpG's:
+    <input type="text" name="ntop" id="ntop" value="5000" />
+    &nbsp;
+    <input type="submit" value="start UMAP now"/>
+
+  </form>
+
+{% endblock %}

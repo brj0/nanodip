@@ -230,6 +230,7 @@ def reference_annotations():
     for r in os.listdir(ANNOTATIONS):
         if r.endswith(".xlsx"):
             annotations.append(r)
+    annotations.sort()
     return [a.replace(".xlsx", "") for a in annotations]
 
 def composite_path(directory, *args):

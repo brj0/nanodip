@@ -24,6 +24,7 @@ from nanodip.config import (
     ANNOTATION_ACRONYMS_TCGA,
     BETA_VALUES,
     CHROMOSOMES,
+    EMPTY_SAMPLE,
     ENDING,
     GENES,
     GENES_RAW,
@@ -365,12 +366,14 @@ def cpg_methyl_from_reads(sample_name):
 
 class Sample:
     """Container of sample data."""
-    def __init__(self, name, cpgs=None):
+    def __init__(self, _name, cpgs=None):
+        # Convert "" to EMPTY_SAMPLE
+        name = EMPTY_SAMPLE if _name is "" else _name
         # Either Sample is initialized by name/id or by CpG's
-        if (name is None and cpgs is None) or (
-            name is not None and cpgs is not None
+        if (name is EMPTY_SAMPLE and cpgs is None) or (
+            name is not EMPTY_SAMPLE and cpgs is not None
         ):
-            raise ValueError("Either {name} or {cpgs} must be given")
+            raise ValueError("Either 'name' or 'cpgs' must be given")
         self.name = name
         self.methyl_df = None
         self.cpg_overlap = None
@@ -379,13 +382,13 @@ class Sample:
         self.set_cpgs(cpgs)
 
     @classmethod
-    def by_cpgs(cls, cpgs):
+    def from_cpgs(cls, cpgs):
         """Constructor for manually define sample by CpG site set."""
-        return cls(None, cpgs)
+        return cls(EMPTY_SAMPLE, cpgs)
 
     def cpgs_only(self):
         """Returns true iff only CpG set is given without methylation info."""
-        return self.name is None
+        return self.name is EMPTY_SAMPLE
 
     def set_reads(self):
         """Calculate all read start and end positions and save data
