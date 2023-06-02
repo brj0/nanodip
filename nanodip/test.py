@@ -134,12 +134,18 @@ logger = logging.getLogger(__name__)
 
 # sample_name = "test20221124a"
 sample_name = "B2022_30785_20220715_BC12"
-reference_name = "MNG_IfP_v1"
-reference_name = "AllIDATv2_20210804"
-reference_name = "GSE90496_IfP01"
-
 sample = Sample(sample_name)
+
+
+reference_name = "MNG_IfP_v1"
+reference = Reference(reference_name)
+calculate_std(reference_name)
+
+reference_name = "GSE90496_IfP01"
 reference = Reference(reference_name)
 calculate_std(reference_name)
 
 
+reference_name = "AllIDATv2_20210804"
+reference = Reference(reference_name)
+calculate_std(reference_name)

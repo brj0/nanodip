@@ -37,23 +37,21 @@ from nanodip.utils import (
 # Define logger
 logger = logging.getLogger(__name__)
 
+# Import cupy if available.
+try:
+    import cupy as xp
+    import cupy
+except ImportError:
+    import numpy as xp
+
 
 def gpu_enabled():
     """Tests if CUDA device is present."""
     try:
-        import cupy
         cupy.cuda.Device()
         return True
     except:
         return False
-
-
-# Import cupy if available.
-if gpu_enabled():
-    import cupy as xp
-    import cupy
-else:
-    import numpy as xp
 
 
 def download_epidip_data(sentrix_id, reference_umap):
@@ -109,17 +107,19 @@ def calculate_std(reference_id):
     # Number of cases is variable
     block_size = GPU_RAM_USAGE // (GPU_FLOAT_SIZE * len(reference.specimens))
 
-    # TODO Segmentation fault (core dumped)
-    print("**************************0*******************************")
-    print("specimens_cnt=", specimens_cnt, "block_size=", block_size)
-    print("xp=", xp)
-
+    # TODO BUG: Segmentation fault (core dumped)
+    # Reproducing bug: delete all files in tmp/epidip then plot reference MNG
+    # afterwards plot GSE.
+    # print("**************************0*******************************")
+    # print("specimens_cnt=", specimens_cnt, "block_size=", block_size)
+    # if reference_id == "GSE90496_IfP01":
+        # import pdb; pdb.set_trace()
     # Initialize memory for loop.
-    beta_values = xp.full(
+    beta_values_xp = xp.full(
         [specimens_cnt, block_size], -1, dtype=float, order="C"
     )
-    print("**************************1*******************************")
-    beta_stds = xp.array([])
+    # print("**************************1*******************************")
+    beta_stds_xp = xp.array([])
 
     # Break data into blocks along the cpg-columns, adjusted to
     # GPU RAM availability.
@@ -128,19 +128,21 @@ def calculate_std(reference_id):
         # Will be =block_size except for the last run.
         d_col = col1 - col0
         for idx, file_ in enumerate(specimen_bin_files):
-            beta_values[idx][:d_col] = xp.fromfile(
+            beta_values_xp[idx][:d_col] = xp.fromfile(
                 file_, count=d_col, offset=col0, dtype=float
             )
         # Replace nan with 0.49
-        beta_values = xp.nan_to_num(beta_values, nan=0.49)
-        beta_stds = xp.append(
-            beta_stds,
-            xp.std(beta_values, axis=0, dtype=float)[:d_col],
+        beta_values_xp = xp.nan_to_num(beta_values_xp, nan=0.49)
+        beta_stds_xp = xp.append(
+            beta_stds_xp,
+            xp.std(beta_values_xp, axis=0, dtype=float)[:d_col],
         )
 
     # Convert cupy to numpy array
-    if isinstance(beta_stds, cupy.ndarray):
-        beta_stds = beta_stds.get()
+    if isinstance(beta_stds_xp, cupy.ndarray):
+        beta_stds = beta_stds_xp.get()
+    else:
+        beta_stds = beta_values_xp
 
     # Standard deviations >1 are useless (typically INF values)
     beta_stds[(beta_stds > 1) | (np.isnan(beta_stds))] = 0
@@ -170,7 +172,8 @@ def calculate_std(reference_id):
 
     # Need to release GPU memory explicitly
     del beta_stds
-    del beta_values
+    del beta_stds_xp
+    del beta_values_xp
 
     # Release GPU memory
     if gpu_enabled():
