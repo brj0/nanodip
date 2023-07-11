@@ -32,8 +32,10 @@ from nanodip.utils import (
 import sys
 import IPython
 import IPython.core.ultratb
+
 sys.excepthook = IPython.core.ultratb.ColorTB()
 import time
+
 pdp = lambda x: print(x.to_string())
 
 ANNOTATION_ID = "1qmis4MSoE0eAMMwG6xZbDCrs-F1jXECZvc4wKWLR0KY"
@@ -140,7 +142,7 @@ DIR = os.path.join(
 )
 LOG_FILE = os.path.join(DIR, "methyl_atlas.log")
 NUM_LOOPS = 100  # TODO del
-NUM_LOOPS = 1
+NUM_LOOPS = 0
 SHEET_NAME = "Sample%20list"
 ANNOTATION_URL = (
     "https://docs.google.com/spreadsheets/d/%s/gviz/tq?tqx=out:csv&sheet=%s"
@@ -245,8 +247,11 @@ def merge_methylation(fname, cases=None, files=None):
     all_files = files if cases is None else get_all_tsv_files(cases)
     methyl_df_list = []
     for file_ in tqdm(all_files, desc="merge tsv"):
-        next_df = pd.read_csv(file_, sep="\t")
-        methyl_df_list.append(next_df)
+        try:
+            next_df = pd.read_csv(file_, sep="\t")
+            methyl_df_list.append(next_df)
+        except pd.errors.EmptyDataError:
+            print(f"file {file_} not found")
     methyl_df = pd.concat(methyl_df_list)[
         ["chromosome", "start", "methylated_frequency"]
     ]
@@ -259,6 +264,56 @@ def merge_methylation(fname, cases=None, files=None):
         .agg({"read_cnt": "size", "methyl_cnt": "sum"})
         .reset_index()
     )
+    methyl_df["methyl_freq"] = methyl_df.methyl_cnt / methyl_df.read_cnt
+    methyl_df["methylated"] = round(methyl_df.methyl_freq)
+    chrom_to_idx = {c: (i + 1) for i, c in enumerate(CHROM)}
+    methyl_df["chrom_nr"] = methyl_df.chromosome.apply(
+        lambda x: chrom_to_idx[x]
+    )
+    methyl_df = methyl_df.sort_values(by=["chrom_nr", "start"])
+    methyl_df = methyl_df.reset_index(drop=True)
+    methyl_df.to_csv(os.path.join(DIR, fname + ".csv"), index=False)
+    methyl_df.to_pickle(os.path.join(DIR, fname + ".pickle"))
+    return methyl_df
+
+
+def merge_huge_methylation(fname, cases=None, files=None):
+    """Merges all freq_tsv ending files that are either within the
+    filetree of the files in {cases} or within {files}.
+    """
+    if not xor(cases is None, files is None):
+        raise ValueError("Provide either 'cases' or 'files'")
+    all_files = files if cases is None else get_all_tsv_files(cases)
+    methyl_df = pd.DataFrame()
+    n_block = 5000
+    next_block_list = []
+    for i, file_ in tqdm(
+        enumerate(all_files), desc="merge tsv", total=len(all_files)
+    ):
+        try:
+            next_df = pd.read_csv(
+                file_,
+                sep="\t",
+                usecols=["chromosome", "start", "methylated_frequency"],
+            )
+            next_block_list.append(next_df)
+        except pd.errors.EmptyDataError:
+            print(f"file {file_} not found")
+        if i % n_block == 0 or i == (len(all_files) - 1):
+            next_block = pd.concat(next_block_list)[
+                ["chromosome", "start", "methylated_frequency"]
+            ]
+            next_block_list = []
+            next_block.columns = ["chromosome", "start", "methyl_cnt"]
+            next_block = next_block[next_block.methyl_cnt.isin([0.0, 1.0])]
+            next_block.methyl_cnt = next_block.methyl_cnt.astype(int)
+            next_block["read_cnt"] = 1
+            methyl_df = pd.concat([methyl_df, next_block])
+            methyl_df = (
+                methyl_df.groupby(["chromosome", "start"])
+                .agg({"read_cnt": "sum", "methyl_cnt": "sum"})
+                .reset_index()
+            )
     methyl_df["methyl_freq"] = methyl_df.methyl_cnt / methyl_df.read_cnt
     methyl_df["methylated"] = round(methyl_df.methyl_freq)
     chrom_to_idx = {c: (i + 1) for i, c in enumerate(CHROM)}
@@ -340,14 +395,19 @@ def get_sample_reads(sample_name):
     files_ = files_by_ending(NANODIP_OUTPUT, sample_name, ENDING["result_tsv"])
     read_list = []
     for file_ in files_:
-        data = pd.read_csv(
-            file_,
-            delimiter="\t",
-        )
-        read_list.append(data)
+        try:
+            data = pd.read_csv(
+                file_,
+                delimiter="\t",
+            )
+            read_list.append(data)
+        except pd.errors.EmptyDataError:
+            pass
+    if len(read_list) == 0:
+        return pd.DataFrame()
     f5c_out = pd.concat(read_list)
-    f5c_out.loc[f5c_out.log_lik_ratio >= 2.5, "methyl_status"] = 1
-    f5c_out.loc[f5c_out.log_lik_ratio <= -2.5, "methyl_status"] = 0
+    f5c_out.loc[f5c_out.log_lik_ratio >= 2.5, "methyl_status"] = int(1)
+    f5c_out.loc[f5c_out.log_lik_ratio <= -2.5, "methyl_status"] = int(0)
     f5c_out = f5c_out[~f5c_out.methyl_status.isnull()]
     f5c_out["cpg_start_methyl"] = [
         cpg_offsets(x, y, z)
@@ -465,7 +525,6 @@ def merged_atlas_with_sample(atlas, sample_reads):
         on=["chromosome", "start"],
         suffixes=[None, "_smp"],
     )
-    # TODO imbalance towards chr10/16
     merged = merged[
         ~merged.methylated_gbm.isna()
         & ~merged.methylated_mng.isna()
@@ -477,9 +536,9 @@ def merged_atlas_with_sample(atlas, sample_reads):
     merged = merged.reset_index(drop=True)
     return merged
 
+
 def unite_atlas_with_sample(atlas, sample_reads):
-    """Unites and return all methylation classes to a single data frame.
-    """
+    """Unites and return all methylation classes to a single data frame."""
     merged = atlas[0].df
     chrom_to_idx = {c: (i + 1) for i, c in enumerate(CHROM)}
     for mclass in tqdm(atlas[1:], desc="merge methylation classes"):
@@ -680,7 +739,7 @@ def _generate_atlases(cases_all):
 
 
 def _evaluate_runs():
-    """ Reads pickle files from disk, evaluates them and prints results
+    """Reads pickle files from disk, evaluates them and prints results
     to console.
     """
     run_list = []
@@ -781,7 +840,7 @@ def random_atlas_samples(cases_all):
     # Get sample reads and merge with atlas.
     for entity in cases_all:
         sample_names = random_samples[entity]
-        sample_reads = pd.DataFrame() 
+        sample_reads = pd.DataFrame()
         for sample_name in sample_names:
             next_reads = get_sample_reads(sample_name)
             next_reads["sample_name"] = sample_name
@@ -801,6 +860,34 @@ def random_atlas_samples(cases_all):
         merged["pitad_hit"] = merged.methylated_smp == merged.methylated_pitad
         runs.append(merged)
     return runs
+
+
+def methylation_stats(cases):
+    """Returns stats such as methylation coveragef or as 'cases'."""
+    for mc in cases.meth_grp.unique():
+        print(mc)
+
+
+def count_sample_reads(cases):
+    read_cnt = []
+    for sample_name in tqdm(cases, desc="Collecting reads"):
+        files_ = files_by_ending(NANODIP_OUTPUT, sample_name, ENDING["result_tsv"])
+        read_list = []
+        for file_ in files_:
+            try:
+                data = pd.read_csv(
+                    file_,
+                    delimiter="\t",
+                )
+                read_list.append(data)
+            except pd.errors.EmptyDataError:
+                pass
+        if len(read_list) > 0:
+            f5c_out = pd.concat(read_list)
+            n_reads = len(set(f5c_out.read_name))
+            read_cnt.append([sample_name, n_reads])
+    return read_cnt
+
 
 
 # Make output dir
@@ -888,6 +975,8 @@ for iter_ in tqdm(range(NUM_LOOPS), desc="sampling loops"):
     atlas_samples.append(merged_rand_samp)
 
 merged = pd.concat(atlas_samples)
+merged.to_csv(os.path.join(DIR, "merged_cpgs.csv"), index=False)
+
 
 summary = (
     merged.groupby(
@@ -910,8 +999,6 @@ summary = (
 )
 summary = summary.sort_values(by=["chrom_nr", "overlap_cnt"])
 
-merged.to_csv(os.path.join(DIR, "merged_cpgs.csv"), index=False)
-
 summary["correct"] = False
 all_entities = ["gbm", "mng", "pitad"]
 for true_class in all_entities:
@@ -922,6 +1009,7 @@ for true_class in all_entities:
         & (summary[true_class] > summary[alternatives].max(axis=1)),
         "correct",
     ] = True
+
 summary.to_csv(os.path.join(DIR, "summary_reads.csv"), index=False)
 
 correct = []
@@ -932,7 +1020,6 @@ for i in range(5000):
         correct.append(prop)
 
 np.array(correct).tofile(os.path.join(DIR, "correct_reads_5000.csv"), sep=",")
-
 
 
 # _generate_atlases(cases_all)
@@ -947,6 +1034,26 @@ np.array(correct).tofile(os.path.join(DIR, "correct_reads_5000.csv"), sep=",")
 # merge_methylation("20_mng_methyl", mng_all[:20].id_)
 # merge_methylation("20_pitad_methyl", pitad_all[:20].id_)
 # merge_methylation("test", pitad_all[:2].id_)
+
+
+# super_methylome = merge_huge_methylation("super", all_cases_df.id_)
+# read_cnt = count_sample_reads(all_cases_df.id_)
+# sum([l for _,l in read_cnt])
+
+# samples = all_cases_df.id_.sample(10)
+# super_methylome10 = merge_huge_methylation("super10", samples)
+# read_cnt = count_sample_reads(samples)
+# sum([l for _,l in read_cnt])
+
+# samples20 = all_cases_df.id_.sample(20)
+# super_methylome10 = merge_huge_methylation("super20", samples20)
+# read_cnt = count_sample_reads(samples20)
+# sum([l for _,l in read_cnt])
+
+# samples100 = all_cases_df.id_.sample(100)
+# super_methylome100 = merge_huge_methylation("super100", samples100)
+# read_cnt = count_sample_reads(samples100)
+# sum([l for _,l in read_cnt])
 
 # gbm_atlas = MethylClass.from_disk("20_gbm_methyl")
 # mng_atlas = MethylClass.from_disk("20_mng_methyl")
@@ -985,3 +1092,30 @@ np.array(correct).tofile(os.path.join(DIR, "correct_reads_5000.csv"), sep=",")
 # read_lengths = m[
 # ~m[["read_name", "chromosome"]].duplicated()
 # ].read_len.to_list()
+
+
+sample_reads = pd.DataFrame()
+for row in tqdm(
+    all_cases_df.itertuples(),
+    total=all_cases_df.shape[0],
+    desc="Extrat all reads from all samples",
+):
+    print(row)
+    next_reads = get_sample_reads(row.id_)
+    next_reads["id_"] = row.id_
+    sample_reads = sample_reads.append(next_reads)
+    if row.Index % 10 == 0:
+        sample_reads.to_csv(os.path.join(DIR, "all_reads_tmp.csv"), index=False)
+
+memory_usage = sample_reads.memory_usage(deep=True)
+total_memory_MB = memory_usage.sum() / (1024 * 1024)
+sample_reads.to_csv(os.path.join(DIR, "all_reads.csv"), index=False)
+
+
+sample_reads["start"] = sample_reads.cpg_start_methyl.apply(
+    lambda x: min(y[0] for y in x)
+)
+sample_reads["end"] = sample_reads.cpg_start_methyl.apply(
+    lambda x: max(y[0] for y in x)
+)
+sample_reads["read_len"] = sample_reads.end - sample_reads.start + 1
