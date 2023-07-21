@@ -388,6 +388,21 @@ def cpg_offsets(seq, offset, methyl_status):
     return offsets
 
 
+def _cpg_offsets(seq, offset):
+    """Transforms DNA sequance coordinate to offset of all CpG
+    sites.
+    Example:
+        >>> _cpg_offsets('TGATCCGATCGATCG', 14850238)
+        array([14850238, 14850242, 14850246], dtype=int32)
+    """
+    start0 = next(re.finditer("CG", seq)).start()
+    offsets = np.array(
+        [cg.start() - start0 + offset for cg in re.finditer("CG", seq)],
+        dtype=np.int32,
+    )
+    return offsets
+
+
 def get_sample_reads(sample_name):
     """Return reads along with methylation sites/status of sample
     {sample_name}.
@@ -421,6 +436,61 @@ def get_sample_reads(sample_name):
         .reset_index()
         .sort_values(["chromosome"])
     ).reset_index(drop=True)
+    return reads
+
+
+def _get_sample_reads(sample_name):
+    """Return reads along with methylation sites/status of sample
+    {sample_name}.
+    """
+    files_ = files_by_ending(NANODIP_OUTPUT, sample_name, ENDING["result_tsv"])
+    read_list = []
+    for file_ in files_:
+        try:
+            data = pd.read_csv(
+                file_,
+                delimiter="\t",
+            )
+            read_list.append(data)
+        except pd.errors.EmptyDataError:
+            pass
+    if len(read_list) == 0:
+        return pd.DataFrame()
+    f5c_out = pd.concat(read_list)
+    f5c_out.loc[f5c_out.log_lik_ratio >= 2.5, "methyl_status"] = 1
+    f5c_out.loc[f5c_out.log_lik_ratio <= -2.5, "methyl_status"] = 0
+    f5c_out = f5c_out[~f5c_out.methyl_status.isnull()]
+    f5c_out["methyl_status"] = f5c_out["methyl_status"].astype(np.int32)
+    f5c_out["cpg_start_methyl"] = [
+        _cpg_offsets(x, y) for x, y in zip(f5c_out.sequence, f5c_out.start)
+    ]
+    f5c_out["methylated_cpgs"] = [[]] * len(f5c_out)
+    f5c_out["unmethylated_cpgs"] = [[]] * len(f5c_out)
+    idx = f5c_out.methyl_status == 1
+    f5c_out.loc[idx, "methylated_cpgs"] = f5c_out.loc[idx, "cpg_start_methyl"]
+    f5c_out.loc[~idx, "unmethylated_cpgs"] = f5c_out.loc[
+        ~idx, "cpg_start_methyl"
+    ]
+    reads = (
+        f5c_out.groupby(["read_name", "chromosome"])["methylated_cpgs"]
+        .apply(np.hstack)
+        .reset_index()
+        .sort_values(["chromosome"])
+    ).reset_index(drop=True)
+    reads = (
+        f5c_out.groupby(["read_name", "chromosome"])
+        .agg(
+            {
+                "methylated_cpgs": lambda x: np.hstack(x).astype(np.int32),
+                "unmethylated_cpgs": lambda x: np.hstack(x).astype(np.int32),
+            }
+        )
+        .reset_index()
+        .sort_values(["chromosome"])
+        .reset_index(drop=True)
+    )
+    reads["methylated_cpgs"] = reads["methylated_cpgs"].apply(np.atleast_1d)
+    reads["unmethylated_cpgs"] = reads["unmethylated_cpgs"].apply(np.atleast_1d)
     return reads
 
 
@@ -871,7 +941,9 @@ def methylation_stats(cases):
 def count_sample_reads(cases):
     read_cnt = []
     for sample_name in tqdm(cases, desc="Collecting reads"):
-        files_ = files_by_ending(NANODIP_OUTPUT, sample_name, ENDING["result_tsv"])
+        files_ = files_by_ending(
+            NANODIP_OUTPUT, sample_name, ENDING["result_tsv"]
+        )
         read_list = []
         for file_ in files_:
             try:
@@ -889,12 +961,12 @@ def count_sample_reads(cases):
     return read_cnt
 
 
-
 # Make output dir
 os.makedirs(DIR, exist_ok=True)
 
 # 17 cases
 all_cases_df = annotated_cases()
+all_cases_df.to_csv(os.path.join(DIR, "all_cases_df.csv"), index=False)
 gbm_rtk_ii = all_cases_df[all_cases_df.meth_grp.isin(["GBM_RTK_II"])]
 
 # 49 cases
@@ -1101,15 +1173,23 @@ for row in tqdm(
     desc="Extrat all reads from all samples",
 ):
     print(row)
-    next_reads = get_sample_reads(row.id_)
+    next_reads = _get_sample_reads(row.id_)
     next_reads["id_"] = row.id_
     sample_reads = sample_reads.append(next_reads)
     if row.Index % 10 == 0:
-        sample_reads.to_csv(os.path.join(DIR, "all_reads_tmp.csv"), index=False)
+        sample_reads.to_csv(
+            os.path.join(DIR, "all_reads_tmp.csv"), index=False
+        )
+
+sample_reads = sample_reads.reset_index(drop=True)
+sample_reads.to_feather(os.path.join(DIR, "all_reads.feather"))
+
+# sample_reads.to_csv(os.path.join(DIR, "all_reads.csv"), index=False)
+# feather.write_dataframe(sample_reads, os.path.join(DIR, "all_reads.feather"))
+# rd = pd.read_feather(os.path.join(DIR, "all_reads.feather"))
 
 memory_usage = sample_reads.memory_usage(deep=True)
 total_memory_MB = memory_usage.sum() / (1024 * 1024)
-sample_reads.to_csv(os.path.join(DIR, "all_reads.csv"), index=False)
 
 
 sample_reads["start"] = sample_reads.cpg_start_methyl.apply(

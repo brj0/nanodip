@@ -28,6 +28,8 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.svm import SVC
 
+pdp = lambda x: print(x.to_string())
+
 sys.path.insert(0, "/applications/nanodip")
 
 from nanodip.config import (
@@ -45,6 +47,7 @@ from nanodip.config import (
     DATA,
     DEBUG_MODE,
     ENDING,
+    EPIDIP_TMP,
     UMAP_LINK,
     EPIDIP_UMAP_COORDINATE_FILES,
     EXCLUDED_FROM_ANALYSIS,
@@ -111,7 +114,7 @@ from nanodip.classifiers import (
     training_test_data,
     evaluate_clf,
 )
-from nanodip.epidip import(
+from nanodip.epidip import (
     calculate_std,
     gpu_enabled,
     top_variable_cpgs,
@@ -131,21 +134,76 @@ print("import done")
 # define logger
 logger = logging.getLogger(__name__)
 
-
 # sample_name = "test20221124a"
-sample_name = "B2022_30785_20220715_BC12"
-sample = Sample(sample_name)
+# sample_name = "B2022_30785_20220715_BC12"
+# sample = Sample(sample_name)
+
+# reference_name = "MNG_IfP_v1"
+# reference = Reference(reference_name)
+# calculate_std(reference)
+
+# reference_name = "AllIDATv2_20210804"
+# reference = Reference(reference_name)
+# calculate_std(reference)
+
+reference_id = "GSE90496_IfP01"
+reference = Reference(reference_id)
+std_all = calculate_std(reference)
 
 
-reference_name = "MNG_IfP_v1"
-reference = Reference(reference_name)
-calculate_std(reference_name)
+gbm_all = [
+    "GBM_G34",
+    "GBM_LOW",
+    "GBM_MES",
+    "GBM_MID",
+    "GBM_MYCN",
+    "GBM_NOS",
+    "GBM_RTK_I",
+    "GBM_RTK_II",
+    "GBM_RTK_III",
+]
+mng_ben = ["MNG_BEN-1", "MNG_BEN-2"]
+pitad_all = [
+    "PITAD",
+    "PITAD_FSH_LH",
+    "PITAD_ACTH",
+    "PITAD_STH_SPA",
+    "PITAD_STH_DNS_A",
+    "PITAD_TSH",
+    "PITAD_STH_DNS_B",
+    "PITAD_PRL",
+]
 
-reference_name = "GSE90496_IfP01"
-reference = Reference(reference_name)
-calculate_std(reference_name)
+
+brain = Reference(reference_id)
+gbm = Reference(reference_id, mclasses=gbm_all)
+mng = Reference(reference_id, mclasses=mng_ben)
+pitad = Reference(reference_id, mclasses=pitad_all)
+mng_all = Reference("MNG_IfP_v1")
+mng = Reference("MNG_IfP_v1", mng_ben)
 
 
-reference_name = "AllIDATv2_20210804"
-reference = Reference(reference_name)
-calculate_std(reference_name)
+mgbm = get_reference_methylation(
+    gbm.specimens, gbm.cpg_sites
+)
+mmng = get_reference_methylation(
+    mng.specimens, mng.cpg_sites
+)
+mpitad = get_reference_methylation(
+    pitad.specimens, pitad.cpg_sites
+)
+
+
+df = pd.DataFrame()
+df["gbm_sum"] = np.sum(mgbm, axis=0)
+df["gbm_cnt"] = mgbm.shape[0]
+df["mng_sum"] = np.sum(mmng, axis=0)
+df["mng_cnt"] = mmng.shape[0]
+df["pitad_sum"] = np.sum(mpitad, axis=0)
+df["pitad_cnt"] = mpitad.shape[0]
+df["pgbm"] = round(df.gbm_sum / df.gbm_cnt).astype(np.int32)
+df["pmng"] = round(df.mng_sum / df.mng_cnt).astype(np.int32)
+df["ppitad"] = round(df.pitad_sum / df.pitad_cnt).astype(np.int32)
+
+
+np.sum((df.pgbm == df.pmng) & (df.pmng == df.ppitad))

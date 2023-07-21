@@ -76,7 +76,7 @@ def download_epidip_data(sentrix_id, reference_umap):
     image.save(cnv_local.replace("pdf", "png"), "png")
 
 
-def calculate_std(reference_id):
+def calculate_std(reference):
     """Calculate sorted standard deviations with GPU (if present) for
     a particular reference dataset and save to disk.
     """
@@ -92,9 +92,6 @@ def calculate_std(reference_id):
         pool.free_all_blocks()
     else:
         logger.info("Probably no CUDA device present.")
-
-    # Collect reference case binary file names
-    reference = Reference(reference_id)
 
     specimen_bin_files = [
         composite_path(BETA_VALUES, s, ENDING["betas_bin"])
@@ -112,7 +109,7 @@ def calculate_std(reference_id):
     # afterwards plot GSE.
     # print("**************************0*******************************")
     # print("specimens_cnt=", specimens_cnt, "block_size=", block_size)
-    # if reference_id == "GSE90496_IfP01":
+    # if reference.name == "GSE90496_IfP01":
         # import pdb; pdb.set_trace()
     # Initialize memory for loop.
     beta_values_xp = xp.full(
@@ -146,7 +143,7 @@ def calculate_std(reference_id):
 
     # Standard deviations >1 are useless (typically INF values)
     beta_stds[(beta_stds > 1) | (np.isnan(beta_stds))] = 0
-    std_bin = composite_path(EPIDIP_TMP, reference_id, ENDING["stdarr_bin"])
+    std_bin = composite_path(EPIDIP_TMP, reference.name, ENDING["stdarr_bin"])
     beta_stds.tofile(std_bin)
 
     # Create data frame containing cpg sites with stds
@@ -166,7 +163,7 @@ def calculate_std(reference_id):
         key=None,
     )
     std_sorted = composite_path(
-        EPIDIP_TMP, reference_id, ENDING["stdsortarr_bin"]
+        EPIDIP_TMP, reference.name, ENDING["stdsortarr_bin"]
     )
     beta_value_df.to_csv(path_or_buf=std_sorted, index=False)
 
@@ -195,6 +192,6 @@ def top_variable_cpgs(reference, nr_top_cpgs):
         not os.path.exists(std_sorted)
         or time.time() - os.path.getmtime(std_sorted) > 60 * 60
     ):
-        calculate_std(reference.name)
+        calculate_std(reference)
     beta_value_df = pd.read_csv(std_sorted)
     return beta_value_df["cpg_site"][:nr_top_cpgs]

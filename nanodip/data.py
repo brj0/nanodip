@@ -7,6 +7,8 @@ data.
 
 
 # start_external_modules
+import base64
+import hashlib
 import logging
 import os
 import re
@@ -121,6 +123,38 @@ def make_binary_reference_data_if_needed():
     if not binary_reference_data_exists():
         make_binary_reference_data()
 
+def _get_annotation(name, mclasses=None):
+    """Reads annotation as csv file from disk, and returns it as
+    pd.DataFrame. If csv is missing or file not up to date, annotation
+    is read from original excel file (slow) and csv file is written to
+    disk.
+    """
+    path_csv = os.path.join(ANNOTATIONS, name + ".csv")
+    path_xlsx = os.path.join(ANNOTATIONS,name + ".xlsx")
+    csv_exists_and_up_to_date = (
+        os.path.exists(path_csv) and
+        os.path.getmtime(path_csv) > os.path.getmtime(path_xlsx)
+    )
+    if csv_exists_and_up_to_date:
+        annotation = pd.read_csv(path_csv)
+    else:
+        annotation = pd.read_excel(
+            path_xlsx,
+            header=None,
+            names=["id", "methylation_class", "custom_text"],
+            engine="openpyxl",
+        )
+        annotation.to_csv(path_csv, index=False)
+    if mclasses is not None:
+        return annotation[annotation.methylation_class.isin(mclasses)]
+    return annotation
+
+def hash_from_string(string):
+    sha256_hash = hashlib.sha256(string.encode()).digest()
+    filename_hash = base64.urlsafe_b64encode(sha256_hash).decode().rstrip("=")
+    return filename_hash
+
+
 class Reference:
     """Container of reference data and metadata."""
 
@@ -139,10 +173,12 @@ class Reference:
         s:i for i, s in enumerate(all_specimens)
     }
 
-    def __init__(self, name):
+    def __init__(self, name, mclasses=None):
         make_binary_reference_data_if_needed()
         self.name = name
-        self.annotation = self.get_annotation()
+        if mclasses is not None:
+            self.name += "-" + hash_from_string("".join(mclasses))
+        self.annotation = _get_annotation(name, mclasses)
         # Only consider specimens with annotation entry and binary file.
         annotated_specimens = set(self.annotation["id"]) & set(
             Reference.all_specimens
@@ -165,29 +201,6 @@ class Reference:
         self.description = Reference.get_description(
             self.methylation_class
         )
-
-    def get_annotation(self):
-        """Reads annotation as csv file from disk, and returns it as
-        pd.DataFrame. If csv is missing or file not up to date, annotation
-        is read from original excel file (slow) and csv file is written to
-        disk.
-        """
-        path_csv = os.path.join(ANNOTATIONS, self.name + ".csv")
-        path_xlsx = os.path.join(ANNOTATIONS, self.name + ".xlsx")
-        csv_exists_and_up_to_date = (
-            os.path.exists(path_csv) and
-            os.path.getmtime(path_csv) > os.path.getmtime(path_xlsx)
-        )
-        if csv_exists_and_up_to_date:
-            return pd.read_csv(path_csv)
-        annotation = pd.read_excel(
-            path_xlsx,
-            header=None,
-            names=["id", "methylation_class", "custom_text"],
-            engine="openpyxl",
-        )
-        annotation.to_csv(path_csv, index=False)
-        return annotation
 
     def get_description(methylation_classes):
         """Returns a description of the methylation class using
