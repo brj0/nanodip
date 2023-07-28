@@ -193,6 +193,15 @@ mpitad = get_reference_methylation(
     pitad.specimens, pitad.cpg_sites
 )
 
+sgbm = mgbm[-1, :]
+smng = mmng[-1, :]
+spitad = mpitad[-1, :]
+
+mgbm = mgbm[:-1, :]
+mmng = mmng[:-1, :]
+mpitad = mpitad[:-1, :]
+
+
 
 df = pd.DataFrame()
 df["gbm_sum"] = np.sum(mgbm, axis=0)
@@ -201,9 +210,21 @@ df["mng_sum"] = np.sum(mmng, axis=0)
 df["mng_cnt"] = mmng.shape[0]
 df["pitad_sum"] = np.sum(mpitad, axis=0)
 df["pitad_cnt"] = mpitad.shape[0]
-df["pgbm"] = round(df.gbm_sum / df.gbm_cnt).astype(np.int32)
-df["pmng"] = round(df.mng_sum / df.mng_cnt).astype(np.int32)
-df["ppitad"] = round(df.pitad_sum / df.pitad_cnt).astype(np.int32)
+df["pgbm"] = df.gbm_sum / df.gbm_cnt
+df["pmng"] = df.mng_sum / df.mng_cnt
+df["ppitad"] = df.pitad_sum / df.pitad_cnt
+
+df["smp"] = sgbm.astype(np.int32)
+df["smp"] = smng.astype(np.int32)
+df["smp"] = spitad.astype(np.int32)
+
+np.linalg.norm(df.smp - df.pgbm)
+np.linalg.norm(df.smp - df.pmng)
+np.linalg.norm(df.smp - df.ppitad)
+
+np.sum(df.smp == np.round(df.pgbm)) / len(df.smp)
+np.sum(df.smp == np.round(df.pmng)) / len(df.smp)
+np.sum(df.smp == np.round(df.ppitad)) / len(df.smp)
 
 
 np.sum((df.pgbm == df.pmng) & (df.pmng == df.ppitad))
