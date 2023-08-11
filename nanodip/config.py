@@ -89,7 +89,7 @@ ANNOTATION_ACRONYMS_TCGA = os.path.join(
 )
 
 # Illumina probe names of the 450K array.
-ILLUMINA_CG_MAP = os.path.join(
+ILLUMINA_CPG_MAP = os.path.join(
     REFERENCE_DATA,
     "minimap_data/hg19_HumanMethylation450_15017482_v1-2_cgmap.tsv",
 )

@@ -164,7 +164,7 @@ class Reference:
             cpg:i for i, cpg in enumerate(f.read().splitlines())
         }
     # All possible CpG sites
-    cpg_sites = cpg_site_to_index.keys()
+    cpg_sites = list(cpg_site_to_index.keys())
     # Id's of all reference specimens
     with open(REFERENCE_SPECIMENS) as f:
         all_specimens = f.read().splitlines()
@@ -174,6 +174,13 @@ class Reference:
     }
 
     def __init__(self, name, mclasses=None):
+        valid_names = set(
+            x.split(".")[0] for x in os.listdir(ANNOTATIONS)
+            if x.endswith("xlsx") or x.endswith("csv")
+        )
+        if name not in valid_names:
+            nm_str = ", ".join(valid_names)
+            raise ValueError(f"Invalid name '{name}'. Must be one of {nm_str}")
         make_binary_reference_data_if_needed()
         self.name = name
         if mclasses is not None:

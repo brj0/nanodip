@@ -54,7 +54,7 @@ from nanodip.config import (
     F5C,
     GENES,
     GENES_RAW,
-    ILLUMINA_CG_MAP,
+    ILLUMINA_CPG_MAP,
     MINIMAP2,
     NANODIP_OUTPUT,
     NANODIP_REPORTS,

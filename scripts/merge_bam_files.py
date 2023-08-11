@@ -1036,9 +1036,38 @@ cases_all = {
     "pitad": pitad_all.id_.tolist(),
 }
 
-# assert(0==1)
 
-# GENERATE ATLASES
+quit()
+
+
+# 0. GENERATE MULTIPLE ATLASES
+###############################################################################
+_generate_atlases(cases_all)
+
+
+# 1. MERGE BAM FILES
+###############################################################################
+merge_bam_files(gbm_all[:20], "20_gbm")
+merge_bam_files(gbm_all[20:21], "sample_gbm_nr20")
+merge_bam_files(mng_all[:20], "20_mng")
+merge_bam_files(pitad_all[:20], "20_pitad")
+
+
+# 2. MERGE METHILATION
+###############################################################################
+merge_methylation("20_gbm_methyl", gbm_all[:20].id_)
+merge_methylation("sample_gbm_nr20", gbm_all[20:21].id_)
+merge_methylation("20_mng_methyl", mng_all[:20].id_)
+merge_methylation("20_pitad_methyl", pitad_all[:20].id_)
+merge_methylation("test", pitad_all[:2].id_)
+
+gbm_atlas = MethylClass.from_disk("20_gbm_methyl")
+mng_atlas = MethylClass.from_disk("20_mng_methyl")
+pitad_atlas = MethylClass.from_disk("20_pitad_methyl")
+
+
+# 3. GENERATE READS AND COUNT OVERLAPPING CPGS
+###############################################################################
 atlas_samples = []
 for iter_ in tqdm(range(NUM_LOOPS), desc="sampling loops"):
     rand_samp = random_atlas_samples(cases_all)
@@ -1048,7 +1077,6 @@ for iter_ in tqdm(range(NUM_LOOPS), desc="sampling loops"):
 
 merged = pd.concat(atlas_samples)
 merged.to_csv(os.path.join(DIR, "merged_cpgs.csv"), index=False)
-
 
 summary = (
     merged.groupby(
@@ -1094,78 +1122,30 @@ for i in range(5000):
 np.array(correct).tofile(os.path.join(DIR, "correct_reads_5000.csv"), sep=",")
 
 
-# _generate_atlases(cases_all)
+# 4. SUPER METHYLOME
+###############################################################################
+super_methylome = merge_huge_methylation("super", all_cases_df.id_)
+read_cnt = count_sample_reads(all_cases_df.id_)
+sum([l for _,l in read_cnt])
 
-# merge_bam_files(gbm_all[:20], "20_gbm")
-# merge_bam_files(gbm_all[20:21], "sample_gbm_nr20")
-# merge_bam_files(mng_all[:20], "20_mng")
-# merge_bam_files(pitad_all[:20], "20_pitad")
+samples = all_cases_df.id_.sample(10)
+super_methylome10 = merge_huge_methylation("super10", samples)
+read_cnt = count_sample_reads(samples)
+sum([l for _,l in read_cnt])
 
-# merge_methylation("20_gbm_methyl", gbm_all[:20].id_)
-# merge_methylation("sample_gbm_nr20", gbm_all[20:21].id_)
-# merge_methylation("20_mng_methyl", mng_all[:20].id_)
-# merge_methylation("20_pitad_methyl", pitad_all[:20].id_)
-# merge_methylation("test", pitad_all[:2].id_)
+samples20 = all_cases_df.id_.sample(20)
+super_methylome10 = merge_huge_methylation("super20", samples20)
+read_cnt = count_sample_reads(samples20)
+sum([l for _,l in read_cnt])
 
-
-# super_methylome = merge_huge_methylation("super", all_cases_df.id_)
-# read_cnt = count_sample_reads(all_cases_df.id_)
-# sum([l for _,l in read_cnt])
-
-# samples = all_cases_df.id_.sample(10)
-# super_methylome10 = merge_huge_methylation("super10", samples)
-# read_cnt = count_sample_reads(samples)
-# sum([l for _,l in read_cnt])
-
-# samples20 = all_cases_df.id_.sample(20)
-# super_methylome10 = merge_huge_methylation("super20", samples20)
-# read_cnt = count_sample_reads(samples20)
-# sum([l for _,l in read_cnt])
-
-# samples100 = all_cases_df.id_.sample(100)
-# super_methylome100 = merge_huge_methylation("super100", samples100)
-# read_cnt = count_sample_reads(samples100)
-# sum([l for _,l in read_cnt])
-
-# gbm_atlas = MethylClass.from_disk("20_gbm_methyl")
-# mng_atlas = MethylClass.from_disk("20_mng_methyl")
-# pitad_atlas = MethylClass.from_disk("20_pitad_methyl")
-
-# sample_name = gbm_all.iloc[20].id_
-# sample_reads = get_sample_reads(sample_name)
-# atlas = [gbm_atlas, mng_atlas, pitad_atlas]
-
-# methyl_matches, methyl_overlap, cpgs = atlas_overlap(
-# sample_reads,
-# atlas,
-# )
-
-# run = Run(sample_name, methyl_matches, methyl_overlap, atlas, cpgs)
-# print(run)
-
-# m = merged[
-# [
-# "chromosome",
-# "start",
-# "end",
-# "true_class",
-# "read_len",
-# "read_name",
-# "methylated_gbm",
-# "methylated_mng",
-# "methylated_pitad",
-# "methylated_smp",
-# ]
-# ]
-# readnms = list(set(merged.read_name))
-# r = readnms[0]
-# r = "01ed94c0-93e1-45b5-9b13-63dc3cb00926"
-# m[m.read_name == r]
-# read_lengths = m[
-# ~m[["read_name", "chromosome"]].duplicated()
-# ].read_len.to_list()
+samples100 = all_cases_df.id_.sample(100)
+super_methylome100 = merge_huge_methylation("super100", samples100)
+read_cnt = count_sample_reads(samples100)
+sum([l for _,l in read_cnt])
 
 
+# 5. EXTRACT ALL READS FROM ALL SAMPLES
+###############################################################################
 sample_reads = pd.DataFrame()
 for row in tqdm(
     all_cases_df.itertuples(),
@@ -1176,7 +1156,7 @@ for row in tqdm(
     next_reads = _get_sample_reads(row.id_)
     next_reads["id_"] = row.id_
     sample_reads = sample_reads.append(next_reads)
-    if row.Index % 10 == 0:
+    if row.Index % 50 == 0:
         sample_reads.to_csv(
             os.path.join(DIR, "all_reads_tmp.csv"), index=False
         )
@@ -1184,13 +1164,8 @@ for row in tqdm(
 sample_reads = sample_reads.reset_index(drop=True)
 sample_reads.to_feather(os.path.join(DIR, "all_reads.feather"))
 
-# sample_reads.to_csv(os.path.join(DIR, "all_reads.csv"), index=False)
-# feather.write_dataframe(sample_reads, os.path.join(DIR, "all_reads.feather"))
-# rd = pd.read_feather(os.path.join(DIR, "all_reads.feather"))
-
 memory_usage = sample_reads.memory_usage(deep=True)
 total_memory_MB = memory_usage.sum() / (1024 * 1024)
-
 
 sample_reads["start"] = sample_reads.cpg_start_methyl.apply(
     lambda x: min(y[0] for y in x)
@@ -1199,3 +1174,5 @@ sample_reads["end"] = sample_reads.cpg_start_methyl.apply(
     lambda x: max(y[0] for y in x)
 )
 sample_reads["read_len"] = sample_reads.end - sample_reads.start + 1
+
+sample_reads = pd.read_feather(os.path.join(DIR, "all_reads.feather"))

@@ -32,7 +32,7 @@ from nanodip.config import (
     F5C,
     GENES,
     GENES_RAW,
-    ILLUMINA_CG_MAP,
+    ILLUMINA_CPG_MAP,
     MINIMAP2,
     NANODIP_REPORTS,
     REFERENCE_GENOME_FA,
@@ -51,7 +51,7 @@ def sanity_check():
         BETA_VALUES,
         ANNOTATION_ACRONYMS_BASEL,
         ANNOTATION_ACRONYMS_TCGA,
-        ILLUMINA_CG_MAP,
+        ILLUMINA_CPG_MAP,
         CHROMOSOMES,
         REFERENCE_GENOME_FA,
         REFERENCE_GENOME_MMI,
@@ -82,7 +82,7 @@ def extract_referenced_cpgs(sample_methylation,
     """
     # TODO What about CpG's with strand "-"
     reference_cpgs = pd.read_csv(
-        ILLUMINA_CG_MAP,
+        ILLUMINA_CPG_MAP,
         delimiter="\t",
         names=["ilmnid", "chromosome", "strand", "start"],
     )
