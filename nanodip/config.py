@@ -35,7 +35,7 @@ General
 """
 
 # NanoDiP version number.
-__version__ = "0.0.31"
+__version__ = "0.0.0"
 
 # Enables/disables debug mode.
 DEBUG_MODE = True
