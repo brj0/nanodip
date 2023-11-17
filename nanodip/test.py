@@ -228,3 +228,7 @@ np.sum(df.smp == np.round(df.ppitad)) / len(df.smp)
 
 
 np.sum((df.pgbm == df.pmng) & (df.pmng == df.ppitad))
+
+
+if not os.path.exists(STATUS_TMP):
+    os.makedirs(STATUS_TMP)

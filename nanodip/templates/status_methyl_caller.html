@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <title>Methylation caller</title>
+  <link rel="stylesheet" href="static/style.css">
+  <script src="static/js/jquery-1.11.1.min.js"></script>
+</head>
+
+<body>
+
+<table class="analysis">
+  <thead>
+    <tr>
+      <th><b>Sample ID </b></th>
+      <th><b>Methylation calling</b></th>
+      <th><b>Progress</b></th>
+      <th><b>Status</b></th>
+    </tr>
+  </thead>
+
+  <tbody>
+    {% for run in analysis_runs %}
+    <tr>
+      <td>{{run}}</td>
+      <td>
+        <label class="switch" title="turn on methylation calling">
+          <input type="checkbox" {% if checked[run] %} checked {% endif %} id="{{run}}" onclick="toggleMCActivity(this)">
+          <span class="slider"></span>
+        </label>
+      </td>
+      <td>
+        <div id="{{run}}_prog">{{progress[run]}}</div>
+      </td>
+      <td>
+        <div id="{{run}}_status">{{status[run]}}</div>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+  <script>
+    function toggleMCActivity(cb) {
+      var sample_id = cb.id;
+      var checked = cb.checked;
+      $.ajax({
+        url: "{{url_methyl_caller}}",
+        type: "GET",
+        contentType: "application/json;charset=UTF-8",
+        data: {
+          "sample_id": sample_id,
+          "checked": checked,
+        },
+        dataType:"html",
+        success: function (data) {
+          console.log(sample_id + " changed methylation activity to " + checked);
+        }
+      });
+    }
+    function getCpGs(sample_id) {
+      console.log(sample_id + ": Methylation calling requested");
+      $.ajax({
+        url: "{{url_cpgs}}",
+        type: "GET",
+        contentType: "application/json;charset=UTF-8",
+        data: {
+          "sample_name": sample_id,
+        },
+        dataType:"json",
+        success: function (data) {
+          var stats = data;
+          if (stats["no_callable_left"]) {
+            console.log(sample_id + ": No more callable reads found");
+          }
+          else {
+            console.log(sample_id + ": Methylation calling successful");
+          }
+        },
+        error: function (data) {
+          console.log(sample_id + ": Methylation calling failed");
+        },
+      });
+    }
+    $(document).ready(function(){
+      {% for run in analysis_runs %}
+        if (document.getElementById("{{run}}").checked) {
+          getCpGs("{{run}}");
+        }
+      {% endfor %}
+
+    })
+  </script>
+
+</body>
+</html>

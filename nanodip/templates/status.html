@@ -44,6 +44,21 @@
         }
       });
     }
+    // TODO
+    function methylationCaller() {
+      $.ajax({
+        url: "{{url_live_plots}}",
+        type: "GET",
+        contentType: "application/json;charset=UTF-8",
+        data: {
+          "device_id": deviceId,
+        },
+        dataType:"html",
+        success: function (data) {
+          $("#" + deviceId + "_plots").html(data);
+        }
+      });
+    }
     function setDeviceBoxColor(deviceId, htmlString) {
       // Check if string "PROCESSING" is contained in HTML and set
       // background color accordingly.
@@ -54,7 +69,7 @@
         $("#" + deviceId + "_status").removeClass("device_box_active");
       }
     }
-    /*Refresh the device status and preview plots every 3 seconds.*/
+    /* Refresh the device status and preview plots every 3 seconds. */
     $(document).ready(function() {
       var refreshPage = function() {
         for (deviceId of {{device_ids}}) {

@@ -618,6 +618,7 @@ def device_status(device_id):
     current_mb = round(current_bases / 1e6, 2)
     progress = round(100*current_mb/needed_mb, 1)
     status = {
+        "Sample ID": run_sample_id(device_id),
         "Real device activity": real_device_activity(device_id),
         "Active run": active_run(device_id),
         "Progress": f"{progress}% ({current_mb} MB / {needed_mb} MB)",

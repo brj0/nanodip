@@ -209,6 +209,9 @@ ENDING = {
 # Name for Samples cpgs containing only
 EMPTY_SAMPLE = "nosample"
 
+# Temporary file directory containing status information about samples
+SMP_STATUS_TMP = os.path.join(TMP, "samples", "status")
+SMP_MCACTIVE_TMP = os.path.join(TMP, "samples", "mcactive")
 
 
 """

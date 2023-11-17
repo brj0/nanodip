@@ -32,11 +32,11 @@
           methylationCalled = `Methylation called for ${stats["called"]}.`;
         }
         else {
-          methylationCalled = "No more callable reads found.";
+          methylationCalled = "No callable reads found.";
         }
 
         var text = `${stats["time"]} &emsp; ${methylationCalled} &emsp;`
-          + `${stats["num_completed"]}/${stats["num_fastq"]}<br>`;
+          + `Progress: ${stats["num_completed"]}/${stats["num_fastq"]}<br>`;
         $("#methyl_out").append(text);
         /*Loop*/
         var sleep = 0;

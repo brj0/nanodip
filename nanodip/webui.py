@@ -34,6 +34,8 @@ from nanodip.config import (
     EPIDIP_UMAP_COORDINATE_FILES,
     NANODIP_REPORTS,
     NEEDED_NUMBER_OF_BASES,
+    SMP_MCACTIVE_TMP,
+    SMP_STATUS_TMP,
 )
 from nanodip.utils import (
     composite_path,
@@ -347,6 +349,56 @@ class UI:
             cnv_plt_path_html=cnv_plt_path_html,
             umap_plt_path_png=umap_plt_path_png,
             umap_plt_path_html=umap_plt_path_html,
+        )
+
+    @cherrypy.expose
+    def status_methyl_caller(self, sample_id="", checked="true"):
+        """TODO: Lists callable probes and invokes methylation calling.
+        """
+        if sample_id:
+            if not os.path.exists(SMP_MCACTIVE_TMP):
+                os.makedirs(SMP_MCACTIVE_TMP)
+            fpath_activity = os.path.join(SMP_MCACTIVE_TMP, sample_id)
+            if checked == "true":
+                with open(fpath_activity, "w") as file:
+                    pass
+            else:
+                if os.path.exists(fpath_activity):
+                    os.remove(fpath_activity)
+            return checked
+        analysis_runs = [
+            run for run in get_runs() if not any(
+                pattern in run for pattern in ANALYSIS_EXCLUSION_PATTERNS
+            )
+        ]
+        stats = {}
+        checked = {}
+        status = {}
+        progress = {}
+        for run in analysis_runs:
+            fpath_status = os.path.join(SMP_STATUS_TMP, run)
+            fpath_activity = os.path.join(SMP_MCACTIVE_TMP, run)
+            stats_from_disk = {
+                "time": "", "num_completed": 0, "num_fastq": 0, "called": [""]
+            }
+            checked[run] = os.path.exists(fpath_activity)
+            if os.path.exists(fpath_status):
+                try:
+                    with open(fpath_status, "r") as f:
+                        stats_from_disk = json.load(f)
+                except json.decoder.JSONDecodeError or KeyError:
+                    print(f"{fpath_status} is no json format")
+            stats[run] = stats_from_disk
+            status[run] = stats_from_disk["time"] + " " + "/".join(stats_from_disk["called"])
+            progress[run] = f"{stats_from_disk['num_completed']} / {stats_from_disk['num_fastq']}"
+        return render_template(
+            "status_methyl_caller.html",
+            url_methyl_caller=url_for(UI.status_methyl_caller),
+            url_cpgs=url_for(UI.cpgs),
+            checked=checked,
+            analysis_runs=analysis_runs,
+            progress=progress,
+            status=status,
         )
 
     @cherrypy.expose
@@ -820,6 +872,10 @@ class UI:
         UI.sem.acquire("cpg")
         stats = methylation_caller(sample_name)
         UI.sem.release("cpg")
+        if not os.path.exists(SMP_STATUS_TMP):
+            os.makedirs(SMP_STATUS_TMP)
+        with open(os.path.join(SMP_STATUS_TMP, sample_name), "w") as f:
+            json.dump(stats, f, indent=2)
         return json.dumps(stats)
 
     @cherrypy.expose
