@@ -113,7 +113,7 @@ table.analysis tbody td:nth-child(1) {
 
 a.show {
   display: inline-block;
-  background-color: #f44336;
+  background-color: #555555;
   color: #FFFFFF;
   padding: 5px 10px;
   text-align: center;
@@ -121,6 +121,7 @@ a.show {
   font-size: 16px;
   border-radius: 10px;
   opacity: 0.9;
+  cursor: pointer;
 }
 
 a.show:hover {
@@ -239,15 +240,21 @@ div.hidden {
 }
 
 input:checked + .slider {
-  background-color: #4CAF50;
+  background-color: #555555;
 }
 
 input:focus + .slider {
-  box-shadow: 0 0 1px #4CAF50;
+  box-shadow: 0 0 1px #555555;
 }
 
 input:checked + .slider:before {
   -webkit-transform: translateX(13px);
   -ms-transform: translateX(13px);
   transform: translateX(13px);
+}
+
+.right_align{
+  text-align: right;
+}
+.right_align a {
 }

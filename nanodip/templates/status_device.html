@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <title>Methylation caller</title>
   <link rel="stylesheet" href="static/style.css">
-  <script src="static/js/jquery-1.11.1.min.js"></script>
+  <script src="static/js/jquery-latest.min.js"></script>
 </head>
 
 <body>
@@ -34,23 +34,40 @@
   {% if is_active %}
   <br>
   <div class="radio_device" id="{{device_id}}_live_status">
-    Launch automatic run terminator after {{needed_mega_bases}} MB:
+    Auto terminator:
 
-    <input type="radio" id="terminator_manually" name="terminator" value="button_manually">
-    <label for="terminator_manually">Off</label>
+    <label class="switch" title="Automatically stop after {{needed_mega_bases}} MB">
+      <input type="checkbox" {% if termination_type == "auto" %} checked {% endif %} onclick="toggleTerminationStatus(this, false)">
+      <span class="slider"></span>
+    </label>
 
-    <input type="radio" id="terminator_on" name="terminator" value="button_auto">
-    <label for="terminator_on">On</label>
-
-    &ensp;&ensp;&ensp;&ensp;&ensp;&ensp;
-
-    <input type="radio" id="terminator_now" name="terminator" value="button_terminated">
-    <label for="terminator_now">Terminate now</label>
+    <div class="right_align">
+      <a class="show" onclick="toggleTerminationStatus(this, true)" title="Terminate now">stop</a>
+    </div>
 
   </div>
   {% endif %}
 
   <script>
+    function toggleTerminationStatus(cb, terminateNow) {
+      var device_id = "{{device_id}}";
+      var checked = cb.checked;
+      var termination_type = terminateNow ? "terminated" : (
+        checked ? "auto" : "manually" );
+      $.ajax({
+        url: "{{url_auto_terminator}}",
+        type: "GET",
+        contentType: "application/json;charset=UTF-8",
+        data: {
+          "device_id": device_id,
+          "termination_type": termination_type,
+        },
+        dataType: "html",
+        success: function (data) {
+          console.log("Auto terminator of " + device_id + " set to " + termination_type)
+        }
+      });
+    }
     // Auto-terminator
     function setAutoTerminate(deviceId, value) {
       $.ajax({

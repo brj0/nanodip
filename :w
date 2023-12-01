@@ -92,7 +92,7 @@ class VarsOnDisk:
     def __init__(self, dirname, default={}):
         self.dir = os.path.join(TMP, dirname)
         self.semaphore = threading.Semaphore()
-        self.default = default.copy()
+        self.default = default
         self.VARSFILE = "vars"
         if not os.path.exists(TMP):
             os.makedirs(TMP)
@@ -126,10 +126,10 @@ class VarsOnDisk:
             with open(itemvars, "r") as f:
                 old_vars = json.load(f)
                 result.update(old_vars)
-        except FileNotFoundError:
-            pass
         except json.decoder.JSONDecodeError:
             os.remove(itemvars)
+        except FileNotFoundError:
+            pass
         return result
 
     def __repr__(self):
@@ -431,7 +431,7 @@ class UI:
         start_calling = {}
         status = {}
         progress = {}
-        for smp in analysis_runs:
+        for run in analysis_runs:
             curr_stats = {
                 "time": "",
                 "num_completed": 0,
@@ -440,21 +440,22 @@ class UI:
                 "called": [""],
                 "start_calling": False,
             }
-            old_stats = UI.samples_stats.get(smp)
+            old_stats = UI.samples_stats.get(run)
             curr_stats.update(old_stats)
-            start_calling[smp] = curr_stats["start_calling"]
-            status[smp] = curr_stats["time"]
+            start_calling[run] = curr_stats["start_calling"]
+            status[run] = curr_stats["time"]
             if curr_stats["no_callable_left"]:
-                status[smp] += " No more callable reads found"
-            elif len(curr_stats["called"]) > 0:
-                status[smp] += " Methylation called for " + "/".join(
+                status[run] += " No more callable reads found"
+            else:
+                status[run] += " Methylation called for " + "/".join(
                     curr_stats["called"]
                 )
+            # status[run] = (
+                # curr_stats["time"] + " " + "/".join(curr_stats["called"])
+            # )
             progress[
-                smp
+                run
             ] = f"{curr_stats['num_completed']} / {curr_stats['num_fastq']}"
-            if smp == "test1130b" and progress[smp] != "0 / 0":
-                import pdb; pdb.set_trace()
         return render_template(
             "status_samples.html",
             url_status_samples=url_for(UI.status_samples),
@@ -936,8 +937,6 @@ class UI:
         if UI.sem.proc_cnt["cpg"] > 0 and max_calls != "0":
             return None
         UI.sem.acquire("cpg")
-        if sample_name.startswith("test1130") and int(max_calls) > 0:
-            import pdb; pdb.set_trace()
         stats = methylation_caller(sample_name, max_calls=int(max_calls))
         old_stats = UI.samples_stats.get(sample_name).copy()
         UI.samples_stats.update(sample_name, stats)
@@ -959,13 +958,13 @@ class UI:
                 pattern in run for pattern in ANALYSIS_EXCLUSION_PATTERNS
             )
         ]
-        print(UI.samples_stats)
         for run in analysis_runs:
             sample_stats = self.samples_stats.get(run)
             is_calling = sample_stats.get("start_calling", False)
             max_calls = "1" if is_calling else "0"
+            if run == "test1130a" and max_calls == "1":
+                import pdb; pdb.set_trace()
             UI.cpgs(self, run, max_calls)
-        return str(UI.samples_stats)
 
     @cherrypy.expose
     def change_voltage(self, device_id="", voltage=""):

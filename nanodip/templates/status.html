@@ -12,6 +12,7 @@
     <div id="{{device}}_device" class="preview_element"></div>
     <div id="{{device}}_plots" class="preview_element"></div>
   </div>
+  <div id="methyl_caller"></div>
 {% endfor %}
 
   <script>
@@ -23,11 +24,14 @@
         data: {
           "device_id": deviceId,
         },
-        dataType:"html",
+        dataType: "html",
         success: function (data) {
           $("#" + deviceId + "_device").html(data);
           setDeviceBoxColor(deviceId, data);
-        }
+        },
+        error: function (data) {
+          console.log("Refresh Device stats: error occured.");
+        },
       });
     }
     function refreshPreviewPlots(deviceId) {
@@ -38,25 +42,43 @@
         data: {
           "device_id": deviceId,
         },
-        dataType:"html",
+        dataType: "html",
         success: function (data) {
           $("#" + deviceId + "_plots").html(data);
-        }
+        },
+        error: function (data) {
+          console.log("Refresh plots: error occured.");
+        },
       });
     }
-    // TODO
-    function methylationCaller() {
+    function refreshSamples() {
       $.ajax({
-        url: "{{url_live_plots}}",
+        url: "{{url_status_samples}}",
         type: "GET",
         contentType: "application/json;charset=UTF-8",
         data: {
-          "device_id": deviceId,
         },
         dataType:"html",
         success: function (data) {
-          $("#" + deviceId + "_plots").html(data);
-        }
+          $("#methyl_caller").html(data);
+        },
+        error: function (data) {
+          console.log("Refresh samples: error occured.");
+        },
+      });
+    }
+    function methylationCaller() {
+      $.ajax({
+        url: "{{url_all_cpgs}}",
+        type: "POST",
+        contentType: "application/json;charset=UTF-8",
+        data: {
+        },
+        error: function (data) {
+          console.log("Methylation caller: error occured.");
+        },
+        dataType: "html",
+        async: true,
       });
     }
     function setDeviceBoxColor(deviceId, htmlString) {
@@ -75,7 +97,10 @@
         for (deviceId of {{device_ids}}) {
           refreshDeviceStatus(deviceId);
           refreshPreviewPlots(deviceId);
+          refreshSamples();
         }
+        methylationCaller();
+        console.log("Page refreshed, sleep for 3s...");
         setTimeout(refreshPage, 3000);
       };
       refreshPage();

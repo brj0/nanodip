@@ -834,15 +834,15 @@ def methylation_calling_done(analysis_dir):
     ]
     return all(ending_present)
 
-def methylation_caller(sample_name, analyze_one=True):
+def methylation_caller(sample_name, max_calls=1):
     """Searches for callable fast5/fastq files that have not yet been
     called and invokes methylation calling. Results will be added to
     the NANODIP_OUTPUT directory.
 
     Args:
         sample_name: Name of sample to be analyzed.
-        analyse_one: If True only first fast5/fastq file found
-                     will be analyzed.
+        max_calls: Number of fast5/fastq file that will be methylation
+            called per cycle.
     """
     # At least 2 "passed" files need to be present.
     barcode = predominant_barcode(sample_name)
@@ -889,11 +889,9 @@ def methylation_caller(sample_name, analyze_one=True):
             not_called.append(
                 [analysis_dir, file_name]
             )
-    for directory, file_name in not_called:
+    for directory, file_name in not_called[:max_calls]:
         single_file_methylation_caller(directory)
         curr_called.append(file_name)
-        if analyze_one:
-            break
     num_completed = len(prev_called) + len(curr_called)
     num_fastq = len(fast5q_file_pairs)
     no_callable_left = num_fastq == num_completed
