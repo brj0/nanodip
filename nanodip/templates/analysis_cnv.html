@@ -22,9 +22,11 @@
 
 <script>
   function renderPlot(plotJSON, plotId){
-    Plotly.setPlotConfig({"scrollZoom": true});
-    Plotly.plot(plotId, plotJSON,{});
-    Plotly.relayout(plotId, {height: "800", width: "1580"});
+    var config = {"scrollZoom": true};
+    Plotly.setPlotConfig(config);
+    Plotly.newPlot(plotId, plotJSON, {});
+    //Plotly.plot(plotId, plotJSON,{}); // Adds to existing plot; obsolete
+    Plotly.relayout(plotId, {height: "800", width: "1580"})
   }
 
   function renderNewPlot(plotJSON, plotId){

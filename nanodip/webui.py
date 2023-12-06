@@ -121,7 +121,7 @@ class VarsOnDisk:
         """
         itemdir = os.path.join(self.dir, item)
         itemvars = os.path.join(itemdir, self.VARSFILE)
-        result = self.default
+        result = self.default.copy()
         try:
             with open(itemvars, "r") as f:
                 old_vars = json.load(f)
@@ -140,62 +140,6 @@ class VarsOnDisk:
             result += f"item: {item}\n{self.VARSFILE}: "
             result += json.dumps(item_vars) + "\n\n"
         return result
-
-
-# class Device:
-    # """Container used to store auto-termination status for a single
-    # device.
-    # """
-    # def __init__(self, device_id):
-        # self.id = device_id
-        # self.termination_type = "manually"
-
-    # def __repr__(self):
-        # return f"(id={self.id}, termination_type={self.termination_type})"
-
-
-# class Devices:
-    # """List of Device objects, used to store auto-termination status for
-    # all devices.
-    # """
-    # def __init__(self):
-        # self.list = []
-
-    # def get(self, device_id):
-        # """Appends device {device_id} if necessary and returns it."""
-        # device = self.get_device(device_id)
-        # if device:
-            # return device
-        # device = Device(device_id)
-        # self.list.append(device)
-        # return device
-
-    # def pop(self, device_id):
-        # """Removes and returns device."""
-        # device = self.get_device(device_id)
-        # if device:
-            # self.list.remove(device)
-            # return device
-        # return None
-
-    # def get_device(self, device_id):
-        # """Returns device with given id. Returns false if id is not found."""
-        # return next(
-            # (device for device in self.list if device_id == device.id),
-            # False,
-        # )
-
-    # def __iter__(self):
-        # return iter(self.list)
-
-    # def __contains__(self, other):
-        # return other in [d.id for d in self]
-
-    # def __repr__(self):
-        # out = "["
-        # out += ", ".join([str(d) for d in self.list])
-        # out += "]"
-        # return out
 
 
 class ActivePlots:
@@ -414,7 +358,11 @@ class UI:
 
     @cherrypy.expose
     def status_samples(self, sample_id="", start_calling="true"):
-        """TODO: Lists callable probes and invokes methylation calling."""
+        """ Retrieve a table providing an overview of all active samples,
+        including their methylation progress/status. Additionally, this
+        function offers a switch to initiate methylation calling for the
+        specified sample.
+        """
         if sample_id:
             UI.samples_stats.update(
                 sample_id,
@@ -453,8 +401,6 @@ class UI:
             progress[
                 smp
             ] = f"{curr_stats['num_completed']} / {curr_stats['num_fastq']}"
-            if smp == "test1130b" and progress[smp] != "0 / 0":
-                import pdb; pdb.set_trace()
         return render_template(
             "status_samples.html",
             url_status_samples=url_for(UI.status_samples),
@@ -701,6 +647,7 @@ class UI:
             )
         raise cherrypy.HTTPError(404, "URL not found")
 
+    # TODO: plotting multiple genes not implemented in html
     @cherrypy.expose
     def cnv(self, sample_name, genes="", new="False", browser_tab_id=""):
         """Creates CNV plot and returns it as JSON.
@@ -929,6 +876,8 @@ class UI:
         ):
             stop_run(device_id)
 
+    # TODO Bad performance during methylation calling. Probably best to make
+    # separate processes/threads.
     @cherrypy.expose
     def cpgs(self, sample_name="", max_calls="1"):
         """Invokes methylation calling and returns statistics."""
@@ -936,8 +885,6 @@ class UI:
         if UI.sem.proc_cnt["cpg"] > 0 and max_calls != "0":
             return None
         UI.sem.acquire("cpg")
-        if sample_name.startswith("test1130") and int(max_calls) > 0:
-            import pdb; pdb.set_trace()
         stats = methylation_caller(sample_name, max_calls=int(max_calls))
         old_stats = UI.samples_stats.get(sample_name).copy()
         UI.samples_stats.update(sample_name, stats)
@@ -959,13 +906,11 @@ class UI:
                 pattern in run for pattern in ANALYSIS_EXCLUSION_PATTERNS
             )
         ]
-        print(UI.samples_stats)
         for run in analysis_runs:
             sample_stats = self.samples_stats.get(run)
             is_calling = sample_stats.get("start_calling", False)
             max_calls = "1" if is_calling else "0"
             UI.cpgs(self, run, max_calls)
-        return str(UI.samples_stats)
 
     @cherrypy.expose
     def change_voltage(self, device_id="", voltage=""):
@@ -1015,7 +960,7 @@ class UI:
 def start_webserver():
     """Start CherryPy Webserver."""
     if DEBUG_MODE:
-        #Set access logging
+        # Set access logging
         cherrypy.log.screen = True
         cherrypy.config.update({
             'log.screen': True,
@@ -1023,7 +968,7 @@ def start_webserver():
 
 
     else:
-        #Set access logging
+        # Set access logging
         cherrypy.log.screen = False
         cherrypy.config.update({'log.screen': False})
         cherrypy.config.update({ "environment": "embedded" })

@@ -254,7 +254,6 @@ input:checked + .slider:before {
 }
 
 .right_align{
-  text-align: right;
-}
-.right_align a {
+  float: right;
+  margin-top: -5px;
 }
