@@ -300,9 +300,56 @@ class Genome:
         genes = pd.read_csv(
             GENES_RAW,
             delimiter="\t",
-            names=["seqname", "source", "feature", "start", "end",
+            header=1,
+            names=[
+                "start", "end", "strand", "name", "seqname", "gene_stable_id"
+            ],
+            dtype={"seqname": str},
+        )
+        chrom_remap = {str(i + 1): self.chrom.name[i] for i in range(0, 22)}
+        chrom_remap.update(
+            {"X": self.chrom.name[22], "Y": self.chrom.name[23]}
+        )
+        genes.seqname = [chrom_remap[i] for i in genes.seqname]
+        genes = genes.drop_duplicates(subset=["name"], keep="first")
+        genes = genes.sort_values("name")
+        genes["loc"] = genes.apply(
+            lambda z: (
+                  z["seqname"]
+                + ":"
+                + "{:,}".format(z["start"])
+                + "-"
+                + "{:,}".format(z["end"])
+            ),
+            axis=1,
+        )
+        # Make data compatible with pythonic notation
+        genes["x_end"] = genes.end + 1
+        offset = {i.name:i.offset for i in self}
+        genes["x_start"] = genes.apply(
+            lambda z: offset[z["seqname"]] + z["start"],
+            axis=1,
+        )
+        genes["x_end"] = genes.apply(
+            lambda z: offset[z["seqname"]] + z["x_end"],
+            axis=1,
+        )
+        genes["x_mid"] = (genes["x_start"] + genes["x_end"]) // 2
+        with open(RELEVANT_GENES, "r") as f:
+            relevant_genes = f.read().splitlines()
+        genes["relevant"] = genes.name.apply(lambda x: x in relevant_genes)
+        genes["len"] = genes["x_end"] - genes["x_start"]
+        genes.to_csv(GENES, index=False, sep="\t")
+
+    # For hg10.refGene.gtf Dataset
+    def write_genes_csv_refGene(self):
+        """Write csv gene list with one selected transcript per gene."""
+        genes = pd.read_csv(
+            GENES_RAW,
+            delimiter="\t",
+            names=["seqname", "source", "feature", "x_start", "x_end",
                    "score", "strand", "frame", "attribute"],
-            usecols=["seqname", "feature", "start", "end", "attribute"]
+            usecols=["seqname", "strand", "feature", "x_start", "x_end", "attribute"]
         )
         genes = genes.loc[
             (genes["feature"] == "transcript")
@@ -322,30 +369,30 @@ class Genome:
             lambda z: (
                   z["seqname"]
                 + ":"
-                + "{:,}".format(z["start"])
+                + "{:,}".format(z["x_start"])
                 + "-"
-                + "{:,}".format(z["end"])
+                + "{:,}".format(z["x_end"])
             ),
             axis=1,
         )
         # Make data compatible with pythonic notation
-        genes["end"] += 1
+        genes["x_end"] += 1
         offset = {i.name:i.offset for i in self}
-        genes["start"] = genes.apply(
-            lambda z: offset[z["seqname"]] + z["start"],
+        genes["x_start"] = genes.apply(
+            lambda z: offset[z["seqname"]] + z["x_start"],
             axis=1,
         )
-        genes["end"] = genes.apply(
-            lambda z: offset[z["seqname"]] + z["end"],
+        genes["x_end"] = genes.apply(
+            lambda z: offset[z["seqname"]] + z["x_end"],
             axis=1,
         )
-        genes["midpoint"] = (genes["start"] + genes["end"]) // 2
+        genes["x_mid"] = (genes["x_start"] + genes["x_end"]) // 2
         with open(RELEVANT_GENES, "r") as f:
             relevant_genes = f.read().splitlines()
         genes["relevant"] = genes.name.apply(lambda x: x in relevant_genes)
-        genes["len"] = genes["end"] - genes["start"]
-        genes[["name", "seqname", "start", "end",
-               "len", "midpoint", "relevant", "transcript",
+        genes["len"] = genes["x_end"] - genes["x_start"]
+        genes[["name", "seqname", "strand", "x_start", "x_end",
+               "len", "x_mid", "relevant", "transcript",
                "loc",
         ]].to_csv(GENES, index=False, sep="\t")
 
@@ -388,7 +435,7 @@ class Sample:
     """Container of sample data."""
     def __init__(self, _name, cpgs=None):
         # Convert "" to EMPTY_SAMPLE
-        name = EMPTY_SAMPLE if _name is "" else _name
+        name = EMPTY_SAMPLE if _name == "" else _name
         # Either Sample is initialized by name/id or by CpG's
         if (name is EMPTY_SAMPLE and cpgs is None) or (
             name is not EMPTY_SAMPLE and cpgs is not None

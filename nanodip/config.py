@@ -126,7 +126,11 @@ REFERENCE_GENOME_MMI = os.path.join(
 
 # HG19 Gene data downloaded from:
 # https://hgdownload.soe.ucsc.edu/goldenPath/hg19/bigZips/genes/hg19.refGene.gtf.gz
-GENES_RAW = os.path.join(REFERENCE_DATA, "hg19_cnv", "hg19.refGene.gtf")
+# GENES_RAW = os.path.join(REFERENCE_DATA, "hg19_cnv", "hg19.refGene.gtf")
+
+# HG19 Gene data downloaded from:
+# https://grch37.ensembl.org/biomart/martview
+GENES_RAW = os.path.join(REFERENCE_DATA, "hg19_cnv", "hg19.ensembl.org.tsv")
 
 # Contains the data from GENES_RAW in simplified form.
 GENES = os.path.join(REFERENCE_DATA, "hg19_cnv", "hg19_genes.csv")

@@ -315,12 +315,12 @@ class CNVData:
         plot.add_trace(
             go.Scatter(
                 customdata=genes[[
-                    "name",          # 0
-                    "loc",           # 1
-                    "transcript",    # 2
-                    "len",           # 3
-                    "cn_obs",        # 4
-                    "cn_exp",        # 5
+                    "name",           # 0
+                    "loc",            # 1
+                    "gene_stable_id", # 2
+                    "len",            # 3
+                    "cn_obs",         # 4
+                    "cn_exp",         # 5
                 ]],
                 hovertemplate=(
                     "<b> %{customdata[0]} </b> "
