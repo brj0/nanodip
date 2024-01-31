@@ -26,6 +26,7 @@ from nanodip.config import (
     ANNOTATION_ACRONYMS_TCGA,
     BETA_VALUES,
     CHROMOSOMES,
+    C_ANNOTATIONS,
     EMPTY_SAMPLE,
     ENDING,
     GENES,
@@ -129,7 +130,7 @@ def _get_annotation(name, mclasses=None):
     is read from original excel file (slow) and csv file is written to
     disk.
     """
-    path_csv = os.path.join(ANNOTATIONS, name + ".csv")
+    path_csv = os.path.join(C_ANNOTATIONS, name + ".csv")
     path_xlsx = os.path.join(ANNOTATIONS,name + ".xlsx")
     csv_exists_and_up_to_date = (
         os.path.exists(path_csv) and
@@ -176,7 +177,7 @@ class Reference:
     def __init__(self, name, mclasses=None):
         valid_names = set(
             x.split(".")[0] for x in os.listdir(ANNOTATIONS)
-            if x.endswith("xlsx") or x.endswith("csv")
+            if x.endswith("xlsx")
         )
         if name not in valid_names:
             nm_str = ", ".join(valid_names)

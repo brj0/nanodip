@@ -56,8 +56,14 @@ NANODIP_OUTPUT = os.path.join(DATA, "nanodip_output")
 # Location to write reports and figures.
 NANODIP_REPORTS = os.path.join(DATA, "nanodip_reports")
 
+# Location of all binaries and reference data
+APP = "/applications"
+
+# Where to write automatically generated data for faster access and tmp files
+CACHE = os.path.join(APP, "nanodip_cache")
+
 # Where to write temporary files
-TMP = os.path.join(DATA, "tmp")
+TMP = os.path.join(CACHE, "tmp")
 
 
 """
@@ -66,13 +72,17 @@ Reference data
 """
 
 # Location of all reference data.
-REFERENCE_DATA = "/applications/reference_data"
+REFERENCE_DATA = os.path.join(APP, "reference_data")
+
+# Location of all transformed reference data for faster performance.
+C_REFERENCE_DATA = os.path.join(CACHE, "reference_data")
 
 # Location of preprocessed beta values.
 BETA_VALUES = os.path.join(REFERENCE_DATA, "betaEPIC450Kmix_bin")
 
 # Location of annotation spreadsheets.
 ANNOTATIONS = os.path.join(REFERENCE_DATA, "reference_annotations")
+C_ANNOTATIONS = os.path.join(C_REFERENCE_DATA, "reference_annotations")
 
 # Location of annotation acronyms.
 ANNOTATION_ACRONYMS = os.path.join(ANNOTATIONS, "acronyms")
@@ -95,7 +105,7 @@ ILLUMINA_CPG_MAP = os.path.join(
 )
 
 # Location of binary methylation data and metadata.
-REFERENCE_METHYLATION_DATA = os.path.join(REFERENCE_DATA, "EPIC450K")
+REFERENCE_METHYLATION_DATA = os.path.join(C_REFERENCE_DATA, "EPIC450K")
 
 # Binary methylation file.
 REFERENCE_METHYLATION = os.path.join(
@@ -113,8 +123,12 @@ REFERENCE_METHYLATION_SHAPE = os.path.join(
     REFERENCE_METHYLATION_DATA, "shape.csv"
 )
 
+# Contains reference data for CNV plots
+HG19_CNV = os.path.join(REFERENCE_DATA, "hg19_cnv")
+C_HG19_CNV = os.path.join(C_REFERENCE_DATA, "hg19_cnv")
+
 # Genome reference data containing chromosome lengths and centromere position.
-CHROMOSOMES = os.path.join(REFERENCE_DATA, "hg19_cnv", "hg19_chromosomes.tsv")
+CHROMOSOMES = os.path.join(HG19_CNV, "hg19_chromosomes.tsv")
 
 # Human reference genome in fa format.
 REFERENCE_GENOME_FA = os.path.join(REFERENCE_DATA, "minimap_data/hg19.fa")
@@ -126,17 +140,17 @@ REFERENCE_GENOME_MMI = os.path.join(
 
 # HG19 Gene data downloaded from:
 # https://hgdownload.soe.ucsc.edu/goldenPath/hg19/bigZips/genes/hg19.refGene.gtf.gz
-# GENES_RAW = os.path.join(REFERENCE_DATA, "hg19_cnv", "hg19.refGene.gtf")
+# GENES_RAW = os.path.join(HG19_CNV, "hg19.refGene.gtf")
 
 # HG19 Gene data downloaded from:
 # https://grch37.ensembl.org/biomart/martview
-GENES_RAW = os.path.join(REFERENCE_DATA, "hg19_cnv", "hg19.ensembl.org.tsv")
+GENES_RAW = os.path.join(HG19_CNV, "hg19.ensembl.org.tsv")
 
 # Contains the data from GENES_RAW in simplified form.
-GENES = os.path.join(REFERENCE_DATA, "hg19_cnv", "hg19_genes.csv")
+GENES = os.path.join(C_HG19_CNV, "hg19_genes.csv")
 
 # List of clinically important genes.
-RELEVANT_GENES = os.path.join(REFERENCE_DATA, "hg19_cnv", "relevant_genes.csv")
+RELEVANT_GENES = os.path.join(HG19_CNV, "relevant_genes.csv")
 
 
 """
@@ -270,7 +284,7 @@ CNV_LINK = (
 UMAP_LINK = "http://s1665.rootserver.io/umap_links/%s"
 
 # Path to precalculated CNV plotly grid.
-CNV_GRID = "/applications/reference_data/hg19_cnv/grid.json"
+CNV_GRID = os.path.join(TMP, "hg19_cnv/grid.json")
 
 # Number of reference cases to be shown in subplot including copy
 # number profile links (not advisable >200, plotly will become really
@@ -313,3 +327,15 @@ CherryPy
 CHERRYPY_HOST = "localhost"
 THIS_HOST = "localhost"
 CHERRYPY_PORT = 8080
+
+
+# Construct cache directory if it does not exist
+for dir_ in [
+    C_ANNOTATIONS,
+    C_HG19_CNV,
+    C_REFERENCE_DATA,
+    REFERENCE_METHYLATION_DATA,
+    TMP,
+]:
+    os.makedirs(dir_, exist_ok=True)
+

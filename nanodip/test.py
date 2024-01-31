@@ -448,3 +448,25 @@ def methylation_caller(sample_name, analyze_one=True):
             x=0
             y=1
             z=2
+
+
+
+
+
+"""
+EPIC450K komplett
+hg19_cnv : grid.json
+reference_annotation : acronyms, all csv files
+"""
+
+
+def cachify_path(file_path):
+    """Returns the transformed file path within the cache directory."""
+    cache_name = os.path.split(CACHE)[1]
+    path_components = file_path.split("/")
+    path_components.insert(1, cache_name)
+    new_path = "/".join(path_components)
+    return new_path
+
+REFERENCE_METHYLATION_SHAPE = cachify_path(REFERENCE_METHYLATION_SHAPE)
+
