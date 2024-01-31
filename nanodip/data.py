@@ -159,6 +159,8 @@ def hash_from_string(string):
 class Reference:
     """Container of reference data and metadata."""
 
+    make_binary_reference_data_if_needed()
+
     # Save cpgs with index as dictionary to allow fast index lookup.
     with open(REFERENCE_CPG_SITES, "r") as f:
         cpg_site_to_index = {
