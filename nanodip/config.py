@@ -147,7 +147,7 @@ REFERENCE_GENOME_MMI = os.path.join(
 GENES_RAW = os.path.join(HG19_CNV, "hg19.ensembl.org.tsv")
 
 # Contains the data from GENES_RAW in simplified form.
-GENES = os.path.join(C_HG19_CNV, "hg19_genes.csv")
+GENES = os.path.join(C_HG19_CNV, "hg19_genes.tsv")
 
 # List of clinically important genes.
 RELEVANT_GENES = os.path.join(HG19_CNV, "relevant_genes.csv")
@@ -284,7 +284,7 @@ CNV_LINK = (
 UMAP_LINK = "http://s1665.rootserver.io/umap_links/%s"
 
 # Path to precalculated CNV plotly grid.
-CNV_GRID = os.path.join(TMP, "hg19_cnv/grid.json")
+CNV_GRID = os.path.join(C_HG19_CNV, "grid.json")
 
 # Number of reference cases to be shown in subplot including copy
 # number profile links (not advisable >200, plotly will become really
