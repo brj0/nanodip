@@ -245,17 +245,20 @@ def composite_path(directory, *args):
         file_name,
     )
 
-def discrete_colors(names):
+def discrete_colors(names, modifier="IcX"):
     """Pseudorandom color scheme based on hashed values. Colors
     of methylation classes will be fixed to their name.
         Args:
             names: List of strings.
+            modifier: Arbitrary string to adjust all colors, resulting in a
+                comprehensive change to the color scheme.
+
         Returns:
             Dictionary of color scheme for all string elements.
     """
     color = {}
     for var in set(names):
-        hash_str = hashlib.md5(bytes(var, "utf-8")).digest()
+        hash_str = hashlib.md5(bytes(var + modifier, "utf-8")).digest()
         hash1 = int.from_bytes(hash_str[:8], byteorder="big")
         hash2 = int.from_bytes(hash_str[8:12], byteorder="big")
         hash3 = int.from_bytes(hash_str[12:], byteorder="big")
@@ -268,6 +271,82 @@ def discrete_colors(names):
         rgb = tuple(int(255 * x) for x in rgb_frac)
         color[var] = f"rgb{rgb}"
     return color
+
+def _best_suffix_for_discrete_colors(umap_df, sq_dist, str_range=range(1,10)):
+    """Helper function for determining the modifier in 'discrete_colors',
+    so that neighbouring points have as different colours as possible.
+    """
+    # Best results for sq_dist = 5 and string length <=3
+    #     string: p9j min_col_diff: 237 avg_col_diff: 24709
+    #     string: uoU min_col_diff: 266 avg_col_diff: 26730
+    #     string: IcX min_col_diff: 285 avg_col_diff: 23411
+    import string
+    import re
+    import itertools
+    import numpy as np
+    # Helper function to calculate color distance
+    def color_distance(color1, color2):
+        # Extract RGB values from color strings
+        rgb1 = [int(x) for x in re.findall(r"\d+", color1)]
+        rgb2 = [int(x) for x in re.findall(r"\d+", color2)]
+        distance = sum([(c1 - c2) ** 2 for c1, c2 in zip(rgb1, rgb2)])
+        return distance
+
+    classes = umap_df.methylation_class.unique()
+    n_classes = len(classes)
+    min_dist = {}
+
+    for i in range(n_classes):
+        for j in range(i + 1, n_classes):
+            class0 = classes[i]
+            class1 = classes[j]
+            df0 = np.array(
+                umap_df.loc[umap_df.methylation_class == class0][["x", "y"]]
+            )
+            df1 = np.array(
+                umap_df.loc[umap_df.methylation_class == class1][["x", "y"]]
+            )
+            dist = np.sum(
+                (df0[:, np.newaxis] - df1[np.newaxis, :]) ** 2, axis=-1
+            )
+            min_dist[(class0, class1)] = np.min(dist)
+
+    current_max = 0
+    current_avg = 0
+
+    characters = string.ascii_letters + string.digits
+
+    # Loop over all strings
+    for length in str_range:
+        print(f"loop over strings of length {length}")
+        for combination in itertools.product(characters, repeat=length):
+            modifier = ''.join(combination)
+            colors = discrete_colors(classes, modifier=modifier)
+            col_diff = []
+            for i in range(n_classes):
+                for j in range(i + 1, n_classes):
+                    class0 = classes[i]
+                    class1 = classes[j]
+                    d = min_dist[class0, class1]
+                    if d < sq_dist:
+                        col_diff.append(
+                            color_distance(colors[class0], colors[class1])
+                        )
+            min_col_diff = np.min(col_diff)
+            avg_col_diff = np.mean(col_diff)
+            if min_col_diff > current_max or (
+                min_col_diff == current_max and current_avg < avg_col_diff
+            ):
+                current_max = min_col_diff
+                current_avg = avg_col_diff
+                print(
+                    "string:",
+                    modifier,
+                    "min_col_diff:",
+                    min_col_diff,
+                    "avg_col_diff:",
+                    avg_col_diff,
+                )
 
 def bonferroni_corrected_ci(hits, lengths, trials, target_length, alpha=0.05):
     """

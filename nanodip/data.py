@@ -273,6 +273,9 @@ class Reference:
         ]
         return "\n".join(lines)
 
+    def __repr__(self):
+        return str(self)
+
 class Genome:
     """Data container for reference genome data."""
     def __init__(self):
@@ -409,6 +412,10 @@ class Genome:
         ]
         return "\n".join(lines)
 
+    def __repr__(self):
+        return str(self)
+
+
 def cpg_methyl_from_reads(sample_name):
     """Returns all Illumina methylation CpG-sites with methylation
     status extracted so far.
@@ -420,23 +427,27 @@ def cpg_methyl_from_reads(sample_name):
         Pandas Data Frame containing the reads Illumina cpg_sites and
         methylation status.
     """
-    methylation_info = pd.DataFrame(columns=["cpg_site", "methylation"])
     cpg_files = files_by_ending(
         NANODIP_OUTPUT, sample_name, ending=ENDING["methoverl_tsv"]
     )
+    cpg_list = []
     for f in cpg_files:
         # Some fast5 files do not contain any CpGs.
         try:
             cpgs = pd.read_csv(f, delimiter="\t", header=None,
                                 names=["cpg_site", "methylation"])
-            methylation_info = methylation_info.append(cpgs)
+            cpg_list.append(cpgs)
         except FileNotFoundError:
             logger.exception("Empty file encountered, skipping")
+    methylation_info = pd.concat(
+        cpg_list, ignore_index=True, names=["cpg_site", "methylation"]
+    )
+
     return methylation_info.reset_index(drop=True)
 
 class Sample:
     """Container of sample data."""
-    def __init__(self, _name, cpgs=None):
+    def __init__(self, _name="", cpgs=None):
         # Convert "" to EMPTY_SAMPLE
         name = EMPTY_SAMPLE if _name == "" else _name
         # Either Sample is initialized by name/id or by CpG's
@@ -526,6 +537,10 @@ class Sample:
         ]
         return "\n".join(lines)
 
+    def __repr__(self):
+        return str(self)
+
+
 def reference_methylation_from_index(reference_index, cpg_index):
     """Extract and return (reference-specimen x CpG-site) methylation
     submatrix from reference data.
@@ -572,7 +587,7 @@ def get_reference_methylation(reference_specimens, cpgs):
     reference_index = [
         Reference.specimen_to_index[a] for a in reference_specimens
     ]
-    reference_index.sort()
+    # reference_index.sort()
 
     cpg_index = [
         Reference.cpg_site_to_index[c] for c in cpgs

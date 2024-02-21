@@ -352,32 +352,42 @@ class CNVData:
             ))
         return plot.to_json()
 
-def umap_plot_from_data(sample, reference, umap_df, close_up):
+def umap_plot_from_data(umap_df, sample=None, reference=None, close_up=False):
     """Create and return umap plot from UMAP data.
 
     Args:
-        sample: Sample data.
-        reference: Reference data.
         umap_df: pandas data frame containing UMAP matrix and
             attributes. First row,w corresponds to sample.
+        sample: Sample data.
+        reference: Reference data.
         close_up: Bool to indicate if only top matches should be plotted.
     Returns:
         UMAP plot as plotly object.
     """
-    # If true, sample methylation is part of analysis.
-    add_sample = not sample.cpgs_only()
-
-    umap_sample = umap_df.iloc[0]
-    title0 = f"for {sample.name}" if add_sample else ""
-    umap_title = (
-        f"UMAP {title0} <br><sup>Reference: {reference.name} "
-        f"({len(reference.specimens)} cases), "
-        f"{len(sample.cpg_overlap)} CpGs </sup>"
-    )
-    if close_up:
-        umap_title = "Close-up " + umap_title
     methyl_classes = umap_df.methylation_class[1:].to_list()
     methyl_classes.sort()
+    if sample is None or sample.cpgs_only():
+        color_map=discrete_colors(methyl_classes)
+        category_orders={"methylation_class": methyl_classes}
+        add_sample = False
+        title0 = ""
+        title1 = ""
+    else:
+        color_map = {sample.name: "#ff0000", **discrete_colors(methyl_classes)}
+        category_orders={"methylation_class": [sample.name] + methyl_classes}
+        add_sample = True
+        umap_sample = umap_df.iloc[0]
+        title0 = f"for {sample.name}"
+        title1 = f", {len(sample.cpg_overlap)} CpGs"
+    if reference is not None:
+        umap_title = (
+            f"UMAP {title0} <br><sup>Reference: {reference.name} "
+            f"({len(reference.specimens)} cases){title1} CpGs </sup>"
+        )
+    else:
+        umap_title = ""
+    if close_up:
+        umap_title = "Close-up " + umap_title
     umap_plot = px.scatter(
         umap_df,
         x="x",
@@ -385,12 +395,9 @@ def umap_plot_from_data(sample, reference, umap_df, close_up):
         labels={"x":"UMAP 0", "y":"UMAP 1", "methylation_class":"WHO class"},
         title=umap_title,
         color="methylation_class",
-        color_discrete_map={
-            sample.name: "#ff0000",
-            **discrete_colors(methyl_classes),
-        },
+        color_discrete_map=color_map,
         hover_name="id",
-        category_orders={"methylation_class": [sample.name] + methyl_classes},
+        category_orders=category_orders,
         hover_data=["description"],
         render_mode=PLOTLY_RENDER_MODE,
         template="simple_white",
@@ -600,9 +607,9 @@ class UMAPData:
     def draw_scatter_plot(self):
         """Draws UMAP scatter plot with close-up plot from data."""
         self.plot = umap_plot_from_data(
+            self.umap_df,
             self.sample,
             self.reference,
-            self.umap_df,
             close_up=False,
         )
         logger.info("UMAP plot generated.")
@@ -615,9 +622,9 @@ class UMAPData:
             by="distance"
         )[:UMAP_PLOT_TOP_MATCHES + 1]
         self.cu_plot = umap_plot_from_data(
+            self.cu_umap_df,
             self.sample,
             self.reference,
-            self.cu_umap_df,
             close_up=True,
         )
         logger.info("UMAP close-up plot generated.")
