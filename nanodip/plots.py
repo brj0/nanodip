@@ -378,7 +378,7 @@ def umap_plot_from_data(umap_df, sample=None, reference=None, close_up=False):
         add_sample = True
         umap_sample = umap_df.iloc[0]
         title0 = f"for {sample.name}"
-        title1 = f", {len(sample.cpg_overlap)} CpGs"
+        title1 = f", {len(sample.cpg_overlap)}"
     if reference is not None:
         umap_title = (
             f"UMAP {title0} <br><sup>Reference: {reference.name} "

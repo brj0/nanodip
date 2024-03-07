@@ -421,36 +421,32 @@ def methylation_caller(sample_name, analyze_one=True):
 # }
 
 
-
-            print("0         smp =", smp)
-            print("1         curr_stats =", curr_stats)
-            print("2         old_stats =", old_stats)
-            print("3         curr_stats =", curr_stats)
-            print("4         status =", status)
-            print("5         progress =", progress)
-            print("6         (smp, progress[smp]) =", (smp, progress[smp]))
-            if (not (smp, progress[smp]) in [
-                ("test1204a", "184 / 184"),
-                ("test1201d", "1 / 60"),
-                ("test1201c", "0 / 0"),
-                ("test1201b", "0 / 92"),
-                ("test1201a", "6 / 107"),
-                ("test1130b", "0 / 0"),
-                ("test1130a", "16 / 17"),
-                ("test1129a", "12 / 19"),
-            ]) and (smp != "test1201a"):
-                # import pdb; pdb.set_trace()
-                print("0!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-                print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-                print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-                print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-                print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-            x=0
-            y=1
-            z=2
-
-
-
+# print("0         smp =", smp)
+# print("1         curr_stats =", curr_stats)
+# print("2         old_stats =", old_stats)
+# print("3         curr_stats =", curr_stats)
+# print("4         status =", status)
+# print("5         progress =", progress)
+# print("6         (smp, progress[smp]) =", (smp, progress[smp]))
+# if (not (smp, progress[smp]) in [
+# ("test1204a", "184 / 184"),
+# ("test1201d", "1 / 60"),
+# ("test1201c", "0 / 0"),
+# ("test1201b", "0 / 92"),
+# ("test1201a", "6 / 107"),
+# ("test1130b", "0 / 0"),
+# ("test1130a", "16 / 17"),
+# ("test1129a", "12 / 19"),
+# ]) and (smp != "test1201a"):
+# # import pdb; pdb.set_trace()
+# print("0!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+# print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+# print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+# print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+# print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+# x=0
+# y=1
+# z=2
 
 
 """
@@ -468,5 +464,5 @@ def cachify_path(file_path):
     new_path = "/".join(path_components)
     return new_path
 
-REFERENCE_METHYLATION_SHAPE = cachify_path(REFERENCE_METHYLATION_SHAPE)
 
+REFERENCE_METHYLATION_SHAPE = cachify_path(REFERENCE_METHYLATION_SHAPE)

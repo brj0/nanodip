@@ -179,7 +179,7 @@ def calculate_std(reference):
     return beta_value_df
 
 
-def top_variable_cpgs(reference, nr_top_cpgs):
+def top_variable_cpgs(reference, nr_top_cpgs, expiry_time=3600):
     """Returns the 'nr_top_cpgs' most variable CpG's of 'reference',
     measured by standard deviation.
     """
@@ -187,10 +187,10 @@ def top_variable_cpgs(reference, nr_top_cpgs):
         EPIDIP_TMP, reference.name, ENDING["stdsortarr_bin"]
     )
     # Calculates the stds and stores them in a file if it does not
-    # already exist or is older than 1 hour.
+    # already exist or is older than expiry_time.
     if (
         not os.path.exists(std_sorted)
-        or time.time() - os.path.getmtime(std_sorted) > 60 * 60
+        or time.time() - os.path.getmtime(std_sorted) > expiry_time
     ):
         calculate_std(reference)
     beta_value_df = pd.read_csv(std_sorted)

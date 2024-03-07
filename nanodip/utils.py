@@ -40,7 +40,9 @@ from nanodip.config import (
     RELEVANT_GENES,
     RESULT_ENDING,
     SAMTOOLS,
+    TMP,
 )
+from nanodip.static.discrete_color_map import color_map
 # end_internal_modules
 
 def sanity_check():
@@ -245,108 +247,156 @@ def composite_path(directory, *args):
         file_name,
     )
 
-def discrete_colors(names, modifier="IcX"):
-    """Pseudorandom color scheme based on hashed values. Colors
-    of methylation classes will be fixed to their name.
+def random_color(var):
+    """Pseudorandom color based on hashed string.
+        Args:
+            var: string to hash
+
+        Returns:
+            Tripple of rgb color.
+    """
+    hash_str = hashlib.md5(bytes(var, "utf-8")).digest()
+    hash1 = int.from_bytes(hash_str[:8], byteorder="big")
+    hash2 = int.from_bytes(hash_str[8:12], byteorder="big")
+    hash3 = int.from_bytes(hash_str[12:], byteorder="big")
+    hue = hash1 % 365
+    saturation = hash2 % 91 + 10
+    lightness = hash3 % 41 + 30
+    # hsl has to be transformed to rgb for plotly, since otherwise not all
+    # colors are displayed correctly, probably due to plotly bug.
+    rgb_frac = colorsys.hls_to_rgb(
+        hue / 364, lightness / 100, saturation / 100
+    )
+    rgb = tuple(int(255 * x) for x in rgb_frac)
+    return rgb
+
+
+def discrete_colors(names):
+    """Pseudorandom color scheme based on precalculated values to improve
+        readability for neighboring methylation groups.
+
         Args:
             names: List of strings.
-            modifier: Arbitrary string to adjust all colors, resulting in a
-                comprehensive change to the color scheme.
 
         Returns:
             Dictionary of color scheme for all string elements.
     """
     color = {}
     for var in set(names):
-        hash_str = hashlib.md5(bytes(var + modifier, "utf-8")).digest()
-        hash1 = int.from_bytes(hash_str[:8], byteorder="big")
-        hash2 = int.from_bytes(hash_str[8:12], byteorder="big")
-        hash3 = int.from_bytes(hash_str[12:], byteorder="big")
-        hue = hash1 % 365
-        saturation = hash2 % 91 + 10
-        lightness = hash3 % 41 + 30
-        # hsl has to be transformed to rgb, since otherwise not all colors
-        # are displayed correctly, probably due to plotly bug.
-        rgb_frac = colorsys.hls_to_rgb(hue/364, lightness/100, saturation/100)
-        rgb = tuple(int(255 * x) for x in rgb_frac)
-        color[var] = f"rgb{rgb}"
+        if var in color_map.keys():
+            color[var] = color_map[var]
+        else:
+            color[var] = f"rgb{random_color(var)}"
     return color
 
-def _best_suffix_for_discrete_colors(umap_df, sq_dist, str_range=range(1,10)):
-    """Helper function for determining the modifier in 'discrete_colors',
-    so that neighbouring points have as different colours as possible.
+def generate_discrete_color_map(
+    names, umap_df, output_path=os.path.join(TMP, "discrete_color_map.py")
+):
     """
-    # Best results for sq_dist = 5 and string length <=3
-    #     string: p9j min_col_diff: 237 avg_col_diff: 24709
-    #     string: uoU min_col_diff: 266 avg_col_diff: 26730
-    #     string: IcX min_col_diff: 285 avg_col_diff: 23411
-    import string
-    import re
-    import itertools
+    Generate a discrete color map to ensure neighboring points have
+    well-distinguishable colors.
+    The algorithm continuously improves the coloring and regularly saves
+    results to disk.
+
+    Args:
+        names (list of str): List of methylation classes.
+        umap_df (DataFrame): DataFrame containing UMAP data.
+        output_path (str): Path of the output file.
+
+    Returns:
+        None
+    """
+    from itertools import combinations
+    import random
     import numpy as np
-    # Helper function to calculate color distance
-    def color_distance(color1, color2):
-        # Extract RGB values from color strings
-        rgb1 = [int(x) for x in re.findall(r"\d+", color1)]
-        rgb2 = [int(x) for x in re.findall(r"\d+", color2)]
-        distance = sum([(c1 - c2) ** 2 for c1, c2 in zip(rgb1, rgb2)])
-        return distance
+    from numba import njit
 
-    classes = umap_df.methylation_class.unique()
-    n_classes = len(classes)
-    min_dist = {}
+    def save_to_disk(color_map):
+        result = {
+            key: f"'rgb{old_color_map[key]}'"
+            for key in sorted(color_map.keys())
+        }
+        with open(output_path, "w") as f:
+            f.write("# Dictionary containing color data\n")
+            f.write("color_map = {\n")
+            for key, value in result.items():
+                f.write(f"    '{key}': {value},\n")
+            f.write("}\n")
 
-    for i in range(n_classes):
-        for j in range(i + 1, n_classes):
-            class0 = classes[i]
-            class1 = classes[j]
-            df0 = np.array(
-                umap_df.loc[umap_df.methylation_class == class0][["x", "y"]]
+
+    pairs = list(combinations(names, 2))
+
+    # Square distance between the methylation groups
+    sq_dist = {}
+    for pair in pairs:
+        name0, name1 = list(pair)
+        coords0 = np.array(
+            umap_df.loc[umap_df.methylation_class == name0][["x", "y"]]
+        )
+        coords1 = np.array(
+            umap_df.loc[umap_df.methylation_class == name1][["x", "y"]]
+        )
+        distances = np.sum(
+            (coords0[:, np.newaxis] - coords1[np.newaxis, :]) ** 2, axis=-1
+        )
+        sq_dist[(name0, name1)] = np.min(distances)
+        sq_dist[(name1, name0)] = np.min(distances)
+
+    color_map = {c: random_color(c) for c in names}
+    old_color_map = color_map.copy()
+
+    umap_dist = 0.1
+    delta_col = 10000
+    filtered_sq_dist = {
+        key: value for key, value in sq_dist.items() if value < umap_dist
+    }
+    cnt = 0
+    n_fail_old = len(names)
+
+    @njit
+    def color_diff(col0, col1):
+        rmean = (col0[0] + col1[0]) / 2
+        dr = col0[0] - col1[0]
+        dg = col0[1] - col1[1]
+        db = col0[2] - col1[2]
+        return (512+rmean)*dr*dr / 256 + 4*dg*dg + (767-rmean)*db*db / 256
+
+    while True:
+        too_similar = set()
+        for name0, name1 in filtered_sq_dist.keys():
+            col_dist = color_diff(color_map[name0], color_map[name1])
+            if col_dist < delta_col:
+                too_similar.add(name0)
+                too_similar.add(name1)
+        n_fail = len(too_similar)
+        if n_fail == 0:
+            save_to_disk(color_map)
+            if cnt % 2 == 0:
+                delta_col += 350
+            else:
+                umap_dist += 0.05
+                filtered_sq_dist = {
+                    key: value
+                    for key, value in sq_dist.items()
+                    if value < umap_dist
+                }
+            print(
+                "New round: delta_col =", delta_col, "umap_dist =", umap_dist
             )
-            df1 = np.array(
-                umap_df.loc[umap_df.methylation_class == class1][["x", "y"]]
-            )
-            dist = np.sum(
-                (df0[:, np.newaxis] - df1[np.newaxis, :]) ** 2, axis=-1
-            )
-            min_dist[(class0, class1)] = np.min(dist)
-
-    current_max = 0
-    current_avg = 0
-
-    characters = string.ascii_letters + string.digits
-
-    # Loop over all strings
-    for length in str_range:
-        print(f"loop over strings of length {length}")
-        for combination in itertools.product(characters, repeat=length):
-            modifier = ''.join(combination)
-            colors = discrete_colors(classes, modifier=modifier)
-            col_diff = []
-            for i in range(n_classes):
-                for j in range(i + 1, n_classes):
-                    class0 = classes[i]
-                    class1 = classes[j]
-                    d = min_dist[class0, class1]
-                    if d < sq_dist:
-                        col_diff.append(
-                            color_distance(colors[class0], colors[class1])
-                        )
-            min_col_diff = np.min(col_diff)
-            avg_col_diff = np.mean(col_diff)
-            if min_col_diff > current_max or (
-                min_col_diff == current_max and current_avg < avg_col_diff
-            ):
-                current_max = min_col_diff
-                current_avg = avg_col_diff
-                print(
-                    "string:",
-                    modifier,
-                    "min_col_diff:",
-                    min_col_diff,
-                    "avg_col_diff:",
-                    avg_col_diff,
-                )
+            old_color_map = color_map
+            n_fail_old = len(names)
+            continue
+        # Roll back changes if new color map is worse
+        if n_fail > n_fail_old:
+            color_map = old_color_map.copy()
+        else:
+            if n_fail < n_fail_old:
+                print("    ", n_fail)
+            old_color_map = color_map
+            n_fail_old = n_fail
+        cnt += 1
+        name = random.choice(list(too_similar))
+        color_map[name] = random_color(name + str(cnt))
 
 def bonferroni_corrected_ci(hits, lengths, trials, target_length, alpha=0.05):
     """

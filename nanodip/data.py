@@ -124,7 +124,7 @@ def make_binary_reference_data_if_needed():
     if not binary_reference_data_exists():
         make_binary_reference_data()
 
-def _get_annotation(name, mclasses=None):
+def _get_annotation(name, mclasses=None, ids=None):
     """Reads annotation as csv file from disk, and returns it as
     pd.DataFrame. If csv is missing or file not up to date, annotation
     is read from original excel file (slow) and csv file is written to
@@ -147,7 +147,9 @@ def _get_annotation(name, mclasses=None):
         )
         annotation.to_csv(path_csv, index=False)
     if mclasses is not None:
-        return annotation[annotation.methylation_class.isin(mclasses)]
+        annotation = annotation[annotation.methylation_class.isin(mclasses)]
+    if ids is not None:
+        annotation = annotation[annotation.id.isin(ids)]
     return annotation
 
 def hash_from_string(string):
@@ -176,7 +178,7 @@ class Reference:
         s:i for i, s in enumerate(all_specimens)
     }
 
-    def __init__(self, name, mclasses=None):
+    def __init__(self, name, mclasses=None, ids=None):
         valid_names = set(
             x.split(".")[0] for x in os.listdir(ANNOTATIONS)
             if x.endswith("xlsx")
@@ -184,19 +186,21 @@ class Reference:
         if name not in valid_names:
             nm_str = ", ".join(valid_names)
             raise ValueError(f"Invalid name '{name}'. Must be one of {nm_str}")
+
         make_binary_reference_data_if_needed()
         self.name = name
+
         if mclasses is not None:
             self.name += "-" + hash_from_string("".join(mclasses))
-        self.annotation = _get_annotation(name, mclasses)
+
+        self.annotation = _get_annotation(name, mclasses, ids)
         # Only consider specimens with annotation entry and binary file.
         annotated_specimens = set(self.annotation["id"]) & set(
             Reference.all_specimens
         )
-        self.specimens_index = [
+        self.specimens_index = sorted(
             Reference.specimen_to_index[a] for a in annotated_specimens
-        ]
-        self.specimens_index.sort()
+        )
         # Save as dictionary to allow fast methylation class lookup.
         specimen_to_mc = dict(
             zip(self.annotation.id, self.annotation.methylation_class)
@@ -416,19 +420,20 @@ class Genome:
         return str(self)
 
 
-def cpg_methyl_from_reads(sample_name):
+def cpg_methyl_from_reads(sample_name, sample_dir):
     """Returns all Illumina methylation CpG-sites with methylation
     status extracted so far.
 
     Args:
         sample_name: sample name to be analysed
+        sample_dir: Path to directory of samples
 
     Returns:
         Pandas Data Frame containing the reads Illumina cpg_sites and
         methylation status.
     """
     cpg_files = files_by_ending(
-        NANODIP_OUTPUT, sample_name, ending=ENDING["methoverl_tsv"]
+        sample_dir, sample_name, ending=ENDING["methoverl_tsv"]
     )
     cpg_list = []
     for f in cpg_files:
@@ -447,7 +452,7 @@ def cpg_methyl_from_reads(sample_name):
 
 class Sample:
     """Container of sample data."""
-    def __init__(self, _name="", cpgs=None):
+    def __init__(self, _name="", cpgs=None, sample_dir=NANODIP_OUTPUT):
         # Convert "" to EMPTY_SAMPLE
         name = EMPTY_SAMPLE if _name == "" else _name
         # Either Sample is initialized by name/id or by CpG's
@@ -456,6 +461,7 @@ class Sample:
         ):
             raise ValueError("Either 'name' or 'cpgs' must be given")
         self.name = name
+        self.sample_dir = sample_dir
         self.methyl_df = None
         self.cpg_overlap = None
         self.cpg_overlap_index = None
@@ -476,7 +482,7 @@ class Sample:
         as list to self.reads.
         """
         genome = Genome()
-        bam_files = files_by_ending(NANODIP_OUTPUT, self.name, ending=".bam")
+        bam_files = files_by_ending(self.sample_dir, self.name, ending=".bam")
         read_positions = []
         for f in bam_files:
             samfile = pysam.AlignmentFile(f, "rb")
@@ -505,7 +511,7 @@ class Sample:
         coresponding to {sample.name}.
         """
         if cpgs is None:
-            self.methyl_df = cpg_methyl_from_reads(self.name)
+            self.methyl_df = cpg_methyl_from_reads(self.name, self.sample_dir)
         else:
             self.methyl_df = pd.DataFrame([(x, None) for x in cpgs])
         self.methyl_df.columns = ["cpg_site", "methylation"]

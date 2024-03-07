@@ -6,7 +6,7 @@ NanoDiP
 <img src="/nanodip/static/img/logo.svg" width="300">
 </h1><br>
 
-This project is a fork of https://github.com/neuropathbasel/nanodip and still **buggy and under construction**.
+This project is a fork of https://github.com/neuropathbasel/nanodip and still **under construction**.
 
 
 Disclaimer
