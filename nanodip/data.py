@@ -12,21 +12,21 @@ import hashlib
 import logging
 import os
 import re
+from multiprocessing import Pool
 
-from tqdm import tqdm
 import numpy as np
 import pandas as pd
 import pysam
-# end_external_modules
+from tqdm import tqdm
 
 # start_internal_modules
 from nanodip.config import (
-    ANNOTATIONS,
     ANNOTATION_ACRONYMS_BASEL,
     ANNOTATION_ACRONYMS_TCGA,
+    ANNOTATIONS,
     BETA_VALUES,
-    CHROMOSOMES,
     C_ANNOTATIONS,
+    CHROMOSOMES,
     EMPTY_SAMPLE,
     ENDING,
     GENES,
@@ -40,25 +40,30 @@ from nanodip.config import (
     REFERENCE_SPECIMENS,
     RELEVANT_GENES,
 )
-from nanodip.utils import (
-    files_by_ending,
-)
+from nanodip.utils import composite_path, files_by_ending
+
+# end_external_modules
+
 # end_internal_modules
 
 # Define logger
 logger = logging.getLogger(__name__)
+
+N_BYTES_FLOAT64 = 8
+
 
 def binary_reference_data_exists():
     """Check if the binary form of the reference data has already been
     created.
     """
     return (
-        os.path.exists(REFERENCE_METHYLATION_DATA) and
-        os.path.exists(REFERENCE_METHYLATION) and
-        os.path.exists(REFERENCE_CPG_SITES) and
-        os.path.exists(REFERENCE_SPECIMENS) and
-        os.path.exists(REFERENCE_METHYLATION_SHAPE)
+        os.path.exists(REFERENCE_METHYLATION_DATA)
+        and os.path.exists(REFERENCE_METHYLATION)
+        and os.path.exists(REFERENCE_CPG_SITES)
+        and os.path.exists(REFERENCE_SPECIMENS)
+        and os.path.exists(REFERENCE_METHYLATION_SHAPE)
     )
+
 
 def make_binary_reference_data(
     input_dir=BETA_VALUES,
@@ -93,8 +98,7 @@ def make_binary_reference_data(
         with open(specimen_path, "rb") as f:
             beta_values = np.fromfile(f, dtype=float)
             methylation_data[i] = np.digitize(
-                beta_values,
-                bins=[cutoff]
+                beta_values, bins=[cutoff]
             ).astype(bool)
 
     # write methylation data as binary
@@ -108,7 +112,7 @@ def make_binary_reference_data(
 
     # write reference specimens
     specimens_file = os.path.join(output_dir, "specimens.csv")
-    specimen_names = [s[:-(len(ENDING["betas_bin"]) + 1)] for s in specimens]
+    specimen_names = [s[: -(len(ENDING["betas_bin"]) + 1)] for s in specimens]
     with open(specimens_file, "w") as f:
         f.write("\n".join(specimen_names))
 
@@ -119,10 +123,12 @@ def make_binary_reference_data(
     with open(index_file, "w") as f:
         f.write(index)
 
+
 def make_binary_reference_data_if_needed():
     """Creates binary reference data if not found on disk."""
     if not binary_reference_data_exists():
         make_binary_reference_data()
+
 
 def _get_annotation(name, mclasses=None, ids=None):
     """Reads annotation as csv file from disk, and returns it as
@@ -131,11 +137,10 @@ def _get_annotation(name, mclasses=None, ids=None):
     disk.
     """
     path_csv = os.path.join(C_ANNOTATIONS, name + ".csv")
-    path_xlsx = os.path.join(ANNOTATIONS,name + ".xlsx")
-    csv_exists_and_up_to_date = (
-        os.path.exists(path_csv) and
-        os.path.getmtime(path_csv) > os.path.getmtime(path_xlsx)
-    )
+    path_xlsx = os.path.join(ANNOTATIONS, name + ".xlsx")
+    csv_exists_and_up_to_date = os.path.exists(path_csv) and os.path.getmtime(
+        path_csv
+    ) > os.path.getmtime(path_xlsx)
     if csv_exists_and_up_to_date:
         annotation = pd.read_csv(path_csv)
     else:
@@ -152,6 +157,7 @@ def _get_annotation(name, mclasses=None, ids=None):
         annotation = annotation[annotation.id.isin(ids)]
     return annotation
 
+
 def hash_from_string(string):
     sha256_hash = hashlib.sha256(string.encode()).digest()
     filename_hash = base64.urlsafe_b64encode(sha256_hash).decode().rstrip("=")
@@ -166,7 +172,7 @@ class Reference:
     # Save cpgs with index as dictionary to allow fast index lookup.
     with open(REFERENCE_CPG_SITES, "r") as f:
         cpg_site_to_index = {
-            cpg:i for i, cpg in enumerate(f.read().splitlines())
+            cpg: i for i, cpg in enumerate(f.read().splitlines())
         }
     # All possible CpG sites
     cpg_sites = list(cpg_site_to_index.keys())
@@ -174,13 +180,12 @@ class Reference:
     with open(REFERENCE_SPECIMENS) as f:
         all_specimens = f.read().splitlines()
     # Save as dictionary to allow fast index lookup.
-    specimen_to_index = {
-        s:i for i, s in enumerate(all_specimens)
-    }
+    specimen_to_index = {s: i for i, s in enumerate(all_specimens)}
 
     def __init__(self, name, mclasses=None, ids=None):
         valid_names = set(
-            x.split(".")[0] for x in os.listdir(ANNOTATIONS)
+            x.split(".")[0]
+            for x in os.listdir(ANNOTATIONS)
             if x.endswith("xlsx")
         )
         if name not in valid_names:
@@ -209,25 +214,20 @@ class Reference:
         self.specimens = [
             Reference.all_specimens[i] for i in self.specimens_index
         ]
-        self.methylation_class = [
-            specimen_to_mc[s] for s in self.specimens
-        ]
-        self.description = Reference.get_description(
-            self.methylation_class
-        )
+        self.methylation_class = [specimen_to_mc[s] for s in self.specimens]
+        self.description = Reference.get_description(self.methylation_class)
 
     def get_description(methylation_classes):
         """Returns a description of the methylation class using
         a heuristic approach.
         """
         abbr_df = pd.read_csv(ANNOTATION_ACRONYMS_BASEL)
-        abbr = dict(
-            zip(abbr_df.MethylClassStr, abbr_df.MethylClassShortDescr)
-        )
+        abbr = dict(zip(abbr_df.MethylClassStr, abbr_df.MethylClassShortDescr))
         non_trivial_abbr = abbr.copy()
         non_trivial_abbr.pop("-")
         tcga_df = pd.read_csv(ANNOTATION_ACRONYMS_TCGA, delimiter="\t")
-        tcga = {r[1]:r[2] for r in tcga_df.itertuples()}
+        tcga = {r[1]: r[2] for r in tcga_df.itertuples()}
+
         def description(mc):
             """Returns description of methylation class {mc}."""
             mc = mc.upper()
@@ -240,11 +240,9 @@ class Reference:
             tcga_substring = [a for a in tcga if a in mc]
             tcga_substring.sort(key=len)
             # Prefer Basel Annotation
-            if (
-                basel_substring and (
-                    not tcga_substring or
-                    len(basel_substring[-1]) >= len(tcga_substring[-1])
-                )
+            if basel_substring and (
+                not tcga_substring
+                or len(basel_substring[-1]) >= len(tcga_substring[-1])
             ):
                 return abbr[basel_substring[-1]]
             # Else use TCGA Annotation
@@ -254,6 +252,7 @@ class Reference:
             if mc == "PITUI":
                 return "Pituicytoma"
             return ""
+
         mc_description = [
             description(mc).capitalize() for mc in methylation_classes
         ]
@@ -280,12 +279,14 @@ class Reference:
     def __repr__(self):
         return str(self)
 
+
 class Genome:
     """Data container for reference genome data."""
+
     def __init__(self):
         self.chrom = pd.read_csv(CHROMOSOMES, delimiter="\t", index_col=False)
         self.chrom["offset"] = [0] + np.cumsum(self.chrom["len"]).tolist()[:-1]
-        self.chrom["center"] = self.chrom["offset"] + self.chrom["len"]//2
+        self.chrom["center"] = self.chrom["offset"] + self.chrom["len"] // 2
         self.chrom["centromere_offset"] = (
             self.chrom["offset"]
             + (self.chrom["centromere_start"] + self.chrom["centromere_end"])
@@ -312,7 +313,12 @@ class Genome:
             delimiter="\t",
             header=1,
             names=[
-                "start", "end", "strand", "name", "seqname", "gene_stable_id"
+                "start",
+                "end",
+                "strand",
+                "name",
+                "seqname",
+                "gene_stable_id",
             ],
             dtype={"seqname": str},
         )
@@ -325,7 +331,7 @@ class Genome:
         genes = genes.sort_values("name")
         genes["loc"] = genes.apply(
             lambda z: (
-                  z["seqname"]
+                z["seqname"]
                 + ":"
                 + "{:,}".format(z["start"])
                 + "-"
@@ -335,7 +341,7 @@ class Genome:
         )
         # Make data compatible with pythonic notation
         genes["x_end"] = genes.end + 1
-        offset = {i.name:i.offset for i in self}
+        offset = {i.name: i.offset for i in self}
         genes["x_start"] = genes.apply(
             lambda z: offset[z["seqname"]] + z["start"],
             axis=1,
@@ -357,9 +363,25 @@ class Genome:
         genes = pd.read_csv(
             GENES_RAW,
             delimiter="\t",
-            names=["seqname", "source", "feature", "x_start", "x_end",
-                   "score", "strand", "frame", "attribute"],
-            usecols=["seqname", "strand", "feature", "x_start", "x_end", "attribute"]
+            names=[
+                "seqname",
+                "source",
+                "feature",
+                "x_start",
+                "x_end",
+                "score",
+                "strand",
+                "frame",
+                "attribute",
+            ],
+            usecols=[
+                "seqname",
+                "strand",
+                "feature",
+                "x_start",
+                "x_end",
+                "attribute",
+            ],
         )
         genes = genes.loc[
             (genes["feature"] == "transcript")
@@ -371,13 +393,13 @@ class Genome:
         genes["transcript"] = genes.attribute.apply(
             lambda x: re.search(
                 'transcript_id(.*)"(.*)"(.*)gene_name(.*)', x
-                ).group(2)
+            ).group(2)
         )
         genes = genes.drop_duplicates(subset=["name", "seqname"], keep="first")
         genes = genes.sort_values("name")
         genes["loc"] = genes.apply(
             lambda z: (
-                  z["seqname"]
+                z["seqname"]
                 + ":"
                 + "{:,}".format(z["x_start"])
                 + "-"
@@ -387,7 +409,7 @@ class Genome:
         )
         # Make data compatible with pythonic notation
         genes["x_end"] += 1
-        offset = {i.name:i.offset for i in self}
+        offset = {i.name: i.offset for i in self}
         genes["x_start"] = genes.apply(
             lambda z: offset[z["seqname"]] + z["x_start"],
             axis=1,
@@ -401,10 +423,20 @@ class Genome:
             relevant_genes = f.read().splitlines()
         genes["relevant"] = genes.name.apply(lambda x: x in relevant_genes)
         genes["len"] = genes["x_end"] - genes["x_start"]
-        genes[["name", "seqname", "strand", "x_start", "x_end",
-               "len", "x_mid", "relevant", "transcript",
-               "loc",
-        ]].to_csv(GENES, index=False, sep="\t")
+        genes[
+            [
+                "name",
+                "seqname",
+                "strand",
+                "x_start",
+                "x_end",
+                "len",
+                "x_mid",
+                "relevant",
+                "transcript",
+                "loc",
+            ]
+        ].to_csv(GENES, index=False, sep="\t")
 
     def __str__(self):
         """Prints overview of object for debugging purposes."""
@@ -439,8 +471,12 @@ def cpg_methyl_from_reads(sample_name, sample_dir):
     for f in cpg_files:
         # Some fast5 files do not contain any CpGs.
         try:
-            cpgs = pd.read_csv(f, delimiter="\t", header=None,
-                                names=["cpg_site", "methylation"])
+            cpgs = pd.read_csv(
+                f,
+                delimiter="\t",
+                header=None,
+                names=["cpg_site", "methylation"],
+            )
             cpg_list.append(cpgs)
         except FileNotFoundError:
             logger.exception("Empty file encountered, skipping")
@@ -450,8 +486,10 @@ def cpg_methyl_from_reads(sample_name, sample_dir):
 
     return methylation_info.reset_index(drop=True)
 
+
 class Sample:
     """Container of sample data."""
+
     def __init__(self, _name="", cpgs=None, sample_dir=NANODIP_OUTPUT):
         # Convert "" to EMPTY_SAMPLE
         name = EMPTY_SAMPLE if _name == "" else _name
@@ -492,16 +530,18 @@ class Sample:
                 continue
             for chrom in genome:
                 for read in samfile.fetch(chrom.name):
-                    read_positions.append([
-                        # Coordinates in pysam are always 0-based (following
-                        # the python convention). SAM text files use 1-based
-                        # coordinates.
-                        read.reference_start + chrom.offset,
-                        # reference_end equals first position after alignment
-                        # (following the python convention).
-                        read.reference_end + chrom.offset,
-                    ])
-                    assert (read.reference_length != 0), "Empty read"
+                    read_positions.append(
+                        [
+                            # Coordinates in pysam are always 0-based (following
+                            # the python convention). SAM text files use 1-based
+                            # coordinates.
+                            read.reference_start + chrom.offset,
+                            # reference_end equals first position after alignment
+                            # (following the python convention).
+                            read.reference_end + chrom.offset,
+                        ]
+                    )
+                    assert read.reference_length != 0, "Empty read"
         self.reads = read_positions
 
     def set_cpgs(self, cpgs=None):
@@ -525,7 +565,8 @@ class Sample:
         reference set, e.g. sex chromosomes.
         """
         self.cpg_overlap = set(self.methyl_df["cpg_site"]).intersection(
-            Reference.cpg_sites)
+            Reference.cpg_sites
+        )
         self.cpg_overlap_index = [
             Reference.cpg_site_to_index[f] for f in self.cpg_overlap
         ]
@@ -569,9 +610,10 @@ def reference_methylation_from_index(reference_index, cpg_index):
     with open(REFERENCE_METHYLATION, "rb") as f:
         for i, d in enumerate(delta_offset):
             reference_submatrix[i] = np.fromfile(
-                f, dtype=bool, offset=d*number_of_cpgs, count=number_of_cpgs
+                f, dtype=bool, offset=d * number_of_cpgs, count=number_of_cpgs
             )[cpg_index]
     return reference_submatrix
+
 
 def get_reference_methylation(reference_specimens, cpgs):
     """Extract and return (reference-specimen x CpG-site) methylation
@@ -595,11 +637,10 @@ def get_reference_methylation(reference_specimens, cpgs):
     ]
     # reference_index.sort()
 
-    cpg_index = [
-        Reference.cpg_site_to_index[c] for c in cpgs
-    ]
-    cpg_index.sort()
+    cpg_index = [Reference.cpg_site_to_index[c] for c in cpgs]
+    # cpg_index.sort()
     return reference_methylation_from_index(reference_index, cpg_index)
+
 
 def get_sample_methylation(sample):
     """Calculate and return sample methylation from reads.
@@ -613,12 +654,8 @@ def get_sample_methylation(sample):
         over all reads is greater than METHYLATION_CUTOFF.
     """
     if sample.methyl_df.empty:
-        raise ValueError(
-            "CpG set of {sample.name} is empty."
-        )
-    sample_methylation = np.full(
-        len(Reference.cpg_sites), 0, dtype=bool
-    )
+        raise ValueError("CpG set of {sample.name} is empty.")
+    sample_methylation = np.full(len(Reference.cpg_sites), 0, dtype=bool)
     sample_mean_methylation = sample.methyl_df.groupby(
         "cpg_site",
         as_index=False,
@@ -629,3 +666,52 @@ def get_sample_methylation(sample):
             i = Reference.cpg_site_to_index[cpg]
             sample_methylation[i] = row.methylation > METHYLATION_CUTOFF
     return sample_methylation[sample.cpg_overlap_index]
+
+
+def read_binary_with_seek(args):
+    """Used for reading beta files."""
+    file_, index = args
+    with open(file_, "rb") as b:
+        buffer = bytearray()
+        for i in index:
+            b.seek(i * N_BYTES_FLOAT64)
+            buffer += b.read(N_BYTES_FLOAT64)
+    return np.float64(np.frombuffer(buffer, dtype=np.float64))
+
+
+def read_binary(args):
+    """Used for reading beta files."""
+    file_, index = args
+    return np.fromfile(file_, dtype=np.float64)[index]
+
+
+def get_betas(reference_specimens, cpgs):
+    """Extract and return (reference-specimen x CpG-site) beta value
+    matrix. Use GPU if available.
+
+        Args:
+            reference_specimens: Iterable object of reference specimen id's.
+            cpgs: Iterable object of CpG site id's.
+
+        Returns:
+            Binary matrix of dimension len(reference_specimens)xlen(cpgs)
+            containing corresponding Methylation status.
+    """
+    cpg_index = [Reference.cpg_site_to_index[c] for c in cpgs]
+    specimen_bin_files = [
+        composite_path(BETA_VALUES, s, ENDING["betas_bin"])
+        for s in reference_specimens
+    ]
+
+    with Pool() as pool:
+        binaries = list(
+            tqdm(
+                pool.imap(
+                    read_binary,
+                    # read_binary_with_seek,
+                    [(file_, cpg_index) for file_ in specimen_bin_files],
+                ),
+                total=len(specimen_bin_files),
+            )
+        )
+    return np.stack(binaries)

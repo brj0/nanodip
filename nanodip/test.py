@@ -2,6 +2,7 @@ import bisect
 
 # import cupy
 from minknow_api.tools import protocols
+from multiprocessing import Pool
 import threading
 import numpy as np
 import logging
@@ -31,7 +32,7 @@ from sklearn.svm import SVC
 
 pdp = lambda x: print(x.to_string())
 
-sys.path.insert(0, "/applications/nanodip")
+# sys.path.insert(0, "/applications/nanodip")
 
 from nanodip.config import (
     ANALYSIS_EXCLUSION_PATTERNS,
@@ -80,6 +81,7 @@ from nanodip.utils import (
     bonferroni_corrected_ci,
 )
 from nanodip.data import (
+    get_betas,
     get_sample_methylation,
     Sample,
     Reference,
@@ -448,6 +450,54 @@ def methylation_caller(sample_name, analyze_one=True):
 # y=1
 # z=2
 
+def _get_betas(reference):
+    if gpu_enabled():
+        # Get unified pool
+        pool = cupy.cuda.MemoryPool(cupy.cuda.memory.malloc_managed)
+        # Set unified pool as default allocator
+        cupy.cuda.set_allocator(pool.malloc)
+        # Release GPU memory
+        pool.free_all_blocks()
+    else:
+        logger.info("Probably no CUDA device present.")
+    cpg_index = [Reference.cpg_site_to_index[c] for c in cpgs]
+    specimen_bin_files = [
+        composite_path(BETA_VALUES, s, ENDING["betas_bin"])
+        for s in reference_specimens
+    ]
+    specimens_cnt = len(reference_specimens)
+    cpg_cnt = len(reference.cpg_sites)
+    # Determine size of beta value array. Number of CpGs is typically fixed,
+    # Number of cases is variable
+    block_size = GPU_RAM_USAGE // (GPU_FLOAT_SIZE * len(reference_specimens))
+    beta_values_xp = xp.empty(
+        [specimens_cnt, cpg_cnt], dtype=np.float64, order="C"
+    )
+    # Break data into blocks along the cpg-columns, adjusted to
+    # GPU RAM availability.
+    for col0 in tqdm(range(0, cpg_cnt, block_size), desc="Reading binary files"):
+        col1 = min(cpg_cnt, col0 + block_size)
+        # Will be =block_size except for the last run.
+        d_col = col1 - col0
+        col_index = [x-col0 for x in cpg_index if x >= col0 and x <= col1]
+        for idx, file_ in enumerate(specimen_bin_files):
+            beta_values_xp[idx][:d_col] = xp.fromfile(
+                file_, count=d_col, offset=col0, dtype=np.float64
+            )
+        # Replace nan with 0.49
+        beta_values_xp = xp.nan_to_num(beta_values_xp, nan=0.49)
+    # Convert cupy to numpy array
+    if isinstance(beta_stds_xp, cupy.ndarray):
+        beta_values = beta_stds_xp.get()
+    else:
+       beta_values= beta_values_xp
+    # Need to release GPU memory explicitly
+    del beta_stds_xp
+    # Release GPU memory
+    if gpu_enabled():
+        pool.free_all_blocks()
+    return beta_values
+
 
 """
 EPIC450K komplett
@@ -465,4 +515,17 @@ def cachify_path(file_path):
     return new_path
 
 
-REFERENCE_METHYLATION_SHAPE = cachify_path(REFERENCE_METHYLATION_SHAPE)
+# REFERENCE_METHYLATION_SHAPE = cachify_path(REFERENCE_METHYLATION_SHAPE)
+
+
+
+
+
+
+
+reference = Reference("AllIDATv2_20210804_HPAP_Sarc")
+reference_specimens = reference.specimens
+cpgs = top_variable_cpgs(reference, 50000)
+betas = get_betas(reference_specimens, cpgs)
+
+
